@@ -1,0 +1,37 @@
+############################################################################################################################################
+                                                   HELPERS:
+############################################################################################################################################
+
+Config.py
+    - define adjustable parameters such as directories, DLC stuff (scorer name, pcutoff), fps
+Utils.py
+    - Functions to get filepaths, colour maps, experiment details etc
+CleanFrames.py
+    - Check for dropped frames and correct for them (if present)
+FieldOfView.py ??
+    - Measure the scale of the environment and objects within by using the geometric markers from DLC tracking (and offset any warping/fish eye)
+RunIdentification.py
+    - Using DLC tracking, segment frames into runs and save as new files with run indexes
+GetSkeletons.py
+    - Extract skeleton info from DLC data and save with the run indexes
+
+############################################################################################################################################
+                                                   ANALYSIS:
+############################################################################################################################################
+
+SoundAnalysis.py
+    - Analyse and plot any effects of the distractor belt sound. Is it random, is there an effect on mouse anxiety etc
+
+3DPoseEstimation.py (maybe more than one)
+    - use anipose to convert 2d DLC tracking into
+
+
+############################################################################################################################################
+                                                   TESTING AND DEVELOPMENT:
+############################################################################################################################################
+
+Test code
+
+
+
+

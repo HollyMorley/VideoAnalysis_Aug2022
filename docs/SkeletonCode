@@ -7,11 +7,19 @@ Config.py
 Utils.py
     - Functions to get filepaths, colour maps, experiment details etc
 CleanFrames.py
-    - Check for dropped frames and correct for them (if present)
+    - Check for dropped frames and correct for them (if present) ### NO LONGER NEEDED, FRAMES WELL TRIGGERED
 FieldOfView.py ??
     - Measure the scale of the environment and objects within by using the geometric markers from DLC tracking (and offset any warping/fish eye)
-RunIdentification.py
+GetRuns.py
     - Using DLC tracking, segment frames into runs and save as new files with run indexes
+    - GetRuns.Main
+        |
+        |- utils.Utils.GetlistofH5files()
+        |- GetRuns.filterData()
+            |- ReducedDataframeCoor
+
+    - NOTE TO SELF: if recording split into multiples, runs may span the break. Therefore, cannot use both start and end to define a run in one expression
+
 GetSkeletons.py
     - Extract skeleton info from DLC data and save with the run indexes
 

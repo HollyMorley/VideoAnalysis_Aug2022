@@ -1,11 +1,12 @@
 # Some useful helper functions for video analysis
 
-import os
-import sys
 from glob import glob
-from Config import *
+from fnmatch import fnmatch
 import matplotlib.pyplot as plt
 from pathlib import Path
+from Helpers.Config import *
+import sys
+import numpy as np
 
 class Utils:
     def __init__(self):
@@ -21,24 +22,62 @@ class Utils:
         return vidfiles
 
 
-    def Getlistoffiles(self, scorer, files=None, directory=None): #### update and change name to Getlistofanalysedfiles
+    def GetlistofH5files(self, files=None, directory=None): #### update and change name to Getlistofanalysedfiles
         if directory is not None and files is None:
-            if '20201218' in directory:
-                datafiles = glob("%s\\*%s.h5" % (directory, diffscorer))
-            else:
-                datafiles = glob("%s\\*%s.h5" %(directory, scorer))
-            print(datafiles)
-            return datafiles
+            datafiles_side = glob("%s\\*%s*%s.h5" % (directory, 'side', scorer_side))
+            datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
+            datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
+
         elif files is not None and directory is None:
-            datafiles = [None] * len(files)
+            datafiles_side = []
+            datafiles_front = []
+            datafiles_overhead = []
             for i in range(0, len(files)):
-                if files[i].endswith("%s.h5" %scorer):
-                    datafiles[i] = files[i]
-                elif files[i].endswith("%s.h5" %diffscorer):
-                    datafiles[i] = files[i]
+                if 'front' in files[i]:
+                    front = files[i]
+                    datafiles_front.append(front)
+                elif 'overhead' in files[i]:
+                    overhead = files[i]
+                    datafiles_overhead.append(overhead)
+                elif 'side' in files[i]:
+                    side = files[i]
+                    datafiles_side.append(side)
+
+        if bool(datafiles_side) or bool(datafiles_front) or bool(datafiles_overhead):
+            print("Files to be analysed are:\n"
+                  "Side: %d files\n"
+                  "%s\n"
+                  "Front: %d files\n"
+                  "%s\n"
+                  "Overhead: %d files\n"
+                  "%s" % (
+                  len(datafiles_side), datafiles_side, len(datafiles_front), datafiles_front, len(datafiles_overhead),
+                  datafiles_overhead))
+
+            datafiles = {
+                'Side': datafiles_side,
+                'Front': datafiles_front,
+                'Overhead': datafiles_overhead
+            }
             return datafiles
         else:
-            print("File/directory format not correct, check paths.")
+            raise Exception("No files found, check file format.\nHint: you should be using the .h5 files\nHint: If specifying just one file, put this is list format still")
+
+    def checkFilenamesMouseID(self, files):
+        # Checks if mouse ID corresponds to correct mouse name
+        if type(files) is dict:
+            files = sorted({x for v in files.values() for x in v})
+
+        for m in range(0, len(mice_ID)):
+            mousefiles = [s for s in files if mice_ID[m] in s]
+            match = [f for f in mousefiles if mice_name[m] in f]
+            if mousefiles != match:
+                mislabeled = set(mousefiles) ^ set(match)
+                print('The following file is labeled incorrectly:\n%s' % mislabeled)
+                print('Code will now quit. Please correct this error and re-try!')
+                sys.exit()
+            else:
+                print('All videos labeled correctly')
 
     def getFilepaths(self, data):
         filenameALL = list()
@@ -52,6 +91,9 @@ class Utils:
             skelfilenameALL.append(skelfilename)
             pathALL.append(path)
         return filenameALL, skelfilenameALL, pathALL
+
+    def NormalizeData(data):
+        return (data - np.min(data)) / (np.max(data) - np.min(data))
 
     def get_cmap(self, n, name='hsv'):
         return plt.cm.get_cmap(name, n)

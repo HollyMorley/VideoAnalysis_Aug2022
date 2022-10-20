@@ -30,7 +30,7 @@ class GetRuns:
         if len(files['Side']) == len(files['Front']) == len(files['Overhead']):
             utils.Utils().checkFilenamesMouseID(files) # before proceeding, check that mouse names are correctly labeled
 
-            for j in range(0, len(files['Side'])):
+            for j in range(0, len(files['Side'])): # all csv files from each cam are same length so use side for all
                 # Get (and clean up) dataframes for one mouse (/vid) for each view point
                 DataframeCoor_side = pd.read_hdf(files['Side'][j])
                 DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side].copy()
@@ -42,33 +42,44 @@ class GetRuns:
                 DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[scorer_overhead].copy()
                 print("Starting analysis...")
 
-                self.filterData(DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff)
+                dfs = self.filterData(DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff)
 
                 # save reduced dataframe as a .h5 file for each mouse
                 destfolder = destfolder
-                newfilename = "%s_RunsAll.h5" %Path(files[j]).stem
-                self.ReducedDataframeCoor.to_hdf("%s\\%s" %(destfolder, newfilename), key='RunsAll', mode='a')
-                print("Reduced coordinate file saved for %s" % files[j])
-                del DataframeCoor
+
+                newfilename_side = "%s_Runs.h5" %Path(files['Side'][j]).stem
+                newfilename_front = "%s_Runs.h5" % Path(files['Front'][j]).stem
+                newfilename_overhead = "%s_Runs.h5" % Path(files['Overhead'][j]).stem
+
+                DataframeCoor_side.to_hdf("%s\\%s" %(destfolder, newfilename_side), key='RunsSide', mode='a')
+                DataframeCoor_front.to_hdf("%s\\%s" % (destfolder, newfilename_front), key='RunsFront', mode='a')
+                newfilename_overhead.to_hdf("%s\\%s" % (destfolder, newfilename_overhead), key='RunsOverhead', mode='a')
+
+                print("Reduced coordinate file saved for:\n%s\n%s\n%s" %(files['Start'][j], files['Front'][j], files['Overhead'][j]))
+                del DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead # clear for next videos just in case it keeps any data
 
             print("Finished extracting runs for files: \n %s" %files)
 
         else:
             raise Exception('Missing 1 or some of side-front-overhead file triplets. Check all 3 files have been analysed')
 
-    def filterData(self, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff):
-        #pcutoff=0.99 ######## TEMP - pcutoff needs to be high for structural points otherwise too messy
-        doormask = np.logical_or.reduce((DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > pcutoff,
-                                          DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > 0.99,
-                                          DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > 0.99))
+    def findDoorOpCl(self, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff):
+        ################################################################################################################
+        ### Find (an overestimate of) frames where the door opens/closes
+        # NB this casts a wide next so as to not miss anything. This will then be refined using the run stages information from findRunStages()
+        ################################################################################################################
 
-        TrialStart_DataframeCoor_side = DataframeCoor_side[doormask] # should be 156773 rows for all 3 views
+        doormask = np.logical_or.reduce((DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > 0.5,
+                                         DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > 0.99,
+                                         DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > 0.99))
+
+        TrialStart_DataframeCoor_side = DataframeCoor_side[doormask]  #
         TrialStart_DataframeCoor_front = DataframeCoor_front[doormask]
         TrialStart_DataframeCoor_overhead = DataframeCoor_overhead[doormask]
 
-        sidemask = TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > pcutoff
-        frontmask = TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > pcutoff
-        overheadmask = TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > pcutoff
+        sidemask = TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > 0.5
+        frontmask = TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > 0.99
+        overheadmask = TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > 0.99
 
         # find 1st derivative of x/y values (ie the 'speed' of the door's movement frame to frame)
         d1_side = TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask].diff()/TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask].index.to_series().diff()
@@ -77,31 +88,67 @@ class GetRuns:
 
         chunk = 75 #50 # min distance from other peaks
 
-        # for every frame, find the sum of the last 1000 frames. Find the both the +ve and -ve peaks in this array to show the frames where noisy/unchanging speed of the door changes to fast moving periods and vice versa
-        highpeaks_side = find_peaks(d1_side.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
-        lowpeaks_side = find_peaks(-d1_side.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
-        highpeaks_front = find_peaks(d1_front.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
-        lowpeaks_front = find_peaks(-d1_front.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
-        highpeaks_overhead = find_peaks(d1_overhead.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
-        lowpeaks_overhead = find_peaks(-d1_overhead.rolling(chunk).sum().shift(-chunk), height=1, prominence=1, distance=1000)[0]
+        # for every frame, find the sum of the last 1000 frames.
+        side_d1rolling = d1_side.rolling(chunk).sum().shift(-chunk)
+        front_d1rolling = d1_front.rolling(chunk).sum().shift(-chunk)
+        overhead_d1rolling = d1_overhead.rolling(chunk).sum().shift(-chunk)
+
+        # Find the both the +ve and -ve peaks in this array to show the frames where noisy/unchanging speed of the door changes to fast moving periods and vice versa
+        highpeaks_side = find_peaks(side_d1rolling, height=1, prominence=1, distance=1000)[0]
+        lowpeaks_side = find_peaks(-side_d1rolling, height=1, prominence=1, distance=1000)[0]
+        highpeaks_front = find_peaks(front_d1rolling, height=1, prominence=1, distance=1000)[0]
+        lowpeaks_front = find_peaks(-front_d1rolling, height=1, prominence=1, distance=1000)[0]
+        highpeaks_overhead = find_peaks(overhead_d1rolling, height=1, prominence=1, distance=1000)[0]
+        lowpeaks_overhead = find_peaks(-overhead_d1rolling, height=1, prominence=1, distance=1000)[0]
+
+        # find difference in index values to show where door is not in frame (ie door is up)
+        diffidx_side = TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'y'][sidemask].index.to_series().diff().shift(-1)
+        diffidx_front = TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'y'][frontmask].index.to_series().diff().shift(-1)
+        diffidx_overhead = TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask].index.to_series().diff().shift(-1)
+
+        # find peaks in above to find frames where the door disappears
+        diffidx_peaks_side = find_peaks(diffidx_side, height=1000)[0]
+        # diffidx_peaks_front = find_peaks(diffidx_front, height=1000)[0]
+        # diffidx_peaks_overhead = find_peaks(diffidx_overhead, height=1000)[0]
 
         # finds where the values corresponding to the above peaks fall either above or below 0.6 (data is normalised between 0 and 1) to exclude erronous data points
         closeidx_side = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[highpeaks_side][utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[highpeaks_side]<0.4]
-        openidx_side = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[lowpeaks_side][utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[lowpeaks_side]>0.6]
-        closeidx_front = utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[highpeaks_front][utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[highpeaks_front]<0.4]
+        openidx_side = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[lowpeaks_side][utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[lowpeaks_side]>0.2]
+        closeidx_front = utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[highpeaks_front][utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[highpeaks_front]<0.5]
         openidx_front = utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[lowpeaks_front][utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door','y'][frontmask]).iloc(axis=0)[lowpeaks_front]>0.6]
         closeidx_overhead = utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[highpeaks_overhead][utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[highpeaks_overhead]<0.4]
-        openidx_overhead = utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[lowpeaks_overhead][utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[lowpeaks_overhead]>0.6]
+        openidx_overhead = utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[lowpeaks_overhead][utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]).iloc(axis=0)[lowpeaks_overhead]>0.5]
 
-        # transitioncrossedmask = np.logical_and.reduce((
-        #     DataframeCoor_overhead.loc(axis=1)['TransitionR', 'likelihood'] > pcutoff,
-        #     DataframeCoor_overhead.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
-        #     DataframeCoor_overhead.loc(axis=1)['Back1', 'likelihood'] > pcutoff,
-        #     DataframeCoor_overhead.loc(axis=1)['Back6', 'likelihood'] > pcutoff,
-        #     DataframeCoor_overhead.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
-        #     DataframeCoor_overhead.loc(axis=1)['Back12', 'x'] > DataframeCoor_overhead.loc(axis=1)['TransitionR', 'x'],
-        #     DataframeCoor_overhead.loc(axis=1)['Back1', 'x'] > DataframeCoor_overhead.loc(axis=1)['Back12', 'x']
-        # ))
+        # finds frames which correspond to peaks found in door disappearing data
+        openidx_framegap_side = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door','y'][sidemask]).iloc(axis=0)[diffidx_peaks_side]
+
+        # if the final value is negative, this suggests this is a missed door open (cant pick up the peak and not closed
+        if side_d1rolling.iloc[-chunk - 1] < side_d1rolling.quantile(.15):
+            openidx_side.loc(axis=0)[side_d1rolling.index[-chunk - 1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'y'][sidemask]).loc(axis=0)[side_d1rolling.index[-chunk - 1]]
+            #openidx_side.loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'y'][sidemask]).index[-1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'y'][sidemask]).loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_side.loc(axis=1)['Door', 'y'][sidemask]).index[-1]]
+        if front_d1rolling.iloc[-chunk - 1] < front_d1rolling.quantile(.15):
+            openidx_front.loc(axis=0)[front_d1rolling.index[-chunk - 1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'y'][frontmask]).loc(axis=0)[front_d1rolling.index[-chunk - 1]]
+            #openidx_front.loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'y'][frontmask]).index[-1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'y'][frontmask]).loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_front.loc(axis=1)['Door', 'y'][frontmask]).index[-1]]
+        if overhead_d1rolling.iloc[-chunk - 1] < overhead_d1rolling.quantile(.15):
+            openidx_overhead.loc(axis=0)[overhead_d1rolling.index[-chunk - 1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask]).loc(axis=0)[overhead_d1rolling.index[-chunk - 1]]
+            #openidx_overhead.loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask]).index[-1]] = utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask]).loc(axis=0)[utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask]).index[-1]]
+
+        doors = {
+            'close_idx_side': closeidx_side,
+            'open_idx_side': openidx_side,
+            'close_idx_front': closeidx_front,
+            'open_idx_front': openidx_front,
+            'close_idx_overhead': closeidx_overhead,
+            'open_idx_overhead': openidx_overhead,
+            'open_idx_framegap_side': openidx_framegap_side
+        }
+
+        return doors
+
+    def findRunStages(self,  DataframeCoor_side, pcutoff):
+        ################################################################################################################
+        ### Find frames that mark the RunStart, Transition, RunEnd, ReturnStart and ReturnEnd
+        ################################################################################################################
 
         RunStartmask = np.logical_or(
             np.logical_and.reduce((
@@ -198,7 +245,6 @@ class GetRuns:
             DataframeCoor_side.loc(axis=1)['Back12', 'x'] < DataframeCoor_side.loc(axis=1)['Wall3', 'x']# Mouse in last block
         ))
 
-        beltpositions = ['RunStart', 'Transition', 'RunEnd', 'ReturnStart', 'ReturnEnd']
 
         nextrungap = 1000
         RunStartfirst = DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask][DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask].index.to_series().diff() > nextrungap]
@@ -212,181 +258,105 @@ class GetRuns:
         ReturnEndlast = DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask][DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask].index.to_series().diff().shift(-1) > nextrungap]
         ReturnEndlast = pd.concat([ReturnEndlast, DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask].iloc[-1:]])
 
-        # plt.plot(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask].index,
-        #          utils.Utils.NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door', 'x'][overheadmask]),
-        #          label="overhead")
-        # plt.vlines(openidx_overhead.index, ymin=0, ymax=1, colors='red')
-        # plt.plot(DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask].index, [0.5] * sum(RunStartmask), 'x',
-        #          color=colors(0))
-        # plt.plot(DataframeCoor_side.loc(axis=1)['Nose', 'x'][Transitionmask].index, [0.5] * sum(Transitionmask), 'x',
-        #          color=colors(1))
-        # plt.plot(DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunEndmask].index, [0.5] * sum(RunEndmask), 'x',
-        #          color=colors(2))
-        # plt.plot(DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnStartmask].index, [0.5] * sum(ReturnStartmask), 'x',
-        #          color=colors(3))
-        # plt.plot(DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask].index, [0.5] * sum(ReturnEndmask), 'x',
-        #          color=colors(4))
+        Runs = {
+            'RunStart': RunStartfirst,
+            'Transition': Transitionfirst,
+            'RunEnd': RunEndlast,
+            'ReturnStart': ReturnStartfirst,
+            'ReturnEnd': ReturnEndlast
+        }
 
-        # plt.plot(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask].index, NormalizeData(TrialStart_DataframeCoor_overhead.loc(axis=1)['Door','x'][overheadmask]), label="overhead")
-        # plt.plot(low_peak_data.index,low_peak_data,'x')
-        # plt.plot(high_peak_data.index,high_peak_data,'x')
-        # plt.vlines(openidx_front.index, ymin=0,ymax=1,colors='red')
-        # plt.vlines(closeidx_front.index, ymin=0,ymax=1,colors='green')
+        return Runs
 
-        # handmask = np.logical_and(DataframeCoor_overhead.loc(axis=1)['Hand','likelihood'] > pcutoff, DataframeCoor_overhead.loc(axis=1)['Hand','x'] < 1920/4)
-        # plt.plot(DataframeCoor_overhead.loc(axis=1)['Hand','x'][handmask].index, (DataframeCoor_overhead.loc(axis=1)['Hand','x'][handmask])/max(DataframeCoor_overhead.loc(axis=1)['Hand','x'][handmask]),'xg')
+    def filterData(self, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff):
+        ################################################################################################################
+        # Combine the door opening data with the run data to chunk data into runs
+        ################################################################################################################
+        runstages = GetRuns.GetRuns().findRunStages(DataframeCoor_side=DataframeCoor_side, pcutoff=pcutoff)
+        doors = GetRuns.GetRuns().findDoorOpCl(DataframeCoor_side=DataframeCoor_side,
+                                               DataframeCoor_front=DataframeCoor_front,
+                                               DataframeCoor_overhead=DataframeCoor_overhead, pcutoff=pcutoff)
+
+        # first check that the number of transitions is the same as run ends
+        if len(runstages['Transition']) != len(runstages['RunEnd']):
+            raise ValueError('There are a different number of transitions from run ends. Error in run stage detection somewhere, most likely due to obscured frames or an attempted transition being wrongly counted')
+
+        # clean data by finding run backs - if there is a case where it goes runstart - ReturnEnd, with no RunEnd between, label that run a rb (put into another list) and delete from the RunStart list
+
+        # To find the trial start frames, find the closest door opening values for each Transition (first) frame
+        big_idxlist = pd.concat([doors['open_idx_side'], doors['open_idx_front'], doors['open_idx_overhead'], doors['open_idx_framegap_side']])
+        dist = runstages['Transition'].index.values[:, np.newaxis] - big_idxlist.index.values
+        dist = dist.astype(float)
+        dist[dist < 0] = np.nan
+        potentialClosestpos = np.nanargmin(dist, axis=1)
+        closestFound, closestCounts = np.unique(potentialClosestpos, return_counts=True)
+        if closestFound.shape[0] != runstages['Transition'].index.values.shape[0]:
+            raise ValueError('Seem to be missing a door opening. Duplicate frames found for 2 runs. (Or the extra run is not a real run, e.g. a runback) ')
+            ############# instead of raising an error here, delete the second (/any subsequent) run from all the run stages lists as this is just the mouse running about after trial done. 
+        TrialStart = big_idxlist.iloc[potentialClosestpos]
 
 
-        ############################################## OLD ############################################################
-        ### Find values where 'Nose' is in frame (creates 1D boolean array)
-        RunIdxNose = FlatDataframeCoor.progress_apply(lambda x: self.getInFrame(x, pcutoff), axis=1)
+        # choose frame after each RunEnd where nose is no longer in frame
+        nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(100).mean() < pcutoff] # finds where the mean of the *last* 100 frames is less than pcutoff
+        nosedisappear = nosenotpresent[nosenotpresent.index.to_series().diff() > 50] # finds where there are large gaps between frames which have a rolling mean of over pcutoff
 
-        ### Filter original data by Nose index (RunIdxNose). All data where 'Nose' not in frame is chucked out.
-        self.ReducedDataframeCoor = FlatDataframeCoor[RunIdxNose]
-        self.ReducedDataframeCoor = self.ReducedDataframeCoor.copy()  # THIS IS NOT IDEAL BUT CANT FIND ANOTHER SOLUTION
+        distnose = runstages['RunEnd'].index.values[:, np.newaxis] - nosedisappear.index.values
+        distnose = distnose.astype(float)
+        distnose[distnose < 0] = np.nan
+        potentialClosestpos_nose = np.nanargmin(distnose, axis=1)
+        closestfoundnose, closestCounts = np.unique(potentialClosestpos_nose, return_counts=True)
+        if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
+            raise ValueError('Seems to be a missing RunEnd value')
+        TrialEnd = nosedisappear.iloc[potentialClosestpos_nose]
 
-        ### Find the beginning and ends of runs and chunk them into their respective runs
-        errorMask = np.logical_and.reduce(( # creates a mask to chuck out any wrong tracking data. Logic is that if only tail1 is present it must be mislabelled
-            self.ReducedDataframeCoor.loc(axis=1)['Platform', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Tail2', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['Tail3', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['RForepaw', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['RHindpaw', 'likelihood'] < pcutoff,
-            self.ReducedDataframeCoor.loc(axis=1)['RAnkle', 'likelihood'] < pcutoff,
-        ))
-        self.ReducedDataframeCoor = self.ReducedDataframeCoor.drop(self.ReducedDataframeCoor[errorMask].index)
+        # chunk up data for each camera between TrialStart and TrialEnd
+        if len(TrialStart) != len(TrialEnd):
+            raise ValueError('Different number of trial starts and ends.')
 
-        chunkIdxend = np.logical_or.reduce((
-                                    # ideal scenario: end is when in the next frame the tail base is on the left hand side of the frame, the tail base is very far right in the frame and the nose is not visible
-                                    np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(-1) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] < -1500, # finds frame before the x coordinate of 'Tail1' jumps to a much lower number
-                                                        self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] > 1800,
-                                                        self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] < pcutoff)),
-                                    # alt scenario 1: end is when in the next frame the tail base is on the left hand side of the frame and the average likelihood of Nose, Shoulder, Hump and Hip jumps from low to high in the next frame. In other words, if the above logic with the tail fails, see in which frame do all the (front end) body points go from being not present to present
-                                    np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(-1) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] < -1500, # finds frame before the x coordinate of 'Tail1' jumps to a much lower number
-                                                        (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'].shift(-1) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'].shift(-1) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'].shift(-1) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood'].shift(-1)) / 4 -
-                                                        (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood']) / 4 > 0.75
-                                                            )),
-                                    # alt scenario 2: same as above logic but looking at two frames ahead instead of one
-                                    np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(-2) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] < -1500, # finds frame before the x coordinate of 'Tail1' jumps to a much lower number
-                                                        (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'].shift(-2) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'].shift(-2) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'].shift(-2) +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood'].shift(-2)) / 4 -
-                                                        (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'] +
-                                                         self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood']) / 4 > 0.75
-                                                            ))
-                                    ))
+        print('Number of runs detected: %s' % len(TrialStart))
+        ### !!! here put some comparison of the lengths from the excel doc when ready for it
 
-        chunkIdxstart = np.logical_or.reduce((np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(1) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] > 1500, # finds frame where x coordinate of 'Nose' jumps from very high to low number
-                                                            self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(1) > 1800
-                                                             )),
-                                      np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(1) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] > 1500,
-                                                          (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood']) / 4 -
-                                                          (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'].shift(1) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'].shift(1) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'].shift(1) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood'].shift(1)) / 4 > 0.75
-                                                            )),
-                                      np.logical_and.reduce((self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'].shift(2) - self.ReducedDataframeCoor.loc(axis=1)['Tail1', 'x'] > 1500,
-                                                          (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'] +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood']) / 4 -
-                                                          (self.ReducedDataframeCoor.loc(axis=1)['Nose', 'likelihood'].shift(2) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Shoulder', 'likelihood'].shift(2) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hump', 'likelihood'].shift(2) +
-                                                           self.ReducedDataframeCoor.loc(axis=1)['Hip', 'likelihood'].shift(2)) / 4 > 0.75
-                                                            ))
-                                      ))
+        runs = pd.DataFrame({'TrialStart': TrialStart.index, 'TrialEnd': TrialEnd.index})
 
-        chunks = pd.DataFrame({'Start': chunkIdxstart, 'End': chunkIdxend}, index= self.ReducedDataframeCoor.index)  # puts both series into one dataframe
-        chunks.loc(axis=1)['Start'].values[0] = True  # adds very first value to dataframe
-        chunks.loc(axis=1)['End'].values[-1] = True  # adds very last value to dataframe
-        StartNos = chunks.index[chunks['Start']]
-        StartNos = StartNos[abs(np.roll(StartNos, -1) - StartNos) > 1000]
-        EndNos = chunks.index[chunks['End']]
-        EndNos = EndNos[abs(np.roll(EndNos, -1) - EndNos) > 1000]
+        Run = np.full([len(DataframeCoor_side)], np.nan)
+        DataframeCoor_side.loc(axis=1)['Run'] = Run
+        DataframeCoor_front.loc(axis=1)['Run'] = Run
+        DataframeCoor_overhead.loc(axis=1)['Run'] = Run
 
-        # remove incorrect frames if any I am aware of:
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1822.9940185546875: # MR 30-11-2020
-            StartNos = StartNos[0:-1]
-            EndNos = EndNos[0:-1]
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1883.6925048828125: # MR 01-12-2020
-            StartNos = StartNos[0:-1]
-            EndNos = EndNos[0:-1]
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1883.5736083984375: # FL 03-12-2020
-            StartNos = StartNos[0:-2]
-            EndNos = EndNos[0:-2]
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1883.2921142578125: # FR 03-12-2020
-            StartNos = StartNos[0:-1]
-            EndNos = EndNos[0:-1]
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1883.7017822265625: # MR 07-12-2020
-            StartNos = StartNos.delete(25)
-            EndNos = EndNos.delete(25)
-        if FlatDataframeCoor.iloc[-1].loc['Nose','x'] == 1887.3360595703125: # FR 11-12-2020
-            StartNos = StartNos.delete(4)
-            EndNos = EndNos.delete(4)
-            StartNos = StartNos[0:-2]
-            EndNos = EndNos[0:-2]
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1887.249755859375: # MR 11-12-2020
-            StartNos = StartNos.delete([25,26])
-            EndNos = EndNos.delete([25,26])
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1886.79248046875: #FL 14-12-2020
-            StartNos = StartNos[0:-1]
-            EndNos = EndNos[0:-1]
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1901.6219482421875: # FLR 15-12-2020
-            StartNos = StartNos[0:-1]
-            EndNos = EndNos[0:-1]
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1885.9906005859375: # FL 16-12-2020
-            StartNos = StartNos.delete([11, 27])
-            EndNos = EndNos.delete([11, 27])
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1883.7584228515625: # FR 16-12-2020
-            StartNos = StartNos[0:-2]
-            EndNos = EndNos[0:-2]
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1888.09228515625: # FLR 17-12-2020
-            StartNos = StartNos.delete(25)
-            EndNos = EndNos.delete(25)
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1888.1256103515625: # FR 17-12-2020
-            StartNos = StartNos.delete(25)
-            EndNos = EndNos.delete(25)
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1886.1680908203125: # FL 18-12-2020
-            StartNos = StartNos.delete(25)
-            EndNos = EndNos.delete(25)
-        if FlatDataframeCoor.iloc[-1].loc['Nose', 'x'] == 1886.28564453125: # FR 18-12-2020
-            StartNos = StartNos.delete([25,26])
-            EndNos = EndNos.delete([25,26])
+        FrameIdx = DataframeCoor_side.index
+        DataframeCoor_side.loc(axis=1)['FrameIdx'] = FrameIdx
+        DataframeCoor_front.loc(axis=1)['FrameIdx'] = FrameIdx
+        DataframeCoor_overhead.loc(axis=1)['FrameIdx'] = FrameIdx
 
-        frameNos = pd.DataFrame({'Start': StartNos, 'End': EndNos})  # creates dataframe of just the frame numbers for the starts and stops of runs
-        print('Number of runs detected: %s' % len(frameNos))
+        for i in range(0, len(runs)):
+            maskside = np.logical_and(DataframeCoor_side.index >= runs.loc(axis=1)['TrialStart'][i],
+                                  DataframeCoor_side.index <= runs.loc(axis=1)['TrialEnd'][i])
+            maskfront = np.logical_and(DataframeCoor_front.index >= runs.loc(axis=1)['TrialStart'][i],
+                                  DataframeCoor_front.index <= runs.loc(axis=1)['TrialEnd'][i])
+            maskoverhead = np.logical_and(DataframeCoor_overhead.index >= runs.loc(axis=1)['TrialStart'][i],
+                                  DataframeCoor_overhead.index <= runs.loc(axis=1)['TrialEnd'][i])
 
-        #Run = np.zeros([len(self.ReducedDataframeCoor)])
-        Run = np.full([len(self.ReducedDataframeCoor)], np.nan)
-        self.ReducedDataframeCoor.loc(axis=1)['Run'] = Run
-        FrameIdx = self.ReducedDataframeCoor.index
-        self.ReducedDataframeCoor.loc(axis=1)['FrameIdx'] = FrameIdx
-        for i in range(0, len(frameNos)):
-            mask = np.logical_and(self.ReducedDataframeCoor.index >= frameNos.loc(axis=1)['Start'][i],
-                                  self.ReducedDataframeCoor.index <= frameNos.loc(axis=1)['End'][i])
             #self.ReducedDataframeCoor.loc(axis=1)['Run'][mask] = i
-            self.ReducedDataframeCoor.loc[mask, 'Run'] = i
-        self.ReducedDataframeCoor = self.ReducedDataframeCoor[self.ReducedDataframeCoor.loc(axis=1)['Run'].notnull()]
-        self.ReducedDataframeCoor.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+            DataframeCoor_side.loc[maskside, 'Run'] = i
+            DataframeCoor_front.loc[maskfront, 'Run'] = i
+            DataframeCoor_overhead.loc[maskoverhead, 'Run'] = i
 
-        self.ReducedDataframeCoor = self.findRunStart(self.ReducedDataframeCoor)
+        DataframeCoor_side = DataframeCoor_side[DataframeCoor_side.loc(axis=1)['Run'].notnull()]
+        DataframeCoor_front = DataframeCoor_front[DataframeCoor_front.loc(axis=1)['Run'].notnull()]
+        DataframeCoor_overhead = DataframeCoor_overhead[DataframeCoor_overhead.loc(axis=1)['Run'].notnull()]
 
-        return self.ReducedDataframeCoor
+        DataframeCoor_side.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        DataframeCoor_overhead.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+
+        ###### should add in another column to show the run stages - RunStart, Tranisiton, RunEnd
+        ### also find run backs (mid trial) and related to this repeat runs
+        ### based on the above need to show where multiple run attempts are. presumably this is clear by, if a runback is present, only considering the second instance of the run (oe RunStart, Transition and RunEnd)
+
+        Dataframes = {
+            'side': DataframeCoor_side,
+            'front': DataframeCoor_front,
+            'overhead': DataframeCoor_overhead
+        }
+
+        return Dataframes

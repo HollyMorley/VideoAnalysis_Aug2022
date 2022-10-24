@@ -258,6 +258,10 @@ class GetRuns:
         ReturnEndlast = DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask][DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask].index.to_series().diff().shift(-1) > nextrungap]
         ReturnEndlast = pd.concat([ReturnEndlast, DataframeCoor_side.loc(axis=1)['Nose', 'x'][ReturnEndmask].iloc[-1:]])
 
+        # getting rid of erronous run ends where nose has jumped when on a runback, e.g. due to hand nudging
+        RunEndlast = RunEndlast[np.logical_and(RunEndlast > RunEndlast.mean() - RunEndlast.std()*2, RunEndlast < RunEndlast.mean() + RunEndlast.std()*2)]
+        Transitionfirst = Transitionfirst[np.logical_and(Transitionfirst > Transitionfirst.mean() - Transitionfirst.std()*2, Transitionfirst < Transitionfirst.mean() + Transitionfirst.std()*2)]
+
         Runs = {
             'RunStart': RunStartfirst,
             'Transition': Transitionfirst,
@@ -290,33 +294,38 @@ class GetRuns:
         dist[dist < 0] = np.nan
         potentialClosestpos = np.nanargmin(dist, axis=1)
         closestFound, closestCounts = np.unique(potentialClosestpos, return_counts=True)
+        # deal with instances where mouse ran back and forth *after* the trial had finished
         if closestFound.shape[0] != runstages['Transition'].index.values.shape[0]:
-            raise ValueError('Seem to be missing a door opening. Duplicate frames found for 2 runs. (Or the extra run is not a real run, e.g. a runback) ')
-            ############# instead of raising an error here, delete the second (/any subsequent) run from all the run stages lists as this is just the mouse running about after trial done. 
-        TrialStart = big_idxlist.iloc[potentialClosestpos]
-
+            newclosestCounts = pd.Series(closestCounts)
+            repeatrunsidx = newclosestCounts.index[newclosestCounts.values>1]
+            print('Multiple TrialStarts found for run %s\nThis is (or should be) because the mouse ran back after having completed the trial' %repeatrunsidx)
+            runstages['RunStart'] = runstages['RunStart'].drop(index=runstages['RunStart'].index[repeatrunsidx])
+            runstages['Transition'] = runstages['Transition'].drop(index=runstages['Transition'].index[repeatrunsidx])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=runstages['RunEnd'].index[repeatrunsidx])
+            ###### !!!!!IMPORTANT!!!! now need to delete, for any run with erronous repeats, any transition or run end before the next run start
+        runstages['TrialStart'] = big_idxlist.iloc[closestFound]
 
         # choose frame after each RunEnd where nose is no longer in frame
         nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(100).mean() < pcutoff] # finds where the mean of the *last* 100 frames is less than pcutoff
         nosedisappear = nosenotpresent[nosenotpresent.index.to_series().diff() > 50] # finds where there are large gaps between frames which have a rolling mean of over pcutoff
 
-        distnose = runstages['RunEnd'].index.values[:, np.newaxis] - nosedisappear.index.values
+        distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
         distnose = distnose.astype(float)
         distnose[distnose < 0] = np.nan
         potentialClosestpos_nose = np.nanargmin(distnose, axis=1)
-        closestfoundnose, closestCounts = np.unique(potentialClosestpos_nose, return_counts=True)
+        closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
         if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
             raise ValueError('Seems to be a missing RunEnd value')
-        TrialEnd = nosedisappear.iloc[potentialClosestpos_nose]
+        runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
 
         # chunk up data for each camera between TrialStart and TrialEnd
-        if len(TrialStart) != len(TrialEnd):
+        if len(runstages['TrialStart']) != len(runstages['TrialEnd']):
             raise ValueError('Different number of trial starts and ends.')
 
-        print('Number of runs detected: %s' % len(TrialStart))
+        print('Number of runs detected: %s' % len(runstages['TrialStart']))
         ### !!! here put some comparison of the lengths from the excel doc when ready for it
 
-        runs = pd.DataFrame({'TrialStart': TrialStart.index, 'TrialEnd': TrialEnd.index})
+        runs = pd.DataFrame({'TrialStart': runstages['TrialStart'].index, 'TrialEnd': runstages['TrialEnd'].index})
 
         Run = np.full([len(DataframeCoor_side)], np.nan)
         DataframeCoor_side.loc(axis=1)['Run'] = Run
@@ -345,18 +354,109 @@ class GetRuns:
         DataframeCoor_front = DataframeCoor_front[DataframeCoor_front.loc(axis=1)['Run'].notnull()]
         DataframeCoor_overhead = DataframeCoor_overhead[DataframeCoor_overhead.loc(axis=1)['Run'].notnull()]
 
-        DataframeCoor_side.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
-        DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
-        DataframeCoor_overhead.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        # DataframeCoor_side.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        # DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        # DataframeCoor_overhead.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
 
         ###### should add in another column to show the run stages - RunStart, Tranisiton, RunEnd
         ### also find run backs (mid trial) and related to this repeat runs
         ### based on the above need to show where multiple run attempts are. presumably this is clear by, if a runback is present, only considering the second instance of the run (oe RunStart, Transition and RunEnd)
 
+        # Tidy up run stages frames by deleting any after the first RunEnd (because these will be where the mouse has run about post trial)
+        for rsidx, rs in enumerate(RunStages):
+            err_mask = np.isin(runstages[rs].index, np.array(DataframeCoor_side.index))
+            if len(runstages[rs]) != len(runstages[rs][err_mask == True]):
+                numerr = len(runstages[rs]) - len(runstages[rs][err_mask == True])
+                errframes = runstages[rs].index[err_mask == False]
+                print('%s extra instances found for %s outside of trial\nFrame numbers: %s\nExtra runs deleted' %(numerr, rs, errframes))
+                runstages[rs] = runstages[rs][err_mask == True]
+
+        RunStage = np.full([len(DataframeCoor_side)], np.nan)
+        DataframeCoor_side.loc(axis=1)['RunStage'] = RunStage
+        DataframeCoor_front.loc(axis=1)['RunStage'] = RunStage
+        DataframeCoor_overhead.loc(axis=1)['RunStage'] = RunStage
+
+        for rsidx, rs in enumerate(RunStages):
+            DataframeCoor_side.at[runstages[rs].index, 'RunStage'] = rs
+            DataframeCoor_front.at[runstages[rs].index, 'RunStage'] = rs
+            DataframeCoor_overhead.at[runstages[rs].index, 'RunStage'] = rs
+
+        DataframeCoor_side.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+        DataframeCoor_overhead.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
+
+        # Find where any runbacks are by looking in each run for multiple RunStarts
+        runbackALL = list()
+        for i in DataframeCoor_side.index.get_level_values('Run').unique():
+            numRunStarts = sum(DataframeCoor_side.xs(axis=0, level='Run', key=i).loc(axis=1)['RunStage'] == 'RunStart')
+            if numRunStarts > 1:
+                numrunbacks = numRunStarts-1
+                print('%s run backs found for run: %s' %(numrunbacks, i))
+                runstartrows = DataframeCoor_side.xs(axis=0, level='Run', key=i)[DataframeCoor_side.xs(axis=0, level='Run', key=i).loc(axis=1)['RunStage'] == 'RunStart']
+                runbackIdx = runstartrows.iloc[:-1].index
+                runbackALL.append(runbackIdx.to_list())
+            else:
+                print('no runbacks for run: %s' %i)
+
+        runbackALL = np.concatenate(runbackALL).flatten()
+
+        # Replace any erronous RunStarts as RunBacks
+        for r in range(0, len(runbackALL)):
+            rbmask = DataframeCoor_side.loc(axis=1)['RunStage'].index.get_level_values(level='FrameIdx') == runbackALL[r]
+            DataframeCoor_side.loc[rbmask, 'RunStage'] = 'RunBack'
+
+        # Fill RunStage column so that each stage is continued until reach the next
+        DataframeCoor_side = DataframeCoor_side.fillna(method='ffill')
+        DataframeCoor_front = DataframeCoor_front.fillna(method='ffill')
+        DataframeCoor_overhead = DataframeCoor_overhead.fillna(method='ffill')
+
+        # Add RunStage to multi index
+        DataframeCoor_side.set_index(['RunStage'], append=True, inplace=True)
+        DataframeCoor_front.set_index(['RunStage'], append=True, inplace=True)
+        DataframeCoor_overhead.set_index(['RunStage'], append=True, inplace=True)
+
+        # Reorder multiindex
+        DataframeCoor_side = DataframeCoor_side.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
+        DataframeCoor_front = DataframeCoor_front.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
+        DataframeCoor_overhead = DataframeCoor_overhead.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
+
+        # get points for travelator landmarks
+        Wall = list()
+        Belt = list()
+        for l in range(1, 6):
+            wall = np.mean(DataframeCoor_side.loc(axis=1)['Wall%s' % l, 'x'][
+                               DataframeCoor_side.loc(axis=1)['Wall%s' % l, 'likelihood'] > pcutoff])
+            belt = np.mean(DataframeCoor_side.loc(axis=1)['Belt%s' % l, 'x'][
+                               DataframeCoor_side.loc(axis=1)['Belt%s' % l, 'likelihood'] > pcutoff])
+
+            Wall.append(wall)
+            Belt.append(belt)
+
+        Wall[1] = Wall[2] - (Wall[2] - Wall[1])/2 # replace dodgy wall2 value with middle between 1 and 3
+        startplatRmean = np.mean(DataframeCoor_side.loc(axis=1)['StartPlatR', 'x'][
+                                     DataframeCoor_side.loc(axis=1)['StartPlatR', 'likelihood'] > pcutoff])
+        startplatLmean = np.mean(DataframeCoor_side.loc(axis=1)['StartPlatL', 'x'][
+                                     DataframeCoor_side.loc(axis=1)['StartPlatL', 'likelihood'] > pcutoff])
+        transitionRmean = np.mean(DataframeCoor_side.loc(axis=1)['TransitionR', 'x'][
+                                      DataframeCoor_side.loc(axis=1)['TransitionR', 'likelihood'] > pcutoff])
+        transitionLmean = np.mean(DataframeCoor_side.loc(axis=1)['TransitionL', 'x'][
+                                      DataframeCoor_side.loc(axis=1)['TransitionL', 'likelihood'] > pcutoff])
+
+        landmarks = {
+            'Wall': Wall,
+            'Belt': Belt,
+            'Platforms': [startplatRmean, startplatLmean, transitionLmean, transitionRmean]
+        }
+
+        # make logic where, if both values present (and within range of each other) make average between the two and set as quadrant marker.
+        # if not present, just choose one.
+        # maybe also check if ALL markers (except wall2) move across video, suggesting camera moved
+
         Dataframes = {
             'side': DataframeCoor_side,
             'front': DataframeCoor_front,
-            'overhead': DataframeCoor_overhead
+            'overhead': DataframeCoor_overhead,
+            'runbacks': runbackALL
         }
 
         return Dataframes

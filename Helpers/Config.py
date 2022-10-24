@@ -1,5 +1,5 @@
 ### User-set values
-
+cams = ['side','front','overhead']
 scorer_side = "DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000"
 scorer_overhead = "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
 scorer_front = "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
@@ -20,6 +20,7 @@ mice_name = [
     'MR',
     'MLR'
 ]
+RunStages = ['TrialStart', 'RunStart', 'Transition', 'RunEnd', 'TrialEnd']
 # pcutoffWeb = 0.6
 # webcamWrongMultiple = 2
 # webcamFPS = 30

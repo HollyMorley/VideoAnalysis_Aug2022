@@ -22,11 +22,16 @@ class Utils:
         return vidfiles
 
 
-    def GetlistofH5files(self, files=None, directory=None): #### update and change name to Getlistofanalysedfiles
+    def GetlistofH5files(self, files=None, directory=None, filtered=None): #### update and change name to Getlistofanalysedfiles
         if directory is not None and files is None:
-            datafiles_side = glob("%s\\*%s*%s.h5" % (directory, 'side', scorer_side))
-            datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
-            datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
+            if filtered is None:
+                datafiles_side = glob("%s\\*%s*%s.h5" % (directory, 'side', scorer_side))
+                datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
+                datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
+            if filtered is True:
+                datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', scorer_side))
+                datafiles_front = glob("%s\\*%s*%s_Runs.h5" % (directory, 'front', scorer_front))
+                datafiles_overhead = glob("%s\\*%s*%s_Runs.h5" % (directory, 'overhead', scorer_overhead))
 
         elif files is not None and directory is None:
             datafiles_side = []
@@ -97,6 +102,8 @@ class Utils:
 
     def get_cmap(self, n, name='hsv'):
         return plt.cm.get_cmap(name, n)
+
+    #def pxtocm(self, dataframe):
 
     def get_exp_details(self,file):
         exp = []

@@ -25,13 +25,17 @@ class Utils:
     def GetlistofH5files(self, files=None, directory=None, filtered=None): #### update and change name to Getlistofanalysedfiles
         if directory is not None and files is None:
             if filtered is None:
-                datafiles_side = glob("%s\\*%s*%s.h5" % (directory, 'side', scorer_side))
+                datafiles_side = glob("%s\\*%s*.h5" % (directory, 'side')) # !!!!!!!!!!!!GOT RID OF scorer_side!!!!!!!!!!!!!!!!!!!!!!!!!!
                 datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
                 datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
             if filtered is True:
                 datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', scorer_side))
                 datafiles_front = glob("%s\\*%s*%s_Runs.h5" % (directory, 'front', scorer_front))
                 datafiles_overhead = glob("%s\\*%s*%s_Runs.h5" % (directory, 'overhead', scorer_overhead))
+
+            datafiles_side.sort()
+            datafiles_front.sort()
+            datafiles_overhead.sort()
 
         elif files is not None and directory is None:
             datafiles_side = []
@@ -58,6 +62,7 @@ class Utils:
                   "%s" % (
                   len(datafiles_side), datafiles_side, len(datafiles_front), datafiles_front, len(datafiles_overhead),
                   datafiles_overhead))
+
 
             datafiles = {
                 'Side': datafiles_side,

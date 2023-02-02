@@ -430,7 +430,7 @@ class Plot():
         if 'TrialStart' in data[con][mouseID]['Side'].loc(axis=0)[r].index:
             trialstart_frame = data[con][mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].index[0]
             runstart_frame = data[con][mouseID]['Side'].loc(axis=0)[r, 'RunStart'].index[0]
-            waittime_s = (runstart_frame - trialstart_frame)/247
+            waittime_s = (runstart_frame - trialstart_frame)/fps
         else:
             waittime_s = 0
 
@@ -443,9 +443,15 @@ class Plot():
             runtime = data[con][mouseID]['Side'].loc(axis=0)[r,'Transition'].index[0] - data[con][mouseID]['Side'].loc(axis=0)[r,'RunStart'].index[0]
             distance = data[con][mouseID]['Side'].loc(axis=0)[r,'Transition'].loc(axis=0)['Nose','x'][0] - data[con][mouseID]['Side'].loc(axis=0)[r,'RunStart'].loc(axis=0)['Nose','x'][0]
             #distancecm =
-            totalspeed = distance
+            totalspeed = distance/runtime
         else:
             raise ValueError('No runstart for run %s' %r)
+
+        # subtract belt speed from totalspeed
+        ##### TEMP ########
+        logdf = pd.read_excel(r"C:\Users\Holly Morley\Dropbox (UCL)\Murray Lab\Holly\Aug22_APACharacteriseLong_log_recovered.xlsx", "Sheet1")
+        b2baselinespeed = np.unique(test.loc(axis=0)[20220824, 'FAA-1034976', 'Baseline'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
+        b2apaspeed = np.unique(test.loc(axis=0)[20220824, 'FAA-1034976', 'APA_characterise'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
 
     def setupForPlotting(self, conditions, means, measure_type, view, runphase, timelocked, means_all=False):
         '''

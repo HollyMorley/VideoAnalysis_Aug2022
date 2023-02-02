@@ -1,6 +1,7 @@
 ### User-set values
 cams = ['side','front','overhead']
 scorer_side = "DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000"
+scorer_side_new = "DLC_resnet50_DLC_DualBeltJul25shuffle1_1020000"
 scorer_overhead = "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
 scorer_front = "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
 pcutoff = 0.9
@@ -30,6 +31,7 @@ after_lengthruns = 25
 preruns_CharLow = 2
 preruns_CharMidHigh = 5
 plotting_destfolder = r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots'
+fps = 247
 # pcutoffWeb = 0.6
 # webcamWrongMultiple = 2
 # webcamFPS = 30

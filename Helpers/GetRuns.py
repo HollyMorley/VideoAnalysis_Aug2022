@@ -12,6 +12,7 @@ import Helpers.utils as utils
 from Helpers.Config import *
 from pathlib import Path
 from scipy.signal import find_peaks
+from scipy import stats
 
 tqdm.pandas()
 
@@ -92,7 +93,10 @@ class GetRuns:
                 try:
                     # Get (and clean up) dataframes for one mouse (/vid) for each view point
                     DataframeCoor_side = pd.read_hdf(files['Side'][j])
-                    DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side].copy()
+                    try:
+                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side].copy()
+                    except:
+                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side_new].copy()
 
                     DataframeCoor_front = pd.read_hdf(files['Front'][j])
                     DataframeCoor_front = DataframeCoor_front.loc(axis=1)[scorer_front].copy()
@@ -101,7 +105,7 @@ class GetRuns:
                     DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[scorer_overhead].copy()
                     print("Starting analysis...")
 
-                    data = self.filterData(DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff)
+                    data = self.filterData(DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff, filename=files['Side'][j])
 
                     if 'APAChar' in Path(files['Side'][j]).stem:
                         runnumbers = APACharRuns
@@ -117,12 +121,12 @@ class GetRuns:
                         APArun0 = data['Dataframes']['side'].loc(axis=0)[runnumbers[0]].iloc[0].name[1]
                         washoutrun0 = data['Dataframes']['side'].loc(axis=0)[runnumbers[0] + runnumbers[1]].iloc[0].name[1]
 
-                        baselinerun0mins = math.modf((baselinerun0 / 247) / 60)[1]
-                        baselinerun0secs = int(math.modf((baselinerun0 / 247) / 60)[0] * 60)
-                        APArun0mins = math.modf((APArun0 / 247) / 60)[1]
-                        APArun0secs = int(math.modf((APArun0 / 247) / 60)[0] * 60)
-                        washoutrun0mins = math.modf((washoutrun0 / 247) / 60)[1]
-                        washoutrun0secs = int(math.modf((washoutrun0 / 247) / 60)[0] * 60)
+                        baselinerun0mins = math.modf((baselinerun0 / fps) / 60)[1]
+                        baselinerun0secs = int(math.modf((baselinerun0 / fps) / 60)[0] * 60)
+                        APArun0mins = math.modf((APArun0 / fps) / 60)[1]
+                        APArun0secs = int(math.modf((APArun0 / fps) / 60)[0] * 60)
+                        washoutrun0mins = math.modf((washoutrun0 / fps) / 60)[1]
+                        washoutrun0secs = int(math.modf((washoutrun0 / fps) / 60)[0] * 60)
                     except:
                         print('Couldnt calculate runtimes')
 
@@ -262,6 +266,8 @@ class GetRuns:
         ### Find frames that mark the RunStart, Transition, RunEnd, ReturnStart and ReturnEnd
         ################################################################################################################
 
+        wall3_mode = stats.mode(np.int_(DataframeCoor_side.loc(axis=1)['Wall3', 'x']))[0][0]
+
         RunStartmask = np.logical_or(
             np.logical_and.reduce((
                 DataframeCoor_side.loc(axis=1)['StartPlatR','likelihood'] > pcutoff,
@@ -269,10 +275,11 @@ class GetRuns:
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['HindpawToeR', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Wall3', 'likelihood'] > pcutoff,
+                #DataframeCoor_side.loc(axis=1)['Wall3', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'], # forward facing run
                 DataframeCoor_side.loc(axis=1)['Back12', 'x'] > DataframeCoor_side.loc(axis=1)['StartPlatR', 'x'], # Mouse in first block
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] < DataframeCoor_side.loc(axis=1)['Wall3', 'x'], # Mouse in first block
+                #DataframeCoor_side.loc(axis=1)['Nose', 'x'] < DataframeCoor_side.loc(axis=1)['Wall3', 'x'], # Mouse in first block
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] < wall3_mode, # Mouse in first block
                 DataframeCoor_side.loc(axis=1)['HindpawToeR', 'y'] > DataframeCoor_side.loc(axis=1)['StartPlatL', 'y'] # hindpaw down
             )),
             np.logical_and.reduce((
@@ -281,10 +288,11 @@ class GetRuns:
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['HindpawToeL', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Wall3', 'likelihood'] > pcutoff,
+                #DataframeCoor_side.loc(axis=1)['Wall3', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'], # forward facing run
                 DataframeCoor_side.loc(axis=1)['Back12', 'x'] > DataframeCoor_side.loc(axis=1)['StartPlatR', 'x'], # Mouse in first block
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] < DataframeCoor_side.loc(axis=1)['Wall3', 'x'], # Mouse in first block
+                # DataframeCoor_side.loc(axis=1)['Nose', 'x'] < DataframeCoor_side.loc(axis=1)['Wall3', 'x'], # Mouse in first block
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] < wall3_mode,  # Mouse in first block
                 DataframeCoor_side.loc(axis=1)['HindpawToeL', 'y'] > DataframeCoor_side.loc(axis=1)['StartPlatL', 'y'] # hindpaw down
             ))
         )
@@ -295,40 +303,44 @@ class GetRuns:
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['ForepawToeR', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'], # forward facing run
+                #DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'], # forward facing run
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] - DataframeCoor_side.loc(axis=1)['Back12', 'x'] > 50,
                 DataframeCoor_side.loc(axis=1)['ForepawToeR', 'x'] > DataframeCoor_side.loc(axis=1)['TransitionR', 'x'],
-                DataframeCoor_side.loc(axis=1)['ForepawToeR', 'y'] > DataframeCoor_side.loc(axis=1)['TransitionR', 'y'].rolling(100).mean(),  # !!! this could take mean of none significant values)
-                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(100).max().shift(-100) > DataframeCoor_side.loc(axis=1)['TransitionR', 'x']
+                DataframeCoor_side.loc(axis=1)['ForepawToeR', 'y'] > DataframeCoor_side.loc(axis=1)['TransitionR', 'y'].rolling(100).mean(),  # !!! this could take mean of none significant values) - if y value bigger than transition (regardless of what side), suggests on belt
+                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(500).max().shift(-500) > DataframeCoor_side.loc(axis=1)['TransitionR', 'x']
             )),
             np.logical_and.reduce((
                 DataframeCoor_side.loc(axis=1)['TransitionR', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                #DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] - DataframeCoor_side.loc(axis=1)['Back12', 'x'] > 50,
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'x'] > DataframeCoor_side.loc(axis=1)['TransitionR', 'x'],
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'y'] > DataframeCoor_side.loc(axis=1)['TransitionR', 'y'].rolling(100).mean(),  # !!! this could take mean of none significant values)
-                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(100).max().shift(-100) > DataframeCoor_side.loc(axis=1)['TransitionR', 'x']
+                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(500).max().shift(-500) > DataframeCoor_side.loc(axis=1)['TransitionR', 'x']
             )),
             np.logical_and.reduce((
                 DataframeCoor_side.loc(axis=1)['TransitionL', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                #DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] - DataframeCoor_side.loc(axis=1)['Back12', 'x'] > 50,
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'x'] > DataframeCoor_side.loc(axis=1)['TransitionL', 'x'],
                 DataframeCoor_side.loc(axis=1)['ForepawToeL', 'y'] > DataframeCoor_side.loc(axis=1)['TransitionL', 'y'].rolling(100).mean(),  # !!! this could take mean of none significant values)
-                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(100).max().shift(-100) >  DataframeCoor_side.loc(axis=1)['TransitionL', 'x']
+                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(500).max().shift(-500) > DataframeCoor_side.loc(axis=1)['TransitionL', 'x']
             )),
             np.logical_and.reduce((
                 DataframeCoor_side.loc(axis=1)['TransitionL', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['Back12', 'likelihood'] > pcutoff,
                 DataframeCoor_side.loc(axis=1)['ForepawToeR', 'likelihood'] > pcutoff,
-                DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                #DataframeCoor_side.loc(axis=1)['Nose', 'x'] > DataframeCoor_side.loc(axis=1)['Back12', 'x'],# forward facing run
+                DataframeCoor_side.loc(axis=1)['Nose', 'x'] - DataframeCoor_side.loc(axis=1)['Back12', 'x'] > 50,
                 DataframeCoor_side.loc(axis=1)['ForepawToeR', 'x'] > DataframeCoor_side.loc(axis=1)['TransitionL', 'x'],
                 DataframeCoor_side.loc(axis=1)['ForepawToeR', 'y'] > DataframeCoor_side.loc(axis=1)['TransitionL', 'y'].rolling(100).mean(),  # !!! this could take mean of none significant values)
-                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(100).max().shift(-100) > DataframeCoor_side.loc(axis=1)['TransitionL', 'x']
+                DataframeCoor_side.loc(axis=1)['Back12', 'x'].rolling(500).max().shift(-500) > DataframeCoor_side.loc(axis=1)['TransitionL', 'x']
             ))
         ))
 
@@ -384,7 +396,7 @@ class GetRuns:
 
         return Runs
 
-    def filterData(self, data_side, data_front, data_overhead, pcutoff):
+    def filterData(self, data_side, data_front, data_overhead, pcutoff, filename):
         ################################################################################################################
         # Combine the door opening data with the run data to chunk data into runs
         ################################################################################################################
@@ -395,11 +407,54 @@ class GetRuns:
         runstages = self.findRunStages(DataframeCoor_side=DataframeCoor_side, pcutoff=pcutoff)
         doors = self.findDoorOpCl(DataframeCoor_side=DataframeCoor_side, DataframeCoor_front=DataframeCoor_front, DataframeCoor_overhead=DataframeCoor_overhead, pcutoff=pcutoff)
 
+        if "HM_20220901_APAChar_FAA-1034979_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].append(pd.Series(data=runstages['Transition'].mean(), index=[206492]), ignore_index=False)
+            runstages['Transition'] = runstages['Transition'].sort_index()
+            runstages['RunEnd'] = runstages['RunEnd'].append(pd.Series(data=runstages['RunEnd'].mean(), index=[206500]), ignore_index=False)
+            runstages['RunEnd'] = runstages['RunEnd'].sort_index()
+        if "HM_20220824_APAChar_FAA-1034979_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping last baseline trial
+            runstages['Transition'] = runstages['Transition'].drop(index=[89673])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[89716])
+        if "HM_20220824_APAChar_FAA-1034983_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping last apa trial
+            runstages['Transition'] = runstages['Transition'].drop(index=[214490])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[214534])
+            # dropping last washout trial
+            runstages['Transition'] = runstages['Transition'].drop(index=[314038])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[314058])
+        if "HM_20220825_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping incorrect run where huma was pushing mouse
+            runstages['Transition'] = runstages['Transition'].drop(index=[363367])
+            # run end not found here as turned back quickly
+        if "HM_20220902_APAChar_FAA-1034979_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping incorrect run where mouse almost stepped over despite it being a run back
+            runstages['Transition'] = runstages['Transition'].drop(index=[95607])
+        if "HM_20220902_APAChar_FAA-1034983_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping incorrect run where mouse almost stepped over despite it being a run back
+            runstages['Transition'] = runstages['Transition'].drop(index=[62263, 98610, 153884, 213502, 215100, 277996, 280140])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[154049, 200310, 215323, 222107, 278464, 280648])
+        if "HM_20220829_APAChar_FAA-1034978_MR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # dropping incorrect run where mouse almost stepped over despite it being a run back
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[114663, 146710])
+            runstages['Transition'] = runstages['Transition'].drop(index=[146704])
+        if "HM_20220829_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[351010])
+        if "HM_20220827_APAChar_FAA-1034976_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[305571])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[305618])
+        if "HM_20220827_APAChar_FAA-1034978_MR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[1824])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[1852])
+
+
         # first check that the number of transitions is the same as run ends
         if len(runstages['Transition']) != len(runstages['RunEnd']):
             runend_outlier_mask = np.logical_and(runstages['RunEnd'] > runstages['RunEnd'].mean() - runstages['RunEnd'].std()*2, runstages['RunEnd'] < runstages['RunEnd'].mean() + runstages['RunEnd'].std()*2)
             if len(runstages['RunEnd']) != sum(runend_outlier_mask):
                 runstages['RunEnd'] = runstages['RunEnd'][np.logical_and(runstages['RunEnd'] > runstages['RunEnd'].mean() - runstages['RunEnd'].std()*2, runstages['RunEnd'] < runstages['RunEnd'].mean() + runstages['RunEnd'].std()*2)]
+                weirdidxs = runend_outlier_mask.index[runend_outlier_mask == False]
+                print('!!!!!!!!Weird RunEnd value(/s) found and DELETED at frame(/s): %s!!!!!!!!!!' % weirdidxs)
             else:
                 raise ValueError('There are a different number of transitions from run ends. Error in run stage detection somewhere, most likely due to obscured frames or an attempted transition being wrongly counted')
 
@@ -414,10 +469,16 @@ class GetRuns:
         potentialClosestpos = np.nanargmin(dist, axis=1)
         closestFound, closestCounts = np.unique(potentialClosestpos, return_counts=True)
         potentialClosestpos_pd = pd.Series(potentialClosestpos)
+
+        # Adding in wrongly missed run ends when e.g. a RB isn't caught as an end of trial
+        if "HM_20220901_APAChar_FAA-1034983_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            # runstages['TrialEnd'] = runstages['TrialEnd'].append(pd.Series(data=1, index=[175584]), ignore_index=False)
+            # runstages['TrialEnd'] = runstages['TrialEnd'].sort_index()
+            runstages['RunEnd'] = runstages['RunEnd'].append(pd.Series(data=1, index=[175583]), ignore_index=False)
+            runstages['RunEnd'] = runstages['RunEnd'].sort_index()
+
         # deal with instances where mouse ran back and forth *after* the trial had finished
         if closestFound.shape[0] != runstages['Transition'].index.values.shape[0]:
-            # newclosestCounts = pd.Series(closestCounts)
-            # repeatrunsidx = newclosestCounts.index[newclosestCounts.values > 1]
             mask = closestCounts > 1
             dups = closestFound[mask]
             to_delALL = list()
@@ -426,35 +487,101 @@ class GetRuns:
                 to_del = repeats_idxs[1:]
                 to_delALL.append(to_del)
             to_delALL = np.concatenate(to_delALL)
-            # print( # isnt it more that there are multiple runs (transitions) with the same trialstart? or are there 2 things going on amd im confused
-            #     'Multiple TrialStarts found for run %s\nThis is (or should be) because the mouse ran back after having completed the trial' % repeatrunsidx)
-            #runstages['RunStart'] = runstages['RunStart'].drop(index=runstages['RunStart'].index[repeatrunsidx]) ### cannot do this as there are not the same number of runstarts as runend/transition
-            #for i in range(0, len(to_delALL)):
+
             potentialClosestpos_pd = potentialClosestpos_pd.drop(index=potentialClosestpos_pd.index[to_delALL])
             if len(runstages['Transition']) == len(runstages['RunEnd']):
                 runstages['Transition'] = runstages['Transition'].drop(index=runstages['Transition'].index[to_delALL])
                 runstages['RunEnd'] = runstages['RunEnd'].drop(index=runstages['RunEnd'].index[to_delALL])
             else:
                 runstages['Transition'] = runstages['Transition'].drop(index=runstages['Transition'].index[to_delALL])
-            ###### !!!!!IMPORTANT!!!! now need to delete, for any run with erronous repeats, any transition or run end before the next run start
         runstages['TrialStart'] = big_idxlist.iloc[potentialClosestpos_pd]
-        #runstages['TrialStart'] = runstages['TrialStart'].sort_index()
 
-        # choose frame after each RunEnd where nose is no longer in frame
-        nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][
-            DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(
+        # # choose frame after each RunEnd where nose is no longer in frame
+        # nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][
+        #     DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(
+        #         100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
+        # nosedisappear = nosenotpresent[
+        #     nosenotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
+        #
+        # distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
+        # distnose = distnose.astype(float)
+        # distnose[distnose < 0] = np.nan
+        # potentialClosestpos_nose = np.nanargmin(distnose, axis=1)
+        # closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
+        # if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
+        #     raise ValueError('Seems to be a missing RunEnd value')
+        # runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
+
+        ############################ NEW AS OF 19-01-2023 ###########################################
+        # changed looking for when nose disappears to when right ear disappears as seems more reliable. Also now look for closest frame whether before or after run end  (when the camera has shifted the tape blocks some of the view and so causes a discrepancy here.
+        # choose frame after each RunEnd where ear is no longer in frame
+        earnotpresent = DataframeCoor_side.loc(axis=1)['EarR', 'likelihood'][
+            DataframeCoor_side.loc(axis=1)['EarR', 'likelihood'].rolling(
                 100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
-        nosedisappear = nosenotpresent[
-            nosenotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
+        eardisappear = earnotpresent[earnotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
 
-        distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
-        distnose = distnose.astype(float)
-        distnose[distnose < 0] = np.nan
-        potentialClosestpos_nose = np.nanargmin(distnose, axis=1)
-        closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
-        if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
+        # choose frame after each RunEnd where tail is no longer in frame
+        tailnotpresent = DataframeCoor_side.loc(axis=1)['Tail1', 'likelihood'][
+            DataframeCoor_side.loc(axis=1)['Tail1', 'likelihood'].rolling(
+                100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
+        taildisappear = tailnotpresent[tailnotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
+
+        eartaildisappear = pd.concat((eardisappear, taildisappear), axis=0)
+
+
+        # # find closest frame of where ear disappears to each run end value
+        # distear = eardisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
+        # distear = abs(distear.astype(float))
+        # potentialClosestpos_ear = np.argmin(distear, axis=1)
+        # closestfoundear, closestCountsear = np.unique(potentialClosestpos_ear, return_counts=True)
+        # if closestfoundear.shape[0] != runstages['RunEnd'].index.values.shape[0]:
+        #     raise ValueError('Seems to be a missing RunEnd value')
+        # runstages['TrialEnd'] = eardisappear.iloc[potentialClosestpos_ear]
+
+        # find closest frame of where ear disappears to each run end value
+        disteartail = eartaildisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
+        disteartail = abs(disteartail.astype(float))
+        potentialClosestpos_eartail = np.argmin(disteartail, axis=1)
+        closestfoundeartail, closestCountseartail = np.unique(potentialClosestpos_eartail, return_counts=True)
+        if closestfoundeartail.shape[0] != runstages['RunEnd'].index.values.shape[0]:
             raise ValueError('Seems to be a missing RunEnd value')
-        runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
+        runstages['TrialEnd'] = eartaildisappear.iloc[potentialClosestpos_eartail]
+
+        # ############################ NEW AS OF 19-01-2023 ###########################################
+        # # changed looking for when nose disappears to when right ear disappears as seems more reliable. Also now look for closest frame whether before or after run end  (when the camera has shifted the tape blocks some of the view and so causes a discrepancy here.
+        # # choose frame after each RunEnd where nose is no longer in frame
+        # nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][
+        #     DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(
+        #         100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
+        # nosedisappear = nosenotpresent[nosenotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
+        #
+        # distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
+        # distnose = abs(distnose.astype(float))
+        # potentialClosestpos_nose = np.argmin(distnose, axis=1)
+        # closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
+        # if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
+        #     raise ValueError('Seems to be a missing RunEnd value')
+        # runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
+
+        # check that the trial end values are appropriate and importantly if they occur before run end that it is not too much before
+        if min(runstages['TrialEnd'].index - runstages['RunEnd'].index) < -20:
+            enddiff = runstages['TrialEnd'].index - runstages['RunEnd'].index
+            rundiff = runstages['TrialEnd'].index[enddiff < -20]
+            bigdiff = enddiff[enddiff > 100]
+            rundiffno = np.asarray(runstages['TrialEnd'].index == rundiff[0]).nonzero()
+            print('!!!!!!!!!!!!!!!!!!!!!!!WARNING!!!!!!!!!!!!!!!!!!\n>>>>>>TrialEnd occurs significantly before RunEnd - could be cutting off the run!! \nTrialEnd frame: %s, \nSize of difference: %s, \nRun # where this occurs: %s' %(rundiff, bigdiff, rundiffno))
+        if max(runstages['TrialEnd'].index - runstages['RunEnd'].index) > 100:
+            enddiff = runstages['TrialEnd'].index - runstages['RunEnd'].index
+            bigdiff = enddiff[enddiff > 100]
+            print('!!!WARNING!!!\n>>>>TrialEnd occurs a long time after RunEnd (Number frames: %s). Advisable to double check run detection is ok.' % bigdiff)
+
+        # Throwing out erronous data manually (here extra TrialStarts, e.g. from door being moved out of trial start)
+        if "HM_20220905_APAChar_FAA-1034978_MR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['TrialStart'] = runstages['TrialStart'].drop(index=180951)
+        if "HM_20220905_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['TrialStart'] = runstages['TrialStart'].drop(index=266851)
+        if "HM_20220901_APAChar_FAA-1034983_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['TrialStart'] = runstages['TrialStart'].drop(index=142714)
 
         # chunk up data for each camera between TrialStart and TrialEnd
         if len(runstages['TrialStart']) != len(runstages['TrialEnd']):
@@ -524,6 +651,14 @@ class GetRuns:
         DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
         DataframeCoor_overhead.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
 
+        ##### !!!! Readjust run numbers for missed runs mid experiment !!!! ######
+        if 'HM_20220825_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_103000' in filename: # 1 missing APA, 2 missing washout (ignored as at end)
+            print('One trial missing from APA phase. Shifting subsequent washout run labels...')
+            for r in reversed(range(31, 39)):
+                DataframeCoor_side.rename(index={r: r + 1}, inplace=True)
+                DataframeCoor_front.rename(index={r: r + 1}, inplace=True)
+                DataframeCoor_overhead.rename(index={r: r + 1}, inplace=True)
+
         # Find where any runbacks are by looking in each run for multiple RunStarts
         runbackALL = list()
         runbacklog = {}
@@ -571,6 +706,14 @@ class GetRuns:
         DataframeCoor_side = DataframeCoor_side.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
         DataframeCoor_front = DataframeCoor_front.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
         DataframeCoor_overhead = DataframeCoor_overhead.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
+
+        # ##### !!!! Readjust run numbers for missed runs mid experiment !!!! ######
+        # if 'HM_20220825_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_103000' in filename: # 1 missing APA, 2 missing washout (ignored as at end)
+        #     print('One trial missing from APA phase. Shifting subsequent washout run labels...')
+        #     for r in reversed(range(31, 39)):
+        #         DataframeCoor_side.rename(index={r: r + 1}, inplace=True)
+        #         DataframeCoor_front.rename(index={r: r + 1}, inplace=True)
+        #         DataframeCoor_overhead.rename(index={r: r + 1}, inplace=True)
 
         markers = self.findMarkers(DataframeCoor_side)['DualBeltMarkers']
         cam_moved = self.findMarkers(DataframeCoor_side)['CameraMoved']
@@ -673,23 +816,30 @@ class GetRuns:
         Wally = list()
         Beltx = list()
         Belty = list()
+
         for l in range(1, 6):
-            wallx = np.mean(df_side.loc(axis=1)['Wall%s' % l, 'x'][
-                                df_side.loc(axis=1)['Wall%s' % l, 'likelihood'] > pcutoff])
-            beltx = np.mean(df_side.loc(axis=1)['Belt%s' % l, 'x'][
-                                df_side.loc(axis=1)['Belt%s' % l, 'likelihood'] > pcutoff])
-            wally = np.mean(df_side.loc(axis=1)['Wall%s' % l, 'y'][
-                                df_side.loc(axis=1)['Wall%s' % l, 'likelihood'] > pcutoff])
-            belty = np.mean(df_side.loc(axis=1)['Belt%s' % l, 'y'][
-                                df_side.loc(axis=1)['Belt%s' % l, 'likelihood'] > pcutoff])
+            # wallx = np.mean(df_side.loc(axis=1)['Wall%s' % l, 'x'][
+            #                     df_side.loc(axis=1)['Wall%s' % l, 'likelihood'] > pcutoff])
+            # beltx = np.mean(df_side.loc(axis=1)['Belt%s' % l, 'x'][
+            #                     df_side.loc(axis=1)['Belt%s' % l, 'likelihood'] > pcutoff])
+            # wally = np.mean(df_side.loc(axis=1)['Wall%s' % l, 'y'][
+            #                     df_side.loc(axis=1)['Wall%s' % l, 'likelihood'] > pcutoff])
+            # belty = np.mean(df_side.loc(axis=1)['Belt%s' % l, 'y'][
+            #                     df_side.loc(axis=1)['Belt%s' % l, 'likelihood'] > pcutoff])
+
+            # gets the most common integer. Even when confidence is low for wall 2 and 3, the coordinate is mostly correct so this captures that
+            wallx = stats.mode(np.int_(df_side.loc(axis=1)['Wall%s' % l, 'x'].values))[0][0]
+            beltx = stats.mode(np.int_(df_side.loc(axis=1)['Belt%s' % l, 'x'].values))[0][0]
+            wally = stats.mode(np.int_(df_side.loc(axis=1)['Wall%s' % l, 'y'].values))[0][0]
+            belty = stats.mode(np.int_(df_side.loc(axis=1)['Belt%s' % l, 'y'].values))[0][0]
 
             Wallx.append(wallx)
             Wally.append(wally)
             Beltx.append(beltx)
             Belty.append(belty)
 
-        Wallx[1] = Wallx[0] + (Wallx[2] - Wallx[0])*0.52 # replace dodgy wall2 value with middle between 1 and 3. 0.52 as stars are not equally apart on backing (ie Wall[1] is 52% of the way to Wall[2]
-        Wally[1] = Wally[0] + (Wally[2] - Wally[0])*0.5
+        # Wallx[1] = Wallx[0] + (Wallx[2] - Wallx[0])*0.52 # replace dodgy wall2 value with middle between 1 and 3. 0.52 as stars are not equally apart on backing (ie Wall[1] is 52% of the way to Wall[2]
+        # Wally[1] = Wally[0] + (Wally[2] - Wally[0])*0.5
 
         startplatRmeanx = np.mean(df_side.loc(axis=1)['StartPlatR', 'x'][
                                      df_side.loc(axis=1)['StartPlatR', 'likelihood'] > pcutoff])
@@ -773,8 +923,12 @@ class GetRuns:
             WallALL_RunsALL.append(Wall_RunsALL)
 
         cam_move = False
-        if sum(pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] > 0) != sum(
-                pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] < 0):
+        if np.logical_and(
+                sum(pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] > 0) != sum(
+                pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] < 0),
+                sum(pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] > 0) != sum(
+                    pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] < 0)
+        ):
             cam_move = True
             raise ValueError('The camera appears to have shifted!! Marker means for this video are not reliable')
 

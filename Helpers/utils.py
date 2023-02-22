@@ -7,6 +7,7 @@ from pathlib import Path
 from Helpers.Config import *
 import sys
 import numpy as np
+import re
 
 class Utils:
     def __init__(self):
@@ -307,4 +308,44 @@ class Utils:
         }
 
         return details
+
+    # def flatten_dict_keys(self, d, parent_key='', sep='_'):
+    #     items = []
+    #     for k, v in d.items():
+    #         new_key = parent_key + sep + k if parent_key else k
+    #         if isinstance(v, dict):
+    #             items.extend(self.flatten_dict_keys(v, new_key, sep=sep).items())
+    #         else:
+    #             items.append((new_key, v))
+    #     return dict(items)
+    def flatten_dict_keys(self, d, parent_key='', sep='_'):
+        items = []
+        for k, v in d.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self.flatten_dict_keys(v, new_key, sep=sep).items())
+            elif isinstance(v, list):
+                items.append((new_key, v))
+            else:
+                items.append((new_key, [v]))
+        return dict(items)
+
+    def findConfidentMeans(self, data, label, coor):
+        mask = data.loc(axis=1)[label, 'likelihood'] > pcutoff
+        mean = np.mean(data.loc(axis=1)[label, coor][mask])
+        return mean
+
+
+    def getSpeedConditions(self, con, speed=list(speeds.keys())):
+        matches = re.findall('|'.join(speed), con)
+        if len(matches) == 2:
+            if con.index(matches[0]) < con.index(matches[1]):
+                speed_order = (matches[0], matches[1])
+            else:
+                speed_order = (matches[1], matches[0])
+        else:
+            speed_order = None
+
+        return speed_order
+
 

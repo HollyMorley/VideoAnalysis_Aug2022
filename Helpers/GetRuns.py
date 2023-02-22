@@ -446,6 +446,13 @@ class GetRuns:
         if "HM_20220827_APAChar_FAA-1034978_MR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
             runstages['Transition'] = runstages['Transition'].drop(index=[1824])
             runstages['RunEnd'] = runstages['RunEnd'].drop(index=[1852])
+        if "HM_20220905_APAChar_FAA-1034979_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[220202])
+        if "HM_20220905_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[104561])
+            runstages['Transition'] = runstages['Transition'].drop(index=[267790])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[64154])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[156728])
 
 
         # first check that the number of transitions is the same as run ends
@@ -578,8 +585,8 @@ class GetRuns:
         # Throwing out erronous data manually (here extra TrialStarts, e.g. from door being moved out of trial start)
         if "HM_20220905_APAChar_FAA-1034978_MR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
             runstages['TrialStart'] = runstages['TrialStart'].drop(index=180951)
-        if "HM_20220905_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
-            runstages['TrialStart'] = runstages['TrialStart'].drop(index=266851)
+        # if "HM_20220905_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+        #     runstages['TrialStart'] = runstages['TrialStart'].drop(index=266851)
         if "HM_20220901_APAChar_FAA-1034983_MLR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
             runstages['TrialStart'] = runstages['TrialStart'].drop(index=142714)
 
@@ -935,7 +942,8 @@ class GetRuns:
         results = {
             'DualBeltMarkers': DualBeltMarkers,
             'CameraMoved': cam_move,
-            'pxtocm': pxtocm
+            'pxtocm': pxtocm,
+            'cmtopx': cmtopx
         }
 
         return results

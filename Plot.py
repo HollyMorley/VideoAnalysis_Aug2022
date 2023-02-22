@@ -26,14 +26,17 @@ class Plot():
         data = dict.fromkeys(conditions)
         for conidx, con in enumerate(conditions):
             if 'Day' not in con:
-                files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s" %(con), filtered=True)
+                #files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s" %(con), filtered=True)
+                files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True)
             else:
                 splitcon = con.split('_')
                 conname = "_".join(splitcon[:-1])
                 dayname = splitcon[-1]
-                files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
+                # files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
+                files = utils.Utils().GetlistofH5files(directory=r"%s\%s\%s" %(filtereddata_folder, conname, dayname), filtered=True)
             #filesALL['%s' %con] =
             mouseIDALL = list()
+            dateALL = list()
 
             # sort lists of filenames so that in same order for reading
             files['Side'].sort()
@@ -43,10 +46,15 @@ class Plot():
             for f in range(0,len(files['Side'])):
                 mouseID = os.path.basename(files['Side'][f]).split('_')[3]
                 mouseIDALL.append(mouseID)
+                date = os.path.basename(files['Side'][f]).split('_')[1]
+                dateALL.append(date)
+
+            # data['%s' % con] = dict.fromkeys(dateALL)
             data['%s' % con] = dict.fromkeys(mouseIDALL)
             for n, name in enumerate(mouseIDALL):
-                data['%s' % con]['%s' %name] = dict.fromkeys(['Side', 'Front', 'Overhead'])
+                #data['%s' % con]['%s' %name] = dict.fromkeys(['Side', 'Front', 'Overhead'])
                 data['%s' %con]['%s' %name] = {
+                    'Date': dateALL[n],
                     'Side': pd.read_hdf(files['Side'][n]),
                     'Front': pd.read_hdf(files['Front'][n]),
                     'Overhead': pd.read_hdf(files['Overhead'][n])
@@ -65,6 +73,7 @@ class Plot():
         for cidx, con in enumerate(data.keys()):
             data_measure[con] = dict.fromkeys(data[con].keys())
             for midx, mouseID in enumerate(data[con].keys()):
+                ########################## Here use locomotion code to idenitfy more accurate timestamps for beginning and transition of run #############################
                 # first get the frame numbers for the x frames before and after transition point for every frame and experimental phase
                 measureAllRuns_pre = list() # early in run - q1 and 2
                 measureAllRuns_apa = list() # just before transition
@@ -82,6 +91,9 @@ class Plot():
                     premask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(preidx)
                     apamask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(apaidx)
                     postmask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(postidx)
+                    runmask = np.logical_or.reduce((data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(preidx), #### WARNING: THIS IS MISSING A SECTION BETWEEN PRE AND APA
+                                                    data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(apaidx),
+                                                    data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(postidx)))
 
                     # do calculations
                     if measure_type == 'Body Length':
@@ -90,7 +102,8 @@ class Plot():
                         measure = self.CalculateBack(calculation='skew',  data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
                     if measure_type == 'Back Height':
                         measure = self.CalculateBack(calculation='height', data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
-
+                    if measure_type == 'Head Height':
+                        measure = self.CalculateHeadHeight(data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
 
                     measureAllRuns_pre.append((measure['mean']['pre'], measure['std']['pre']))
                     measureAllRuns_apa.append((measure['mean']['apa'], measure['std']['apa']))
@@ -101,6 +114,7 @@ class Plot():
                 measureAllRuns_post = np.vstack(measureAllRuns_post)
 
                 # remove data from prep runs (different numbers depending on condition
+                ########################### COULD CHANGE HERE TO READ FROM EXCEL LOG SHEET ###########################
                 if np.logical_and('Char' in con, np.logical_or('LowHigh' in con, 'LowMid' in con)):
                     measureAllRuns_pre = measureAllRuns_pre[preruns_CharLow:]
                     measureAllRuns_apa = measureAllRuns_apa[preruns_CharLow:]
@@ -193,8 +207,13 @@ class Plot():
                 # first get the frame numbers for the x frames before and after transition point for every frame and experimental phase
                 measureAllRuns = list()
                 for r in data[con][mouseID]['Side'].index.get_level_values(level='Run').unique():
+
+                    ###################################### PICK MEASURE ################################################
                     if measure_type == 'Wait Time':
                         measure = self.CalculateWaitTime(data=data, con=con, mouseID=mouseID, r=r)
+                    if measure_type == 'Average Run Speed':
+                        measure = self.CalculateRunningSpeed_runaverage(data=data, con=con, mouseID=mouseID, r=r)
+                    ####################################################################################################
 
                     measureAllRuns.append(measure)
                 measureAllRuns = np.vstack(measureAllRuns)
@@ -426,6 +445,64 @@ class Plot():
         }
         return bodylength
 
+
+    def CalculateHeadHeight(self, data, con, mouseID, r, premask, apamask, postmask, view):
+        # nosemask_pre = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][premask] > pcutoff
+        # nosemask_apa = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][apamask] > pcutoff
+        # nosemask_post = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][postmask] > pcutoff
+
+        nose_trans_mask_pre = np.logical_and(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][premask] > pcutoff,
+                                             np.logical_or(
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionR', 'likelihood'][premask] > pcutoff,
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionL', 'likelihood'][premask] > pcutoff
+                                             ))
+        nose_trans_mask_apa = np.logical_and(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][apamask] > pcutoff,
+                                             np.logical_or(
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionR', 'likelihood'][apamask] > pcutoff,
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionL', 'likelihood'][apamask] > pcutoff
+                                             ))
+        nose_trans_mask_post = np.logical_and(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'likelihood'][postmask] > pcutoff,
+                                             np.logical_or(
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionR', 'likelihood'][postmask] > pcutoff,
+                                                 data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionL', 'likelihood'][postmask] > pcutoff
+                                             ))
+
+        nose_pre = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'y'][premask][nose_trans_mask_pre]
+        nose_apa = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'y'][apamask][nose_trans_mask_apa]
+        nose_post = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Nose', 'y'][postmask][nose_trans_mask_post]
+
+
+
+        # transitionRmask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionR', 'likelihood'] > pcutoff
+        # transitionLmask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionL', 'likelihood'] > pcutoff
+
+        transitionR_height_mean = np.mean(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionR', 'y'][transitionRmask])
+        transitionL_height_mean = np.mean(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['TransitionL', 'y'][transitionLmask])
+
+        platform_height_av = np.mean([transitionR_height_mean, transitionL_height_mean])
+
+        headheight_mean_pre = nose_pre - platform_height_av
+        headheight_mean_apa = nose_apa - platform_height_av
+        headheight_mean_post = nose_post - platform_height_av
+
+        headheight_std_pre = nose_pre - platform_height_av
+        headheight_std_apa = nose_apa - platform_height_av
+        headheight_std_post = nose_post - platform_height_av
+
+        headheight = {
+            'mean': {
+                'pre': bodylengthmean_pre,
+                'apa': bodylengthmean_apa,
+                'post': bodylengthmean_post
+            },
+            'std': {
+                'pre': bodylengthstd_pre,
+                'apa': bodylengthstd_apa,
+                'post': bodylengthstd_post
+            }
+        }
+
+
     def CalculateWaitTime(self, data, con, mouseID, r, view='Side'):
         if 'TrialStart' in data[con][mouseID]['Side'].loc(axis=0)[r].index:
             trialstart_frame = data[con][mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].index[0]
@@ -438,20 +515,43 @@ class Plot():
 
     def CalculateRunningSpeed_runaverage(self, data, con, mouseID, r):
         # for each run get the run time (transition frame - start frame) and run distance (x values corresponding to these frames)
+
+        date = int(data[con][mouseID]['Date'])
+
         # speed = distance/time
+        # Calculate the average speed traveled for this run
         if 'TrialStart' in data[con][mouseID]['Side'].loc(axis=0)[r].index:
             runtime = data[con][mouseID]['Side'].loc(axis=0)[r,'Transition'].index[0] - data[con][mouseID]['Side'].loc(axis=0)[r,'RunStart'].index[0]
             distance = data[con][mouseID]['Side'].loc(axis=0)[r,'Transition'].loc(axis=0)['Nose','x'][0] - data[con][mouseID]['Side'].loc(axis=0)[r,'RunStart'].loc(axis=0)['Nose','x'][0]
             #distancecm =
-            totalspeed = distance/runtime
+            mousespeedav = distance/runtime
         else:
             raise ValueError('No runstart for run %s' %r)
 
         # subtract belt speed from totalspeed
         ##### TEMP ########
+        if 'APAChar' in con:
+            numruns = APACharRuns
+        if 'PerceptionTest' in con:
+            numruns = APAPerRuns
+        if 'VMT' in con:
+            numruns = APAVmtRuns
+
         logdf = pd.read_excel(r"C:\Users\Holly Morley\Dropbox (UCL)\Murray Lab\Holly\Aug22_APACharacteriseLong_log_recovered.xlsx", "Sheet1")
-        b2baselinespeed = np.unique(test.loc(axis=0)[20220824, 'FAA-1034976', 'Baseline'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
-        b2apaspeed = np.unique(test.loc(axis=0)[20220824, 'FAA-1034976', 'APA_characterise'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
+
+        if r < numruns[0]: # baseline
+            b2speed = np.unique(logdf.loc(axis=0)[date, mouseID, 'Baseline'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
+        elif np.logical_and(r >= numruns[0], r < numruns[0] + numruns[1]): # APA
+            b2speed = np.unique(logdf.loc(axis=0)[date, mouseID, 'APA_characterise'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
+        elif np.logical_and(r >= numruns[0] + numruns[1], r < numruns[0] + numruns[1] + numruns[2]): # washout
+            b2speed = np.unique(logdf.loc(axis=0)[date, mouseID, 'Washout'].loc(axis=1)['Belt2speed (cm/s)'].values)[0]
+        elif r >= numruns[0] + numruns[1] + numruns[2]:
+            print('There are somehow too many runs here!!')
+
+        realspeed = mousespeedav - b2speed
+
+        return realspeed
+
 
     def setupForPlotting(self, conditions, means, measure_type, view, runphase, timelocked, means_all=False):
         '''
@@ -570,13 +670,15 @@ class Plot():
 
         blues = utils.Utils().get_cmap(20, 'Blues')
         colors = utils.Utils().get_cmap(20, 'tab20')
-        if 'APAChar_LowHigh_Day3' in conditions_all and 'APAChar_LowMid_Day3' in conditions_all:
+        if 'APAChar_LowHigh_Day3' in conditions_all and 'APAChar_LowMid_Day3' in conditions_all  and len(conditions) ==2:
             sub_colors = [blues(13), colors(4)]
-        elif 'APAChar_LowHigh_Day1' in conditions_all and 'APAChar_LowHigh_Day3' in conditions_all:
+        elif 'APAChar_LowHigh_Day1' in conditions_all and 'APAChar_LowHigh_Day3' in conditions_all and len(conditions) ==2:
             sub_colors = [blues(18), blues(10)]
-        elif 'VMT_LowHighac' in conditions_all and 'VMT_LowHighpd' in conditions_all:
+        elif 'APAChar_LowHigh_Day1' in conditions_all and 'APAChar_LowHigh_Day2' in conditions_all and 'APAChar_LowHigh_Day3' in conditions_all and len(conditions) ==3:
+            sub_colors = [blues(19), blues(14), blues(9)]
+        elif 'VMT_LowHighac' in conditions_all and 'VMT_LowHighpd' in conditions_all and len(conditions) ==2:
             sub_colors = [colors(6), colors(8)]
-        elif 'PerceptionTest' in conditions_all:
+        elif 'PerceptionTest' in conditions_all and len(conditions) ==2:
             sub_colors = [colors(10), colors(11)]
 
         plt.rcParams.update({
@@ -755,6 +857,8 @@ class Plot():
             sub_colors = [blues(13), colors(4)]
         elif 'APAChar_LowHigh_Day1' in conditions_all and 'APAChar_LowHigh_Day3' in conditions_all and len(conditions) ==2:
             sub_colors = [blues(18), blues(10)]
+        elif 'APAChar_LowHigh_Day1' in conditions_all and 'APAChar_LowHigh_Day2' in conditions_all and 'APAChar_LowHigh_Day3' in conditions_all and len(conditions) ==3:
+            sub_colors = [blues(19), blues(14), blues(9)]
         elif 'VMT_LowHighac' in conditions_all and 'VMT_LowHighpd' in conditions_all and len(conditions) ==2:
             sub_colors = [colors(6), colors(8)]
         elif 'VMT_LowHighac' in conditions_all and 'VMT_LowHighpd' in conditions_all and 'APAChar_LowHigh' in conditions_all:
@@ -856,19 +960,46 @@ class Plot():
 
 
         if save == True:
-            plt.savefig(r'%s\Chunk, %s, %s, %s, %s, %s, %s, %s.png' %(plotting_destfolder, conditions, runphase, measure_type, view, style, timelocked, meanstd), transparent=transparent, format='png')
+            plt.savefig(r'%s\Chunk, %s, %s, %s, %s, %s, %s, %s.png' %(plotting_destfolder, conditions, runphase, measure_type, view, style, timelocked, meanstd), bbox_inches = 'tight', transparent=transparent, format='png')
 
     def tempMain(self, measure_type):
         ### Back length
-        condition_names = ['APAChar_LowHigh_Day1', 'APAChar_LowMid_Day1', 'APAChar_LowHigh_Day3', 'APAChar_LowMid_Day3', 'APAChar_HighLow', 'PerceptionTest', 'VMT_LowHighac', 'VMT_LowHighpd']
-        condition_combos = {
-            'Low Day1': [condition_names[0], condition_names[1]],
-            'Low Day3': [condition_names[2], condition_names[3]],
-            'Low-High Repeats': [condition_names[0], condition_names[2]],
-            'High-Low': [condition_names[4]],
-            'Perception Test': [condition_names[5]],
-            'VMT': [condition_names[6], condition_names[7]],
-            'Char vs VMT': [condition_names[0], condition_names[6], condition_names[7]]
+        # condition_names = ['APAChar_LowHigh_Day1', 'APAChar_LowMid_Day1', 'APAChar_LowHigh_Day3', 'APAChar_LowMid_Day3', 'APAChar_HighLow', 'PerceptionTest', 'VMT_LowHighac', 'VMT_LowHighpd', 'APAChar_LowHigh_Day2']
+        # condition_combos = {
+        #     'Low Day1': [condition_names[0], condition_names[1]],
+        #     'Low Day3': [condition_names[2], condition_names[3]],
+        #     'Low-High Repeats': [condition_names[0], condition_names[2]],
+        #     'Low-High Repeats - All': [condition_names[0], condition_names[8], condition_names[2]],
+        #     'High-Low': [condition_names[4]],
+        #     'Perception Test': [condition_names[5]],
+        #     'VMT': [condition_names[6], condition_names[7]],
+        #     'Char vs VMT': [condition_names[0], condition_names[6], condition_names[7]]
+        # }
+        folder_names = [f for f in os.listdir(filtereddata_folder) if os.path.isdir(os.path.join(filtereddata_folder, f))]
+        folder_names = sorted(folder_names)
+        condition_names = {
+            'APA': {
+                'Day_comparison': {
+                    'Low-High': ['%s_Day1' % folder_names[2], '%s_Day2' % folder_names[2], '%s_Day3' % folder_names[2]],
+                    'Low-Mid': ['%s_Day1' % folder_names[3], '%s_Day2' % folder_names[3], '%s_Day3' % folder_names[3]]
+                },
+                'TransitionMagnitude_comparison': {
+                    'Accelerating': [folder_names[2], folder_names[3]],  # low-high vs low-mid
+                    'Decelerating': [folder_names[0], folder_names[5]] # high-low vs mid-low
+                },
+                'BaseSpeed_comparison': {
+                    'Accelerating': [folder_names[3], folder_names[4]], # low-mid vs mid-high
+                    'Decelerating': [folder_names[1], folder_names[5]] # high-mid vs mid-low
+                }
+            },
+            'PerceptionTest': folder_names[6],
+            'VMT': { ########### WAIT FOR FINAL FOLDERS TO DO THIS BIT ##############
+                'Perceived': {
+                    'SpeedComparison': [folder_names[7], folder_names[9]]
+                },
+                'Actual': {
+                }
+            }
         }
 
         view = ['Overhead', 'Side']
@@ -876,30 +1007,33 @@ class Plot():
         mean_std = ['mean', 'std']
         style = ['group', 'individual']
 
+        # get a flattened list of condition_names keys so can iterate over
+        list_conditions = utils.Utils().flatten_dict_keys(condition_names)
+
         if measure_type == 'Body Length':
-            for cidx, c in enumerate(condition_combos.keys()):
+            for cidx, c in enumerate(list_conditions.keys()):
                 if 'Char vs VMT' not in c:
                     for v in view:
                         for r in runphase:
                             for s in style:
-                                self.PlotByRun(conditions=condition_combos[c],measure_type='Body Length', view=v, runphase=[r], style=s,save=True)
+                                self.PlotByRun(conditions=list_conditions[c],measure_type='Body Length', view=v, runphase=[r], style=s,save=True)
             s='group'
-            for cidx, c in enumerate(condition_combos.keys()):
+            for cidx, c in enumerate(list_conditions.keys()):
                 for v in view:
                     for r in runphase:
                         for m in mean_std:
-                            self.PlotByPhaseChunk(conditions=condition_combos[c],measure_type='Body Length', view=v, runphase=[r], style=s,meanstd=m,save=True)
+                            self.PlotByPhaseChunk(conditions=list_conditions[c],measure_type='Body Length', view=v, runphase=[r], style=s,meanstd=m,save=True)
 
         if measure_type == 'Back Skew' or measure_type == 'Back Height':
-            for cidx, c in enumerate(condition_combos.keys()):
+            for cidx, c in enumerate(list_conditions.keys()):
                 if 'Char vs VMT' not in c:
                     for r in runphase:
                         for s in style:
-                            self.PlotByRun(conditions=condition_combos[c],measure_type=measure_type, view='Side', runphase=[r], style=s,save=True)
+                            self.PlotByRun(conditions=list_conditions[c],measure_type=measure_type, view='Side', runphase=[r], style=s,save=True)
             s='group'
-            for cidx, c in enumerate(condition_combos.keys()):
+            for cidx, c in enumerate(list_conditions.keys()):
                 for r in runphase:
                     for m in mean_std:
-                        self.PlotByPhaseChunk(conditions=condition_combos[c],measure_type=measure_type, view='Side', runphase=[r], style=s,meanstd=m,save=True)
+                        self.PlotByPhaseChunk(conditions=list_conditions[c],measure_type=measure_type, view='Side', runphase=[r], style=s,meanstd=m,save=True)
 
 

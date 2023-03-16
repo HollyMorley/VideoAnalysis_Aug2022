@@ -348,4 +348,9 @@ class Utils:
 
         return speed_order
 
+    def sigmoid(self, x, L, x0, k, b):
+        y = L / (1 + np.exp(-k * (x - x0))) + b
+        return (y)
+
+
 

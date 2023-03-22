@@ -10,7 +10,7 @@ con = conditions[0]
 mouseID = 'FAA-1034976'
 view = 'Side'
 
-frame_num = 11270
+frame_num = 268110
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)
@@ -59,6 +59,7 @@ def on_key_press(event):
     # Update the image and frame number display
     update_image()
     plotSwSt(stsw)
+    plotTail()
     plt.draw()
 
 
@@ -88,6 +89,11 @@ def plotSwSt(stsw):
             position = np.where(stsw[l]['Swing']['idx'] == frame_num)
             plt.scatter(stsw[l]['Swing']['x'][position], stsw[l]['Swing']['y'][position] ,color=colors[l], marker='s', s=markersize)  ##### put in here the same colours as plot for graphs
 
+def plotTail():
+    tailx = df[con][mouseID]['Side'].loc(axis=0)[:, ['TrialStart','RunStart','Transition','RunEnd'], frame_num].loc(axis=1)['Tail1','x'].values[0]
+    taily = df[con][mouseID]['Side'].loc(axis=0)[:, ['TrialStart','RunStart','Transition','RunEnd'], frame_num].loc(axis=1)['Tail1','y'].values[0]
+    markersize = 10
+    plt.scatter(tailx, taily, color='red', marker='s', s=markersize)  ##### put in here the same colours as plot for graphs
 
 # Get data for stance and swing
 df = Plot.Plot().GetDFs(conditions)
@@ -97,6 +103,7 @@ stsw = getStSwFramesForVid(df, con, mouseID, view)
 # Start at the first frame
 update_image()
 plotSwSt(stsw)
+plotTail()
 
 
 # Connect the key press event to the figure

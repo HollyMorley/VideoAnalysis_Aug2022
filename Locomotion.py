@@ -47,20 +47,38 @@ class Locomotion():
         newfirststance = frame[halfwindow:][plateaumask][0]
         return newfirststance
 
-    def findNewVal(self, r, l, i, frame, popt, stancestart):
-        # check for 's' sigmoid shape...
-        if np.logical_and.reduce((utils.Utils().sigmoid(frame, *popt)[-1] == max(utils.Utils().sigmoid(frame, *popt)),
-                                  utils.Utils().sigmoid(frame, *popt)[0] == min(utils.Utils().sigmoid(frame, *popt)),
-                                  max(utils.Utils().sigmoid(frame, *popt)) != min(utils.Utils().sigmoid(frame, *popt)),
-                                  np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[-5:-1]) < 0.0001),
-                                  np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[0:4]) < 0.0001))):
-            try:
-                newfirststance = self.findplateau(frame=frame, popt=popt)
-                stancestart[i] = newfirststance
-                return stancestart[i]
-            except:
-                print('cant divide for run: %s, limb: %s, stance: %s --> Deleted' % (r, l, i))
+    def findNewVal(self, r, l, i, ydata, p0, frame):
+        try:
+            popt, pcov = curve_fit(utils.Utils().sigmoid, frame, ydata, p0, method='dogbox')
+            # check for 's' sigmoid shape...
+            if np.logical_and.reduce((utils.Utils().sigmoid(frame, *popt)[-1] == max(utils.Utils().sigmoid(frame, *popt)),
+                                      utils.Utils().sigmoid(frame, *popt)[0] == min(utils.Utils().sigmoid(frame, *popt)),
+                                      max(utils.Utils().sigmoid(frame, *popt)) != min(utils.Utils().sigmoid(frame, *popt)),
+                                      np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[-1:-4:-1]) < 0.0001),
+                                      np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[0:3]) < 0.0001))):
+                try:
+                    newfirststance = self.findplateau(frame=frame, popt=popt)
+                    satisfied = True
 
+                except:
+                    print('cant divide for run: %s, limb: %s, stance: %s --> Deleted' % (r, l, i))
+                    newfirststance = []
+                    satisfied = False
+
+            else:
+                newfirststance = []
+                satisfied = False
+        except:
+            print('Cant find any curve to refine for run: %s, limb: %s, stance: %s --> Deleted (1)' % (r, l, i))
+            newfirststance = []
+            satisfied = False
+        return [newfirststance, satisfied]
+
+
+    def findPeakByRot(self, x, t, w, p):
+        peaks, info = scipy.signal.find_peaks(x, rel_height=1, width=w, distance=10, prominence=p)
+        stancestart = np.array(t[peaks])  # find first frame
+        return stancestart
 
 
     def getLocoPeriods(self, data, con, mouseID, fillvalues=True, view='Side'):
@@ -77,20 +95,15 @@ class Locomotion():
 
                 # new swing/ stance id
                 slope, intercept, r_value, p_value, std_err = stats.linregress(t, x)
-                xcorr = (x - slope * t) - intercept
-                xcorr_rot = (x - slope * t * 0.5) - intercept
+                xcorr_rot0 = (x - slope * t) - intercept
+                xcorr_rot90 = (x - slope * t * 0.5) - intercept
 
                 # find start of stance
-                #peaks_st, _ = scipy.signal.find_peaks(xcorr, rel_height=1, width=10, distance=10, prominence=10)
-                peaks_st, info_st = scipy.signal.find_peaks(xcorr, rel_height=1, width=1, distance=10, prominence=10)
-                peaks_st_rot, info_st_rot = scipy.signal.find_peaks(xcorr_rot, rel_height=1, width=5, distance=10, prominence=20)
-                stancestart_bkup = np.array(t[peaks_st])  # find first frame
-                stancestart = np.array(t[peaks_st_rot])
+                stancestart = self.findPeakByRot(xcorr_rot90, t, w=5, p=20)
+                stancestart_rot0 = self.findPeakByRot(xcorr_rot0, t, w=1, p=10)
 
                 # find start of swing
-                #peaks_sw, _ = scipy.signal.find_peaks(-xcorr, rel_height=1, width=10, distance=10, prominence=10)
-                peaks_sw, info_sw = scipy.signal.find_peaks(-xcorr, rel_height=1, width=5, distance=10, prominence=20)
-                swingstart = np.array(t[peaks_sw])
+                swingstart = self.findPeakByRot(-xcorr_rot0, t, w=5, p=20)
 
                 # Check whether pattern of swing vs stance is right
                 # this assumes there are never any missing swing values!!
@@ -106,13 +119,13 @@ class Locomotion():
                     miss = np.array(np.where(np.diff(posALL) > 1)[0] + 1)  # find the expected position of any missing stances
 
                 if np.any(miss): # if there are any missing values found
-                    # check stancestart_bkup
+                    # check stancestart_rot0
                     for i in miss:
-                        poss_st = np.logical_and(stancestart_bkup > stancestart[i-1], stancestart_bkup < stancestart[i]) # find possible values
+                        poss_st = np.logical_and(stancestart_rot0 > stancestart[i-1], stancestart_rot0 < stancestart[i]) # find possible values
                         if np.any(poss_st):
                             if sum(poss_st) == 1:
-                                newvalmask = np.logical_and(stancestart_bkup > stancestart[i-1], stancestart_bkup < stancestart[i])
-                                stancestart = np.concatenate((stancestart, stancestart_bkup[newvalmask]))
+                                newvalmask = np.logical_and(stancestart_rot0 > stancestart[i-1], stancestart_rot0 < stancestart[i])
+                                stancestart = np.concatenate((stancestart, stancestart_rot0[newvalmask]))
                                 stancestart.sort()
                             else:
                                 print('Found %s extra possible values for stance_bkup to fill in missing gap in run %s, limb %s' %(sum(poss_st), r, l))
@@ -128,181 +141,83 @@ class Locomotion():
                     extr_indices = np.where(np.isin(posALL, non_unique_vals))[0]
 
 
-                # refine first stance values
-                markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
-                # #wallbeltdiffy = markerstuff['DualBeltMarkers']['y_edges'][1] - markerstuff['DualBeltMarkers']['y_wall'][0]
-                # belt2diff = markerstuff['DualBeltMarkers']['y_belt'][4] - np.mean(markerstuff['DualBeltMarkers']['y_belt'][0:3]) # finds the difference between the y of both belts
-                # x1 = markerstuff['DualBeltMarkers']['x_edges'][1]
-                # x2 = markerstuff['DualBeltMarkers']['x_edges'][2]
-                # y1 = markerstuff['DualBeltMarkers']['y_edges'][1]
-                # y2 = markerstuff['DualBeltMarkers']['y_edges'][2]
-                # m = (y2 - y1) / (x2 - x1)
-                # b = y1 - m * x1
-
                 # Remove erronous stancestarts AND refine frames
+                markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
                 todelALL = []
                 for i in range(0, len(stancestart)):
                     xs = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], stancestart[i]].loc(axis=1)[l, 'x'].values[0] # find x value in single frame where l is in stance
 
                     # Check that paw is not in transition area...
                     if xs < markerstuff['DualBeltMarkers']['x_edges'][2] or xs > markerstuff['DualBeltMarkers']['x_edges'][3] + 5:
+
+                        # 1st try: find curve and refine using main identified stance values
                         ydata, frame, p0 = self.findsigmoid(type='ctr', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y')
-                        try:
-                            popt, pcov = curve_fit(utils.Utils().sigmoid, frame, ydata, p0, method='dogbox')
-                            # check for 's' sigmoid shape...
-                            if np.logical_and.reduce((utils.Utils().sigmoid(frame, *popt)[-1] == max(utils.Utils().sigmoid(frame, *popt)),
-                                                        utils.Utils().sigmoid(frame, *popt)[0] == min(utils.Utils().sigmoid(frame, *popt)),
-                                                        max(utils.Utils().sigmoid(frame, *popt)) != min(utils.Utils().sigmoid(frame, *popt)),
-                                                        np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[-5:-1]) < 0.0001),
-                                                        np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[0:4]) < 0.0001))):
+                        newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
 
-                                # REFINE:
-                                # find curve for xdata too incase this summarises the step better
-                                xdata, xframe, xp0 = self.findsigmoid(type='ctr', st=stancestart[i], r=r, l=l,data=data[con][mouseID][view], xy='x')
+                        # 2nd try: find curve and refine using back up stance values (from tilting)
+                        if satisfied is False:
+                            # Find if there are any stance_bkup values nearby
+                            diffs = abs(stancestart[i] - stancestart_rot0)  # find difference between current stance val and all the stance_bkup vals
+                            if np.min(diffs[np.nonzero(diffs)]) < 30: # if there is a bkup value that is within 30 frames and isnt the same value....
+                                nearmask = np.where(np.min(diffs[np.nonzero(diffs)]) == diffs)[0][0] # create mask to show where the closest stance_bkup value that isnt the same value as stance is
+                                nearest = stancestart_rot0[nearmask]
+                                ydata, frame, p0 = self.findsigmoid(type='ctr', st=nearest, r=r, l=l, data=data[con][mouseID][view], xy='y')
+                                newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
 
-                                # if can fit a curve to xdata...
-                                try:
-                                    xpopt, xpcov = curve_fit(utils.Utils().sigmoid, xframe, xdata, xp0, method='dogbox') # (fitting curve to xdata)
-
-                                    # find residuals (ie difference) between both x and y data and their curves
-                                    yresid = utils.Utils().sigmoid(frame, *popt) - ydata
-                                    xresid = utils.Utils().sigmoid(xframe, *xpopt) - xdata
-
-                                    # if the mean of the normalised x residuals (ie confidence) is lower than for y, use x for finding plateau
-                                    if np.mean(xresid/xdata) < np.mean(yresid/ydata):
-                                        newfirststance = self.findplateau(frame=xframe, popt=xpopt)
-                                    # Otherwise, continue using y for plateau
-                                    else:
-                                        newfirststance = self.findplateau(frame=frame, popt=popt)
-
-                                    stancestart[i] = newfirststance
-
-                                # if can't fit a curve to xdata, stick with y curve
-                                except:
-                                    try:
-                                        newfirststance = self.findplateau(frame=frame, popt=popt)
-                                        stancestart[i] = newfirststance
-                                    except:
-                                        print('cant divide for run: %s, limb: %s, stance: %s --> Deleted' %(r,l,i))
+                        # 3rd try: find curve and refine using stance values from 30 frames ahead
+                        if satisfied is False:
+                            lastidx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx')[mask][-1]
+                            if stancestart[i] + 30 < lastidx:
+                                ydata, frame, p0 = self.findsigmoid(type='fwd', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y') # check for 30 frames ahead of stance point just in case it cant find the curve as it is further ahead
+                                newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
                             else:
-                                # Find if there are any stance_bkup values nearby
-                                diffs = abs(stancestart[i] - stancestart_bkup)  # find difference between current stance val and all the stance_bkup vals
-                                if np.min(diffs[np.nonzero(diffs)]) < 30: # if there is a bkup value that is within 30 frames and isnt the same value....
-                                    nearmask = np.where(np.min(diffs[np.nonzero(diffs)]) == diffs)[0][0] # create mask to show where the closest stance_bkup value that isnt the same value as stance is
-                                    nearest = stancestart_bkup[nearmask]
-                                    ydata, frame, p0 = self.findsigmoid(type='ctr', st=nearest, r=r, l=l, data=data[con][mouseID][view], xy='y')
-                                    try:
-                                        popt, pcov = curve_fit(utils.Utils().sigmoid, frame, ydata, p0, method='dogbox')
-                                        # check for 's' sigmoid shape...
-                                        if np.logical_and.reduce((utils.Utils().sigmoid(frame, *popt)[-1] == max(utils.Utils().sigmoid(frame, *popt)),
-                                                                    utils.Utils().sigmoid(frame, *popt)[0] == min(utils.Utils().sigmoid(frame, *popt)),
-                                                                    max(utils.Utils().sigmoid(frame, *popt)) != min(utils.Utils().sigmoid(frame, *popt)),
-                                                                    np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[-5:-1]) < 0.0001),
-                                                                    np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[0:4]) < 0.0001))):
-                                            # REFINE
-                                            try:
-                                                newfirststance = self.findplateau(frame=frame, popt=popt)
-                                                stancestart[i] = newfirststance
-                                            except:
-                                                print('cant divide for run: %s, limb: %s, stance: %s --> Deleted' % (r, l, nearest))
+                                satisfied = False
 
-                                        else:
-                                            print('Finish this')
+                        # 4th try: if can't find a sigmoid with either ctr or fwd aproach, find if there is a horizontal line between stance and it's next swing. Could just be a missing data issue
+                        if satisfied is False:
+                            if np.any(stancestart[i] - swingstart < 0):
+                                try:
+                                    swingid = np.where(stancestart[i] - swingstart < 0)[0][0]
+                                    slope, intercept, r_value, p_value, std_err = stats.linregress(
+                                        xS.loc[stancestart[i]:swingstart[swingid]].index,
+                                        xS.loc[stancestart[i]:swingstart[swingid]])
+                                    if slope < 2:
+                                        newfirststance = stancestart[i]
+                                        satisfied = True
+                                    else:
+                                        satisfied = False
+                                except:
+                                    print('Couldnt find horizontal line for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
+                                    satisfied = False
+                            else:
+                                try:
+                                    finalidx = xS.index[-1]
+                                    slope, intercept, r_value, p_value, std_err = stats.linregress(
+                                        xS.loc[stancestart[i]:finalidx].index,
+                                        xS.loc[stancestart[i]:finalidx])
+                                    if slope < 2:
+                                        newfirststance = stancestart[i]
+                                        satisfied = True
+                                    else:
+                                        satisfied = False
+                                except:
+                                    print('Couldnt find horizontal line for run (using final value of run): %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
+                                    satisfied = False
 
-                                    except:
-                                        print('Couldnt find a curve for the nearest stance back up value for run: %s, limb: %s, stance: %s' % (r, l, nearest))
 
-                                else:
-                                    # check for 30 frames ahead of stance point just in case it cant find the curve as it is further ahead
-                                    ydata, frame, p0 = self.findsigmoid(type='fwd', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y')
-                                    try:
-                                        popt, pcov = curve_fit(utils.Utils().sigmoid, frame, ydata, p0, method='dogbox')
-                                        if np.logical_and.reduce((utils.Utils().sigmoid(frame, *popt)[-1] == max(utils.Utils().sigmoid(frame, *popt)),
-                                                                    utils.Utils().sigmoid(frame, *popt)[0] == min(utils.Utils().sigmoid(frame, *popt)),
-                                                                    max(utils.Utils().sigmoid(frame, *popt)) != min(utils.Utils().sigmoid(frame, *popt)),
-                                                                    np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[-5:-1]) < 0.0001),
-                                                                    np.all(np.diff(utils.Utils().sigmoid(frame, *popt)[0:4]) < 0.0001))):
-                                            # REFINE
-                                            try:
-                                                newfirststance = self.findplateau(frame=frame, popt=popt)
-                                                stancestart[i] = newfirststance
-                                            except:
-                                                print('cant divide for run: %s, limb: %s, stance: %s' % (r, l, i))
-
-                                        else:
-                                            # if can't find a sigmoid with either ctr or fwd aproach, find if there is a horizontal line between stance and it's next swing. Could just be a missing data issue
-                                            swingid = np.where(stancestart[i] - swingstart < 0)[0][0]
-                                            slope, intercept, r_value, p_value, std_err = stats.linregress(
-                                                xS.loc[stancestart[i]:swingstart[swingid]].index,
-                                                xS.loc[stancestart[i]:swingstart[swingid]])
-                                            if slope < 2:
-                                                pass
-                                            else:
-                                                # remove this stancestart value from the stancestart array
-                                                todelALL.append(i)
-                                                print('Cant find horizontal line between st and sw for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
-                                                if i in extr_indices:
-                                                    print('This stance was possibly an erronous extra stance')
-                                    except:
-                                        todelALL.append(i)
-                                        print('Cant find any curve to refine for run: %s, limb: %s, stance: %s --> Deleted (1)' %(r,l,i))
-                                        if i in extr_indices:
-                                            print('This stance was possibly an erronous extra stance')
-
-                        except:
+                        if satisfied is True:
+                            stancestart[i] = newfirststance
+                        else:
+                            # remove this stancestart value from the stancestart array
                             todelALL.append(i)
-                            print('Cant find any curve to refine for run: %s, limb: %s, stance: %s --> Deleted (2)' %(r,l,i))
+                            print('Cant find any way to validify this value for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
                             if i in extr_indices:
                                 print('This stance was possibly an erronous extra stance')
+
                     else:
-                        pass # don't do anything here because y data is not informative in the transition zone as it does deeper
+                        pass
 
                 stancestart = np.delete(stancestart, todelALL)
-
-                # # refine stancestart values
-                # for i in range(0, len(stancestart)):
-                #     x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], stancestart[i]].loc(axis=1)[l, 'x'].values[0]
-                #     if x < markerstuff['DualBeltMarkers']['x_edges'][2] or x > markerstuff['DualBeltMarkers']['x_edges'][3] + 5: # only refine with y when paw is not in transition zone otherwise y max is not when paw goes down (it goes down roller too)
-                #         ydata_ctr = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], np.arange(stancestart[i]-ctr_window,stancestart[i]+ctr_window)].loc(axis=1)[l, 'y'].values
-                #         frame_ctr = np.arange(stancestart[i]-ctr_window,stancestart[i]+ctr_window)
-                #         p0_ctr = [max(ydata_ctr), np.median(frame_ctr), 1, min(ydata_ctr)]
-                #         try:
-                #             popt, pcov = curve_fit(utils.Utils().sigmoid, frame_ctr, ydata_ctr, p0_ctr, method='dogbox')
-                #             plateaumask = (np.gradient(utils.Utils().sigmoid(frame_ctr, *popt), frame_ctr)/max(np.gradient(utils.Utils().sigmoid(frame_ctr, *popt), frame_ctr)))[ctr_window:] < 0.5 # find where normalised gradient is lower than 0.5 in second half (downward curve in change)
-                #             newfirststance = frame_ctr[ctr_window:][plateaumask][0]
-                #             stancestart[i] = newfirststance
-                #         except: ############# dont do this for transition zone!!!! y is not reliable
-                #             try:
-                #                 ydata_fwd = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], np.arange(stancestart[i], stancestart[i] + fwd_window)].loc(axis=1)[l, 'y'].values
-                #                 frame_fwd = np.arange(stancestart[i], stancestart[i] + fwd_window)
-                #                 p0_fwd = [max(ydata_fwd), np.median(frame_fwd), 1, min(ydata_fwd)]
-                #                 popt, pcov = curve_fit(utils.Utils().sigmoid, frame_fwd, ydata_fwd, p0_fwd, method='dogbox')
-                #                 plateaumask = (np.gradient(utils.Utils().sigmoid(frame_fwd, *popt), frame_fwd)/max(np.gradient(utils.Utils().sigmoid(frame_fwd, *popt), frame_fwd)))[ctr_window:] < 0.5 # find where normalised gradient is lower than 0.5 in second half (downward curve in change)
-                #                 newfirststance = frame_fwd[ctr_window:][plateaumask][0]
-                #                 stancestart[i] = newfirststance
-                #             except:
-                #                 print('Cant find curve to refine ')
-                #     else:
-                #         pass
-
-                    # except:
-                    #     print('Couldnt find curve for run: %s, limb: %s and stance number: %s' %(r,l,i))
-
-
-                # xS = pd.Series(data=x, index=t)
-                # for i in range(0, len(stancestart)):
-                #     try:
-                #         if stancestart[0] < swingstart[0]:
-                #             slope, intercept, r_value, p_value, std_err = stats.linregress(xS.loc[stancestart[i]:swingstart[i]].index, xS.loc[stancestart[i]:swingstart[i]])
-                #             instancemask = xS.loc[stancestart[i]:swingstart[i]] > (slope * xS.loc[stancestart[i]:swingstart[i]].index) + intercept
-                #             newfirststance = xS.loc[stancestart[i]:swingstart[i]].index[instancemask][0]
-                #         else:
-                #             slope, intercept, r_value, p_value, std_err = stats.linregress(xS.loc[stancestart[i]:swingstart[i + 1]].index, xS.loc[stancestart[i]:swingstart[i + 1]])
-                #             instancemask = xS.loc[stancestart[i]:swingstart[i + 1]] > (slope * xS.loc[stancestart[i]:swingstart[i + 1]].index) + intercept
-                #             newfirststance = xS.loc[stancestart[i]:swingstart[i + 1]].index[instancemask][0]
-                #         stancestart[i] = newfirststance
-                #     except:
-                #         print('problem with number of stance vs swing for: Limb: %s, Run: %s, and Stance #: %s' % (l, r, i))
 
                 # put first swing and stance frames into df
                 StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)

@@ -22,6 +22,7 @@ mice_name = [
     'MLR'
 ]
 RunStages = ['TrialStart', 'RunStart', 'Transition', 'RunEnd', 'TrialEnd']
+ExpPhases = ['Baseline', 'APA', 'Washout']
 distancescm = [13,12,11.5,11.5] # goes 0: wall1-wall0,  1: wall2-wall1, 3: wall3-wall2, 4: wall4-wall3
 APACharRuns = [10,20,10]
 APAPerRuns = [10,20,10] #### warning if change i have sometimes used the apachar variable to define perception runs too

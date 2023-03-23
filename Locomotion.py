@@ -142,82 +142,82 @@ class Locomotion():
 
 
                 # Remove erronous stancestarts AND refine frames
-                markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
-                todelALL = []
-                for i in range(0, len(stancestart)):
-                    xs = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], stancestart[i]].loc(axis=1)[l, 'x'].values[0] # find x value in single frame where l is in stance
-
-                    # Check that paw is not in transition area...
-                    if xs < markerstuff['DualBeltMarkers']['x_edges'][2] or xs > markerstuff['DualBeltMarkers']['x_edges'][3] + 5:
-
-                        # 1st try: find curve and refine using main identified stance values
-                        ydata, frame, p0 = self.findsigmoid(type='ctr', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y')
-                        newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
-
-                        # 2nd try: find curve and refine using back up stance values (from tilting)
-                        if satisfied is False:
-                            # Find if there are any stance_bkup values nearby
-                            diffs = abs(stancestart[i] - stancestart_rot0)  # find difference between current stance val and all the stance_bkup vals
-                            if np.min(diffs[np.nonzero(diffs)]) < 30: # if there is a bkup value that is within 30 frames and isnt the same value....
-                                nearmask = np.where(np.min(diffs[np.nonzero(diffs)]) == diffs)[0][0] # create mask to show where the closest stance_bkup value that isnt the same value as stance is
-                                nearest = stancestart_rot0[nearmask]
-                                ydata, frame, p0 = self.findsigmoid(type='ctr', st=nearest, r=r, l=l, data=data[con][mouseID][view], xy='y')
-                                newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
-
-                        # 3rd try: find curve and refine using stance values from 30 frames ahead
-                        if satisfied is False:
-                            lastidx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx')[mask][-1]
-                            if stancestart[i] + 30 < lastidx:
-                                ydata, frame, p0 = self.findsigmoid(type='fwd', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y') # check for 30 frames ahead of stance point just in case it cant find the curve as it is further ahead
-                                newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
-                            else:
-                                satisfied = False
-
-                        # 4th try: if can't find a sigmoid with either ctr or fwd aproach, find if there is a horizontal line between stance and it's next swing. Could just be a missing data issue
-                        if satisfied is False:
-                            if np.any(stancestart[i] - swingstart < 0):
-                                try:
-                                    swingid = np.where(stancestart[i] - swingstart < 0)[0][0]
-                                    slope, intercept, r_value, p_value, std_err = stats.linregress(
-                                        xS.loc[stancestart[i]:swingstart[swingid]].index,
-                                        xS.loc[stancestart[i]:swingstart[swingid]])
-                                    if slope < 2:
-                                        newfirststance = stancestart[i]
-                                        satisfied = True
-                                    else:
-                                        satisfied = False
-                                except:
-                                    print('Couldnt find horizontal line for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
-                                    satisfied = False
-                            else:
-                                try:
-                                    finalidx = xS.index[-1]
-                                    slope, intercept, r_value, p_value, std_err = stats.linregress(
-                                        xS.loc[stancestart[i]:finalidx].index,
-                                        xS.loc[stancestart[i]:finalidx])
-                                    if slope < 2:
-                                        newfirststance = stancestart[i]
-                                        satisfied = True
-                                    else:
-                                        satisfied = False
-                                except:
-                                    print('Couldnt find horizontal line for run (using final value of run): %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
-                                    satisfied = False
-
-
-                        if satisfied is True:
-                            stancestart[i] = newfirststance
-                        else:
-                            # remove this stancestart value from the stancestart array
-                            todelALL.append(i)
-                            print('Cant find any way to validify this value for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
-                            if i in extr_indices:
-                                print('This stance was possibly an erronous extra stance')
-
-                    else:
-                        pass
-
-                stancestart = np.delete(stancestart, todelALL)
+                # markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
+                # todelALL = []
+                # for i in range(0, len(stancestart)):
+                #     xs = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], stancestart[i]].loc(axis=1)[l, 'x'].values[0] # find x value in single frame where l is in stance
+                #
+                #     # Check that paw is not in transition area...
+                #     if xs < markerstuff['DualBeltMarkers']['x_edges'][2] or xs > markerstuff['DualBeltMarkers']['x_edges'][3] + 5:
+                #
+                #         # 1st try: find curve and refine using main identified stance values
+                #         ydata, frame, p0 = self.findsigmoid(type='ctr', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y')
+                #         newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
+                #
+                #         # 2nd try: find curve and refine using back up stance values (from tilting)
+                #         if satisfied is False:
+                #             # Find if there are any stance_bkup values nearby
+                #             diffs = abs(stancestart[i] - stancestart_rot0)  # find difference between current stance val and all the stance_bkup vals
+                #             if np.min(diffs[np.nonzero(diffs)]) < 30: # if there is a bkup value that is within 30 frames and isnt the same value....
+                #                 nearmask = np.where(np.min(diffs[np.nonzero(diffs)]) == diffs)[0][0] # create mask to show where the closest stance_bkup value that isnt the same value as stance is
+                #                 nearest = stancestart_rot0[nearmask]
+                #                 ydata, frame, p0 = self.findsigmoid(type='ctr', st=nearest, r=r, l=l, data=data[con][mouseID][view], xy='y')
+                #                 newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
+                #
+                #         # 3rd try: find curve and refine using stance values from 30 frames ahead
+                #         if satisfied is False:
+                #             lastidx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx')[mask][-1]
+                #             if stancestart[i] + 30 < lastidx:
+                #                 ydata, frame, p0 = self.findsigmoid(type='fwd', st=stancestart[i], r=r, l=l, data=data[con][mouseID][view], xy='y') # check for 30 frames ahead of stance point just in case it cant find the curve as it is further ahead
+                #                 newfirststance, satisfied = self.findNewVal(r, l, i, ydata, p0, frame)
+                #             else:
+                #                 satisfied = False
+                #
+                #         # 4th try: if can't find a sigmoid with either ctr or fwd aproach, find if there is a horizontal line between stance and it's next swing. Could just be a missing data issue
+                #         if satisfied is False:
+                #             if np.any(stancestart[i] - swingstart < 0):
+                #                 try:
+                #                     swingid = np.where(stancestart[i] - swingstart < 0)[0][0]
+                #                     slope, intercept, r_value, p_value, std_err = stats.linregress(
+                #                         xS.loc[stancestart[i]:swingstart[swingid]].index,
+                #                         xS.loc[stancestart[i]:swingstart[swingid]])
+                #                     if slope < 2:
+                #                         newfirststance = stancestart[i]
+                #                         satisfied = True
+                #                     else:
+                #                         satisfied = False
+                #                 except:
+                #                     print('Couldnt find horizontal line for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
+                #                     satisfied = False
+                #             else:
+                #                 try:
+                #                     finalidx = xS.index[-1]
+                #                     slope, intercept, r_value, p_value, std_err = stats.linregress(
+                #                         xS.loc[stancestart[i]:finalidx].index,
+                #                         xS.loc[stancestart[i]:finalidx])
+                #                     if slope < 2:
+                #                         newfirststance = stancestart[i]
+                #                         satisfied = True
+                #                     else:
+                #                         satisfied = False
+                #                 except:
+                #                     print('Couldnt find horizontal line for run (using final value of run): %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
+                #                     satisfied = False
+                #
+                #
+                #         if satisfied is True:
+                #             stancestart[i] = newfirststance
+                #         else:
+                #             # remove this stancestart value from the stancestart array
+                #             todelALL.append(i)
+                #             print('Cant find any way to validify this value for run: %s, limb: %s, stance: %s --> Deleted ' % (r, l, i))
+                #             if i in extr_indices:
+                #                 print('This stance was possibly an erronous extra stance')
+                #
+                #     else:
+                #         pass
+                #
+                # stancestart = np.delete(stancestart, todelALL)
 
                 # put first swing and stance frames into df
                 StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)

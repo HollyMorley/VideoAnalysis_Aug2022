@@ -5,12 +5,12 @@ import Plot
 import numpy as np
 
 video_file = r"Z:\Holly\Data\Behaviour\Dual-belt_APAs\videos\Raw_videos\Round_2\20220826\HM_20220826_APAChar_FAA-1034976_MNone_side_1.avi"
-conditions = ['APAChar_LowHigh_Day3']
+conditions = ['APAChar_LowHigh_Repeats_NoWash_Day3']
 con = conditions[0]
 mouseID = 'FAA-1034976'
 view = 'Side'
 
-frame_num = 104787
+frame_num = 140377
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)

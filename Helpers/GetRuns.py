@@ -370,7 +370,7 @@ class GetRuns:
         ))
 
 
-        nextrungap = 1000
+        nextrungap = 900
         RunStartfirst = DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask][DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask].index.to_series().diff() > nextrungap]
         RunStartfirst = pd.concat([DataframeCoor_side.loc(axis=1)['Nose', 'x'][RunStartmask].iloc[:1], RunStartfirst])
         Transitionfirst = DataframeCoor_side.loc(axis=1)['Nose', 'x'][Transitionmask][DataframeCoor_side.loc(axis=1)['Nose', 'x'][Transitionmask].index.to_series().diff() > nextrungap]
@@ -453,6 +453,32 @@ class GetRuns:
             runstages['Transition'] = runstages['Transition'].drop(index=[267790])
             runstages['RunEnd'] = runstages['RunEnd'].drop(index=[64154])
             runstages['RunEnd'] = runstages['RunEnd'].drop(index=[156728])
+        if "HM_20230306_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[212837])
+        if "HM_20230306_APACharRepeat_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[263385,200613,182649])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[200649,182748])
+        if "HM_20230306_APACharRepeat_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[298498,339900]) # mouse got stuck and couldn't finish last 2 trials (incl trial where got stuck).
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[298731,340102])
+            runstages['Transition'] = runstages['Transition'].drop(index=[271271]) # mouse slipped under door when stationary
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[271302])
+        if "HM_20230306_APACharRepeat_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[150479])  # extra run - mouse sat so jerry did another
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[150933])
+        if "HM_20230309_APACharRepeat_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[77841,141427,211977])  # extra run - mouse sat so jerry did another
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[78278,212009])
+        if "HM_20230309_APACharRepeat_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[52222,143313,218775,357521,378928,403650])  # lots of runbacks
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[143386, 218803,403716])
+        if "HM_20230309_APACharRepeat_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[69734]) # belt off
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[69766])
+        if "HM_20230309_APACharRepeat_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[46271,217479]) # belt off
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[46430])
+
 
 
         # first check that the number of transitions is the same as run ends
@@ -503,21 +529,6 @@ class GetRuns:
                 runstages['Transition'] = runstages['Transition'].drop(index=runstages['Transition'].index[to_delALL])
         runstages['TrialStart'] = big_idxlist.iloc[potentialClosestpos_pd]
 
-        # # choose frame after each RunEnd where nose is no longer in frame
-        # nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][
-        #     DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(
-        #         100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
-        # nosedisappear = nosenotpresent[
-        #     nosenotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
-        #
-        # distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
-        # distnose = distnose.astype(float)
-        # distnose[distnose < 0] = np.nan
-        # potentialClosestpos_nose = np.nanargmin(distnose, axis=1)
-        # closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
-        # if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
-        #     raise ValueError('Seems to be a missing RunEnd value')
-        # runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
 
         ############################ NEW AS OF 19-01-2023 ###########################################
         # changed looking for when nose disappears to when right ear disappears as seems more reliable. Also now look for closest frame whether before or after run end  (when the camera has shifted the tape blocks some of the view and so causes a discrepancy here.
@@ -536,15 +547,6 @@ class GetRuns:
         eartaildisappear = pd.concat((eardisappear, taildisappear), axis=0)
 
 
-        # # find closest frame of where ear disappears to each run end value
-        # distear = eardisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
-        # distear = abs(distear.astype(float))
-        # potentialClosestpos_ear = np.argmin(distear, axis=1)
-        # closestfoundear, closestCountsear = np.unique(potentialClosestpos_ear, return_counts=True)
-        # if closestfoundear.shape[0] != runstages['RunEnd'].index.values.shape[0]:
-        #     raise ValueError('Seems to be a missing RunEnd value')
-        # runstages['TrialEnd'] = eardisappear.iloc[potentialClosestpos_ear]
-
         # find closest frame of where ear disappears to each run end value
         disteartail = eartaildisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
         disteartail = abs(disteartail.astype(float))
@@ -553,22 +555,6 @@ class GetRuns:
         if closestfoundeartail.shape[0] != runstages['RunEnd'].index.values.shape[0]:
             raise ValueError('Seems to be a missing RunEnd value')
         runstages['TrialEnd'] = eartaildisappear.iloc[potentialClosestpos_eartail]
-
-        # ############################ NEW AS OF 19-01-2023 ###########################################
-        # # changed looking for when nose disappears to when right ear disappears as seems more reliable. Also now look for closest frame whether before or after run end  (when the camera has shifted the tape blocks some of the view and so causes a discrepancy here.
-        # # choose frame after each RunEnd where nose is no longer in frame
-        # nosenotpresent = DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'][
-        #     DataframeCoor_side.loc(axis=1)['Nose', 'likelihood'].rolling(
-        #         100).mean() < pcutoff]  # finds where the mean of the *last* 100 frames is less than pcutoff
-        # nosedisappear = nosenotpresent[nosenotpresent.index.to_series().diff() > 50]  # finds where there are large gaps between frames which have a rolling mean of over pcutoff
-        #
-        # distnose = nosedisappear.index.values - runstages['RunEnd'].index.values[:, np.newaxis]
-        # distnose = abs(distnose.astype(float))
-        # potentialClosestpos_nose = np.argmin(distnose, axis=1)
-        # closestfoundnose, closestCountsnose = np.unique(potentialClosestpos_nose, return_counts=True)
-        # if closestfoundnose.shape[0] != runstages['RunEnd'].index.values.shape[0]:
-        #     raise ValueError('Seems to be a missing RunEnd value')
-        # runstages['TrialEnd'] = nosedisappear.iloc[potentialClosestpos_nose]
 
         # check that the trial end values are appropriate and importantly if they occur before run end that it is not too much before
         if min(runstages['TrialEnd'].index - runstages['RunEnd'].index) < -20:
@@ -661,10 +647,10 @@ class GetRuns:
         ##### !!!! Readjust run numbers for missed runs mid experiment !!!! ######
         if 'HM_20220825_APAChar_FAA-1034980_MNone_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_103000' in filename: # 1 missing APA, 2 missing washout (ignored as at end)
             print('One trial missing from APA phase. Shifting subsequent washout run labels...')
-            for r in reversed(range(31, 39)):
-                DataframeCoor_side.rename(index={r: r + 1}, inplace=True)
-                DataframeCoor_front.rename(index={r: r + 1}, inplace=True)
-                DataframeCoor_overhead.rename(index={r: r + 1}, inplace=True)
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=31, max=39, shifted=1)
+        if 'HM_20230306_APACharRepeat_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000' in filename: # 5 missing APA from end of APA phase (accidentally quit video)
+            print('Five trials missing from APA phase. Shifting subsequent washout run labels...')
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=27, max=37, shifted=5)
 
         # Find where any runbacks are by looking in each run for multiple RunStarts
         runbackALL = list()
@@ -814,6 +800,12 @@ class GetRuns:
         }
 
         return results
+
+    def shiftRunNumbers(self, side, front, overhead, min, max, shifted):
+        for r in reversed(range(min, max)):
+            side.rename(index={r: r + shifted}, inplace=True)
+            front.rename(index={r: r + shifted}, inplace=True)
+            overhead.rename(index={r: r + shifted}, inplace=True)
 
 
     def findMarkers(self, df_side):

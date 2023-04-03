@@ -30,10 +30,14 @@ class Plot():
                 files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True)
             else:
                 splitcon = con.split('_')
-                conname = "_".join(splitcon[:-1])
+                conname = "_".join(splitcon[0:2])
                 dayname = splitcon[-1]
+                w = splitcon[-2]
                 # files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
-                files = utils.Utils().GetlistofH5files(directory=r"%s\%s\%s" %(filtereddata_folder, conname, dayname), filtered=True)
+                if 'Repeats' in con:
+                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Repeats\%s\%s" %(filtereddata_folder, conname, w, dayname), filtered=True)
+                else:
+                    raise ValueError('Havent done this yet')
             #filesALL['%s' %con] =
             mouseIDALL = list()
             dateALL = list()
@@ -979,9 +983,9 @@ class Plot():
         folder_names = sorted(folder_names)
         condition_names = {
             'APA': {
-                'Day_comparison': {
-                    'Low-High': ['%s_Day1' % folder_names[2], '%s_Day2' % folder_names[2], '%s_Day3' % folder_names[2]],
-                    'Low-Mid': ['%s_Day1' % folder_names[3], '%s_Day2' % folder_names[3], '%s_Day3' % folder_names[3]]
+                'Day_comparison_nowash': {
+                    'Low-High': ['%s_Repeats_NoWash_Day1' % folder_names[2], '%s_Repeats_NoWash_Day2' % folder_names[2], '%s_Repeats_NoWash_Day3' % folder_names[2]],
+                    'Low-Mid': ['%s_Repeats_NoWash_Day1' % folder_names[3], '%s_Repeats_NoWash_Day2' % folder_names[3], '%s_Repeats_NoWash_Day3' % folder_names[3]]
                 },
                 'TransitionMagnitude_comparison': {
                     'Accelerating': [folder_names[2], folder_names[3]],  # low-high vs low-mid

@@ -86,6 +86,8 @@ class Plot():
                     if timelocked == True:
                         preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
                         apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3'][-APA_lengthruns:].index.get_level_values(level='FrameIdx')
+                        #apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')][-APA_lengthruns:].index.get_level_values(level='FrameIdx')
+                        #apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
                         postidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q4'][:after_lengthruns].index.get_level_values(level='FrameIdx')
                     else:
                         preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
@@ -684,19 +686,29 @@ class Plot():
             sub_colors = [colors(6), colors(8)]
         elif 'PerceptionTest' in conditions_all and len(conditions) ==2:
             sub_colors = [colors(10), colors(11)]
+        elif 'APAChar_LowHigh_Repeats_Wash_Day1' in conditions_all and 'APAChar_LowHigh_Repeats_Wash_Day2' in conditions_all and 'APAChar_LowHigh_Repeats_Wash_Day3' in conditions_all and len(
+                conditions) == 3:
+            sub_colors = [blues(19), blues(14), blues(9)]
+        elif 'APAChar_LowHigh_Repeats_NoWash_Day1' in conditions_all and 'APAChar_LowHigh_Repeats_NoWash_Day2' in conditions_all and 'APAChar_LowHigh_Repeats_NoWash_Day3' in conditions_all and len(
+                conditions) == 3:
+            sub_colors = [blues(19), blues(14), blues(9)]
+        elif 'APAChar_LowHigh_Repeats_Wash_Day1' in conditions_all and 'APAChar_LowHigh_Repeats_Wash_Day2' in conditions_all and 'APAChar_LowHigh_Repeats_Wash_Day3' in conditions_all \
+                and 'APAChar_LowHigh_Repeats_NoWash_Day1' in conditions_all and len(conditions) == 4:
+            sub_colors = [blues(19), blues(14), blues(9), blues(4)]
 
         plt.rcParams.update({
-            "figure.facecolor": (1.0, 0.0, 0.0, 0),  # red   with alpha = 30%
+            "figure.facecolor": (1.0, 1.0, 1.0, 1.0),  # red   with alpha = 30%
             "axes.facecolor": (1.0, 1.0, 1.0, 1.0),  # green with alpha = 50%
-            "savefig.facecolor": (0.0, 0.0, 1.0, 0),  # blue  with alpha = 20%
+            "savefig.facecolor": (1.0, 1.0, 1.0, 1.0),  # blue  with alpha = 20%
             "font.size": 24,
             'axes.spines.right': False,
             'axes.spines.top':False
         })
 
 
-        plt.figure(num="%s_%s_%s_%s_%s_timelocked=%s" %(conditions, runphase, measure_type, view, style, timelocked), figsize=(11, 4))
-        ax =plt.subplot(111) # can give this ax more specific name
+        fig = plt.figure(num="%s_%s_%s_%s_%s_timelocked=%s" %(conditions, runphase, measure_type, view, style, timelocked), figsize=(11, 4))
+        #ax =plt.subplot(121) # can give this ax more specific name
+        ax = fig.add_axes([0.1, 0.1, 0.65, 0.75])
         ax.set_xlim(1, groupData[conditions[0]][runphase[0]].shape[0])
         #ax.set_xlabel('Run')
 
@@ -751,7 +763,8 @@ class Plot():
         if legend == True:
             if userlabels == True:
                 legendtitle = input('Enter legend title:')
-                ax.legend(title=legendtitle, bbox_to_anchor=(1, 1), loc='lower right')
+                #ax.legend(title=legendtitle, bbox_to_anchor=(1, 1), loc='lower right')
+                ax.legend(title=legendtitle, bbox_to_anchor=(1.05, 1), loc=2,borderaxespad=0.)
             else:
                 ax.legend(bbox_to_anchor=(1, 1), loc='lower right')
 

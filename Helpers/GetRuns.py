@@ -531,6 +531,64 @@ class GetRuns:
         if "HM_20230314_APACharRepeat_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
             runstages['Transition'] = runstages['Transition'].drop(index=[59066])
             runstages['RunEnd'] = runstages['RunEnd'].drop(index=[59103])
+        if "HM_20230316_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[283387])
+        if "HM_20230316_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[58424])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[58469])
+        if "HM_20230316_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[261775])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[262121])
+        if "HM_20230317_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[248056,351360,42293,51532,172871,451565])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[42305,51603,173079,451576])
+            # delete 2 stationary from start of vid 2
+            runstages['Transition'] = runstages['Transition'].drop(index=[474757,484487])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[474781,484521])
+        if "HM_20230317_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[217467])
+        if "HM_20230318_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[314581])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[314662])
+        if "HM_20230318_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[273351])
+        if "HM_20230318_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[267891,37330,315623])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[268878,267942,37661,315662])
+        if "HM_20230319_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[90782,206795]) ###### DONT UNDERSTADN WHY 206795 IS AN EXTRA RUN
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[206829]) #### SEE ABOVE
+        if "HM_20230403_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[65623,86388])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[65654,86427])
+        if "HM_20230403_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[174584])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[174623])
+        if "HM_20230403_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[225151,172293,179690])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[172370,179801])
+        if "HM_20230404_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[59837])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[59957])
+        if "HM_20230404_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[210985])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[211037])
+        if "HM_20230404_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[97213,15902])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[15952])
+        if "HM_20230405_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[123121,354831])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[354888])
+        if "HM_20230405_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[259725,54967])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[54995])
+        if "HM_20230406_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[273924])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[273959])
+        if "HM_20230406_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            runstages['Transition'] = runstages['Transition'].drop(index=[279133,297567])
+            runstages['RunEnd'] = runstages['RunEnd'].drop(index=[279164,297598])
+
 
         # first check that the number of transitions is the same as run ends
         if len(runstages['Transition']) != len(runstages['RunEnd']):
@@ -704,6 +762,14 @@ class GetRuns:
             self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=27, max=37, shifted=5)
         if "HM_20230308_APACharRepeat_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
             self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=0, max=40, shifted=2)
+        if "HM_20230316_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=1, max=41, shifted=1)
+        if "HM_20230317_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=4, max=39, shifted=1)
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=2, max=40, shifted=2)
+        if "HM_20230319_APACharExt_FAA-1035249_R_2_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000" in filename:
+            self.shiftRunNumbers(side=DataframeCoor_side, front=DataframeCoor_front, overhead=DataframeCoor_overhead, min=0, max=15, shifted=2)
+
 
         # Find where any runbacks are by looking in each run for multiple RunStarts
         runbackALL = list()

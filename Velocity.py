@@ -9,6 +9,11 @@ import math
 import pandas as pd
 from scipy.stats import sem
 import seaborn as sns
+import statsmodels.api as sm
+from statsmodels.stats.anova import AnovaRM
+from statsmodels.stats.multicomp import MultiComparison
+from scipy.stats import shapiro, levene
+from pingouin import rm_anova, pairwise_ttests
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 class Velocity:
@@ -410,16 +415,18 @@ class Velocity:
 
 
 
-    def plotSpeed_AllMice_Means_DayComp(self, conditions=['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3'], view='Side', expphase=[], xaxis='x', n=30):
-        sns.set(style='white')
-        colorrange = len(conditions) + 1
-        colors = sns.color_palette("ch:start=.2,rot=-.3", colorrange)
-        linestyles = ['-', '--', '-.', ':']
+    def plotSpeed_AllMice_Means_DayComp(self, name, conditions=['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3'], view='Side', expphase=[], plotfig=False):
+        if plotfig == True:
+            sns.set(style='white')
+            colorrange = len(conditions) + 1
+            colors = sns.color_palette("ch:start=.2,rot=-.3", colorrange)
+            linestyles = ['-', '--', '-.', ':']
 
         data = Plot.Plot().GetDFs(conditions)
 
         for e in expphase:
-            fig, ax = plt.subplots()
+            if plotfig == True:
+                fig, ax = plt.subplots()
             if e == 'Baseline':
                 f = range(2, 12)
                 cnum = 0
@@ -436,6 +443,7 @@ class Velocity:
                 f = range(32, 42)
                 cnum = 11
 
+            Stats = []
             Veldata = []
             for con in conditions:
                 allmice = []
@@ -497,7 +505,7 @@ class Velocity:
                     common_x = np.nan
 
                 try:
-                    transition_x_mean = np.mean(allmice[:,2])
+                    transition_x_mean = np.nanmean(allmice[:,2])
                     upper_closest = common_x[common_x - transition_x_mean > 0][0]
                     lower_closest = common_x[common_x - transition_x_mean < 0][-1]
                     if abs(transition_x_mean - upper_closest) < abs(transition_x_mean - lower_closest):
@@ -512,31 +520,77 @@ class Velocity:
                 # calculate transition position for experiment
                 trans_mean = np.mean(allmice[:, 4])
 
+                Stats.append(np.array(interpolated_runs_filtered)[:,xpos]) # getting all values for the 'transition' point for each condition
                 Veldata.append([common_x, upper_bound, lower_bound, average_interpolated_runs, transition_x_mean_est, transition_y, trans_mean])
 
-            for d in reversed(range(0, len(Veldata))):
-                common_x, upper_bound, lower_bound, average_interpolated_runs, transition_x_mean_est, transition_y, trans_mean = \
-                    Veldata[d]
-                # Plot shaded error region (se)
-                ax.fill_between(common_x, upper_bound, lower_bound, color=colors[d + 1], linestyle=linestyles[d], alpha=0.2)
-                # Plot the mean line
-                ax.plot(common_x, average_interpolated_runs, color=colors[d + 1], linestyle=linestyles[d],
-                        label=conditions[d].split('_')[-1])
-                # plot transition time point
-                ax.scatter(transition_x_mean, transition_y, color=colors[d + 1])
-            Varray = np.array(Veldata, dtype=object)
-            trans_mean_mean = np.mean(Varray[:,6])
-            ax.axvline(x=trans_mean_mean, color='black', linestyle='--')
+            if plotfig == False:
+                # Create a DataFrame with the data in long format
+                df = pd.DataFrame(np.array(Stats).T, columns=conditions)
+                df['mouse'] = data[con].keys()
+                df = pd.melt(df, id_vars=['mouse'], var_name='condition', value_name='speed')
 
-            # Add labels and title
-            plt.xlabel('Position on belt (cm)')
-            plt.ylabel('Velocity (cm/s)')
-            plt.title("%s" % (e))
-            plt.legend()
-            plt.ylim(0, 100)
-            fig.set_size_inches(10.44, 4.43, forward=True)
-            plt.savefig(r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\April23_roughstuff\Repeats\Velocity\Meanof17mice_%s.png" % (
-                e), bbox_inches='tight')
+                print('*************************************************************************************\n'
+                      'The following are results for the %s phase:\n'
+                      '*************************************************************************************' %e)
+
+                # Check normality assumption using Shapiro-Wilk test
+                for cond in df['condition'].unique():
+                    print(f"Shapiro-Wilk test for {cond}:")
+                    sw_stat, sw_p = shapiro(df.loc[df['condition'] == cond, 'speed'])
+                    print(f"Statistics={sw_stat:.4f}, p={sw_p:.4f}")
+                    alpha = 0.05
+                    if sw_p > alpha:
+                        print(f"{cond} is normally distributed (fail to reject H0)")
+                    else:
+                        print(f"{cond} is not normally distributed (reject H0)")
+
+                # Repeated measures ANOVA
+                aovrm = AnovaRM(df, 'speed', 'mouse', within=['condition'])
+                res = aovrm.fit()
+                print(res)
+
+                # Post hoc tests using Tukey's HSD
+                from statsmodels.stats.multicomp import MultiComparison
+                mc = MultiComparison(df['speed'], df['condition'])
+                posthoc = mc.tukeyhsd()
+                print(posthoc)
+
+
+                # # Run the repeated measures ANOVA
+                # rm = AnovaRM(statsdf, depvar='score', subject='subject', within=['condition'])
+                # res = rm.fit()
+                #
+                # # Print the ANOVA table
+                # print(res.summary())
+                #
+                # # Perform post-hoc tests
+                # mc = MultiComparison(statsdf['score'], statsdf['condition'])
+                # result = mc.tukeyhsd()
+
+
+            if plotfig == True:
+                for d in reversed(range(0, len(Veldata))):
+                    common_x, upper_bound, lower_bound, average_interpolated_runs, transition_x_mean_est, transition_y, trans_mean = \
+                        Veldata[d]
+                    # Plot shaded error region (se)
+                    ax.fill_between(common_x, upper_bound, lower_bound, color=colors[d + 1], linestyle=linestyles[d], alpha=0.2)
+                    # Plot the mean line
+                    ax.plot(common_x, average_interpolated_runs, color=colors[d + 1], linestyle=linestyles[d],
+                            label=conditions[d].split('_')[-1])
+                    # plot transition time point
+                    ax.scatter(transition_x_mean_est, transition_y, color=colors[d + 1])
+                Varray = np.array(Veldata, dtype=object)
+                trans_mean_mean = np.nanmean(Varray[:,6])
+                ax.axvline(x=trans_mean_mean, color='black', linestyle='--')
+
+                # Add labels and title
+                plt.xlabel('Position on belt (cm)')
+                plt.ylabel('Velocity (cm/s)')
+                plt.title("%s" % (e))
+                plt.legend()
+                plt.ylim(0, 100)
+                fig.set_size_inches(10.44, 4.43, forward=True)
+                plt.savefig(r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\April23_roughstuff\Repeats\Velocity\%s_%s.png" % (name, e), bbox_inches='tight')
 
 
         # for con in conditions:

@@ -8,6 +8,8 @@ from Helpers.Config import *
 import sys
 import numpy as np
 import re
+import math
+import pandas as pd
 
 class Utils:
     def __init__(self):
@@ -352,7 +354,37 @@ class Utils:
         y = L / (1 + np.exp(-k * (x - x0))) + b
         return (y)
 
+    def frametotime(self, frame):
+        time = (frame / fps) / 60
+        sec, min = math.modf(time)
+        sec = sec * 60
+        print('%s mins, %s secs' % (min, sec))
 
+    def combinetwohdfs(self):
+        scorers = [scorer_side, scorer_front, scorer_overhead]
+        for v, view in enumerate(cams):
+            df1 = pd.read_hdf(
+                r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230317\bin\HM_20230317_APACharExt_FAA-1035244_L_%s_1%s.h5" % (
+                view, scorers[v]))
+            df2 = pd.read_hdf(
+                r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230317\bin\HM_20230317_APACharExt_FAA-1035244_L_2_%s_1%s.h5" % (
+                view, scorers[v]))
+            newdf = pd.concat([df1, df2], ignore_index=True)
+            newdf.to_hdf(
+                r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230317\HM_20230317_APACharExt_FAA-1035244_L_%s_1%s.h5" % (
+                view, scorers[v]), key='view', mode='w')
+
+    def frametotime_2vid(self, frame, extra):
+        '''
+        :param frame:
+        :param extra: number of frames in the first video
+        :return:
+        '''
+        realframe = frame - extra
+        time = (realframe / fps) / 60
+        sec, min = math.modf(time)
+        sec = sec * 60
+        print('%s mins, %s secs' % (min, sec))
 
 
 

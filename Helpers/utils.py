@@ -386,5 +386,29 @@ class Utils:
         sec = sec * 60
         print('%s mins, %s secs' % (min, sec))
 
+    def find_phase_starts(self, lst):
+        phase_starts = [0]  # Start value of the first phase is always 0
+        total = 0
+
+        for value in lst:
+            total += value
+            phase_starts.append(total)
+        phase_starts.pop()
+
+        return phase_starts
+
+    def find_blocks(self, array, gap_threshold):
+        blocks = []
+        start = None
+        for i in range(len(array) - 1):
+            if start is None:
+                start = array[i]
+            if array[i + 1] - array[i] > gap_threshold:
+                blocks.append((start, array[i]))
+                start = None
+        if start is not None:
+            blocks.append((start, array[-1]))
+        return blocks
+
 
 

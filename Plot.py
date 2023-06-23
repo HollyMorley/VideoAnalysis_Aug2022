@@ -67,10 +67,95 @@ class Plot():
                 }
         return data
 
-    def getMeasures(self, conditions, measure_type, view, timelocked, n_apa1):
+    def maskRunPhases(self, data, con, mouseID, view, measure_type, prepruns, timelocked):
+        ########################## Here use locomotion code to idenitfy more accurate timestamps for beginning and transition of run #############################
+        # first get the frame numbers for the x frames before and after transition point for every frame and experimental phase
+        measureAllRuns_pre = list()  # early in run - q1 and 2
+        measureAllRuns_apa = list()  # just before transition
+        measureAllRuns_post = list()  # just after transition
+        for r in data[con][mouseID]['Side'].index.get_level_values(level='Run').unique():
+            if r >= prepruns:
+                if timelocked == True:
+                    preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                        np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1',
+                                      data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[
+                                          'Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
+                    apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                                 data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3'][
+                             -APA_lengthruns:].index.get_level_values(level='FrameIdx')
+                    # apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')][-APA_lengthruns:].index.get_level_values(level='FrameIdx')
+                    # apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
+                    postidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                                  data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q4'][
+                              :after_lengthruns].index.get_level_values(level='FrameIdx')
+                else:
+                    preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                        np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1',
+                                      data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[
+                                          'Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
+                    apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                        data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[
+                            'Quadrant'] == 'Q3'].index.get_level_values(level='FrameIdx')
+                    postidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][
+                        data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[
+                            'Quadrant'] == 'Q4'].index.get_level_values(level='FrameIdx')
+
+                premask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(
+                    preidx)
+                apamask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(
+                    apaidx)
+                postmask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(
+                    postidx)
+                runmask = np.logical_or.reduce((data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(
+                    level='FrameIdx').isin(preidx),  #### WARNING: THIS IS MISSING A SECTION BETWEEN PRE AND APA
+                                                data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(
+                                                    level='FrameIdx').isin(apaidx),
+                                                data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(
+                                                    level='FrameIdx').isin(postidx)))
+
+                # do calculations
+                if measure_type == 'Body Length':
+                    measure = self.CalculateBodyLength(data=data, con=con, mouseID=mouseID, r=r, premask=premask,
+                                                       apamask=apamask, postmask=postmask, view=view)
+                if measure_type == 'Back Skew':
+                    measure = self.CalculateBack(calculation='skew', data=data, con=con, mouseID=mouseID, r=r,
+                                                 premask=premask, apamask=apamask, postmask=postmask, view=view)
+                if measure_type == 'Back Height':
+                    measure = self.CalculateBack(calculation='height', data=data, con=con, mouseID=mouseID, r=r,
+                                                 premask=premask, apamask=apamask, postmask=postmask, view=view)
+                if measure_type == 'Head Height':
+                    measure = self.CalculateHeadHeight(data=data, con=con, mouseID=mouseID, r=r, premask=premask,
+                                                       apamask=apamask, postmask=postmask, view=view)
+
+                measureAllRuns_pre.append((measure['mean']['pre'], measure['std']['pre'], r))
+                measureAllRuns_apa.append((measure['mean']['apa'], measure['std']['apa'], r))
+                measureAllRuns_post.append((measure['mean']['post'], measure['std']['post'], r))
+
+        measureAllRuns_pre = np.vstack(measureAllRuns_pre)
+        measureAllRuns_apa = np.vstack(measureAllRuns_apa)
+        measureAllRuns_post = np.vstack(measureAllRuns_post)
+
+        # convert to df so can have accurate run numbers
+        measureAllRuns_pre = pd.DataFrame(data=measureAllRuns_pre[:, [0, 1]],
+                                          index=pd.Index(measureAllRuns_pre[:, 2] - 2), columns=['mean', 'std'])
+        measureAllRuns_apa = pd.DataFrame(data=measureAllRuns_apa[:, [0, 1]],
+                                          index=pd.Index(measureAllRuns_apa[:, 2] - 2), columns=['mean', 'std'])
+        measureAllRuns_post = pd.DataFrame(data=measureAllRuns_post[:, [0, 1]],
+                                           index=pd.Index(measureAllRuns_post[:, 2] - 2), columns=['mean', 'std'])
+        # check for missing runs and fill in the gaps
+        newidx = range(40)
+        measureAllRuns_pre = measureAllRuns_pre.reindex(newidx, fill_value=None)
+        measureAllRuns_apa = measureAllRuns_apa.reindex(newidx, fill_value=None)
+        measureAllRuns_post = measureAllRuns_post.reindex(newidx, fill_value=None)
+
+        return measureAllRuns_pre, measureAllRuns_apa, measureAllRuns_post
+
+    def getMeasures(self, conditions, measure_type, view, timelocked, n_apa1, chunk_size, chunked):
         '''
         :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats
         :param measure: which measure you plan to calculate e.g. body length
+        :param n_apa1: size of first APA half. Dependent on chunked == False
+        :param chunk_size: how long are the chunks you want across the entire experiment (all phases) -> ** either 2 or 5. ONLY APPLIES if chunked == True
         :return: dictionary holding specified measure at each run stage [pre, apa, post], both for every run and averaged across each run stage eg baseline.
         '''
         data = self.GetDFs(conditions)
@@ -83,9 +168,10 @@ class Plot():
             elif 'Char' in con:  # for all other apa characterise conditions
                 prepruns = preruns_CharMidHigh
             elif np.logical_and('VMT' in con, np.logical_or('LowHigh' in con, 'LowMid' in con)):
-                if np.logical_and('LowHighpd' in con, np.logical_or.reduce(
-                        ('1034980' in mouseID, '1034982' in mouseID, '1034983' in mouseID))):
-                    prepruns = preruns_CharLow
+                print('redo this bit')
+                # if np.logical_and('LowHighpd' in con, np.logical_or.reduce(
+                #         ('1034980' in mouseID, '1034982' in mouseID, '1034983' in mouseID))):
+                #     prepruns = preruns_CharLow
             elif 'PerceptionTest' in con:
                 prepruns = preruns_CharLow ##### ????????????????????????????????
                 # finish this + for other conditions
@@ -94,120 +180,127 @@ class Plot():
 
             data_measure[con] = dict.fromkeys(data[con].keys())
             for midx, mouseID in enumerate(data[con].keys()):
-                ########################## Here use locomotion code to idenitfy more accurate timestamps for beginning and transition of run #############################
-                # first get the frame numbers for the x frames before and after transition point for every frame and experimental phase
-                measureAllRuns_pre = list() # early in run - q1 and 2
-                measureAllRuns_apa = list() # just before transition
-                measureAllRuns_post = list() # just after transition
-                for r in data[con][mouseID]['Side'].index.get_level_values(level='Run').unique():
-                    if r >= prepruns:
-                        if timelocked == True:
-                            preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
-                            apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3'][-APA_lengthruns:].index.get_level_values(level='FrameIdx')
-                            #apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')][-APA_lengthruns:].index.get_level_values(level='FrameIdx')
-                            #apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
-                            postidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q4'][:after_lengthruns].index.get_level_values(level='FrameIdx')
-                        else:
-                            preidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q1', data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q2')].index.get_level_values(level='FrameIdx')
-                            apaidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q3'].index.get_level_values(level='FrameIdx')
-                            postidx = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'][data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Quadrant'] == 'Q4'].index.get_level_values(level='FrameIdx')
+                # ########################## Here use locomotion code to idenitfy more accurate timestamps for beginning and transition of run #############################
+                measureAllRuns_pre, measureAllRuns_apa, measureAllRuns_post = self.maskRunPhases(data,con,mouseID,view,measure_type,prepruns,timelocked)
+                measureALLRuns_all = [measureAllRuns_pre,measureAllRuns_apa,measureAllRuns_post]
 
-                        premask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(preidx)
-                        apamask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(apaidx)
-                        postmask = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(postidx)
-                        runmask = np.logical_or.reduce((data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(preidx), #### WARNING: THIS IS MISSING A SECTION BETWEEN PRE AND APA
-                                                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(apaidx),
-                                                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx').isin(postidx)))
+                if chunked == False:
+                    #### calculate averages and std for measure in baseline, APA1, APA2, washout ###
+                    measureBaseline_ALL = []
+                    measureWashout_ALL = []
+                    for runphase in [measureAllRuns_pre, measureAllRuns_apa, measureAllRuns_post]:
+                        # Baseline runs
+                        measureBaseline = [np.nanmean(runphase.loc[:9, 'mean']), np.nanstd(runphase.loc[:9, 'mean'])]
+                        measureBaseline_ALL.append(measureBaseline)
+                        # Washout runs
+                        measureWashout = [np.nanmean(runphase.loc[-9:, 'mean']), np.nanstd(runphase.loc[-9:, 'mean'])]
+                        measureWashout_ALL.append(measureWashout)
 
-                        # do calculations
-                        if measure_type == 'Body Length':
-                            measure = self.CalculateBodyLength(data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
-                        if measure_type == 'Back Skew':
-                            measure = self.CalculateBack(calculation='skew',  data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
-                        if measure_type == 'Back Height':
-                            measure = self.CalculateBack(calculation='height', data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
-                        if measure_type == 'Head Height':
-                            measure = self.CalculateHeadHeight(data=data, con=con, mouseID=mouseID, r=r, premask=premask, apamask=apamask, postmask=postmask, view=view)
+                    measureBaseline_pre = [np.nanmean(measureAllRuns_pre.loc[:9,'mean']), np.nanstd(measureAllRuns_pre.loc[:9,'mean'])]
+                    measureBaseline_apa = [np.nanmean(measureAllRuns_apa.loc[:9,'mean']), np.nanstd(measureAllRuns_apa.loc[:9,'mean'])]
+                    measureBaseline_post = [np.nanmean(measureAllRuns_post.loc[:9,'mean']), np.nanstd(measureAllRuns_post.loc[:9,'mean'])]
 
-                        measureAllRuns_pre.append((measure['mean']['pre'], measure['std']['pre'], r))
-                        measureAllRuns_apa.append((measure['mean']['apa'], measure['std']['apa'], r))
-                        measureAllRuns_post.append((measure['mean']['post'], measure['std']['post'], r))
+                    # Washout runs
+                    measureWashout_pre = [np.nanmean(measureAllRuns_pre.loc[-9:,'mean']), np.nanstd(measureAllRuns_pre.loc[-9:,'mean'])]
+                    measureWashout_apa = [np.nanmean(measureAllRuns_apa.loc[-9:,'mean']), np.nanstd(measureAllRuns_apa.loc[-9:,'mean'])]
+                    measureWashout_post = [np.nanmean(measureAllRuns_post.loc[-9:,'mean']), np.nanstd(measureAllRuns_post.loc[-9:,'mean'])]
 
-                measureAllRuns_pre = np.vstack(measureAllRuns_pre)
-                measureAllRuns_apa = np.vstack(measureAllRuns_apa)
-                measureAllRuns_post = np.vstack(measureAllRuns_post)
+                    # if type(n_apa1) == tuple:
+                    #     n_apa1 = n_apa1[0]
+                    # elif type(n_apa1) == int:
+                    #     n_apa1 = n_apa1
 
-                # convert to df so can have accurate run numbers
-                measureAllRuns_pre = pd.DataFrame(data=measureAllRuns_pre[:, [0,1]], index=pd.Index(measureAllRuns_pre[:, 2] - 2), columns=['mean','std'])
-                measureAllRuns_apa = pd.DataFrame(data=measureAllRuns_apa[:,[0,1]], index=pd.Index(measureAllRuns_apa[:,2]-2), columns=['mean','std'])
-                measureAllRuns_post = pd.DataFrame(data=measureAllRuns_post[:,[0,1]], index=pd.Index(measureAllRuns_post[:,2]-2), columns=['mean','std'])
-                # check for missing runs and fill in the gaps
-                newidx = range(40)
-                measureAllRuns_pre = measureAllRuns_pre.reindex(newidx, fill_value=None)
-                measureAllRuns_apa = measureAllRuns_apa.reindex(newidx, fill_value=None)
-                measureAllRuns_post = measureAllRuns_post.reindex(newidx, fill_value=None)
+                    # APA runs (+ APA runs split into two halves)
+                    if 'Char' in con or 'Perception' in con:
+                        numruns = APACharRuns
+                    elif 'VMT' in con:
+                        numruns = APAVmtRuns
 
+                    full_chunk = numruns[1]
 
-                #### calculate averages and std for measure in baseline, APA1, APA2, washout ###
-                # Baseline runs
-                measureBaseline_pre = [np.nanmean(measureAllRuns_pre.loc[:9,'mean']), np.nanstd(measureAllRuns_pre.loc[:9,'mean'])]
-                measureBaseline_apa = [np.nanmean(measureAllRuns_apa.loc[:9,'mean']), np.nanstd(measureAllRuns_apa.loc[:9,'mean'])]
-                measureBaseline_post = [np.nanmean(measureAllRuns_post.loc[:9,'mean']), np.nanstd(measureAllRuns_post.loc[:9,'mean'])]
+                    measureAPA_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]:numruns[0]+full_chunk-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]:numruns[0]+full_chunk-1,'mean'])]
+                    measureAPA_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]:numruns[0]+full_chunk-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]:numruns[0]+full_chunk-1,'mean'])]
+                    measureAPA_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]:numruns[0]+full_chunk-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]:numruns[0]+full_chunk-1,'mean'])]
 
-                # Washout runs
-                measureWashout_pre = [np.nanmean(measureAllRuns_pre.loc[-9:,'mean']), np.nanstd(measureAllRuns_pre.loc[-9:,'mean'])]
-                measureWashout_apa = [np.nanmean(measureAllRuns_apa.loc[-9:,'mean']), np.nanstd(measureAllRuns_apa.loc[-9:,'mean'])]
-                measureWashout_post = [np.nanmean(measureAllRuns_post.loc[-9:,'mean']), np.nanstd(measureAllRuns_post.loc[-9:,'mean'])]
+                    measureAPA_1_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
+                    measureAPA_1_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
+                    measureAPA_1_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
 
-                if type(n_apa1) == tuple:
-                    n_apa1 = n_apa1[0]
-                elif type(n_apa1) == int:
-                    n_apa1 = n_apa1
+                    measureAPA_2_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
+                    measureAPA_2_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
+                    measureAPA_2_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
 
-                # APA runs (+ APA runs split into two halves)
-                if 'Char' in con or 'Perception' in con:
-                    numruns = APACharRuns
-                elif 'VMT' in con:
-                    numruns = APAVmtRuns
-                measureAPA_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean'])]
-                measureAPA_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean'])]
-                measureAPA_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]:numruns[0]+numruns[1]-1,'mean'])]
+                else:
+                    # APA runs (+ APA runs split into two halves)
+                    if 'Char' in con or 'Perception' in con:
+                        numruns = APACharRuns
+                    elif 'VMT' in con:
+                        numruns = APAVmtRuns
+                    starts = utils.Utils().find_phase_starts(numruns)
+                    all_runphases = []
+                    # iterate through each RUN phase (pre, apa, post)
+                    for rpidx, rp in enumerate(['pre', 'apa', 'post']):
+                        # iterate through exp phase (baseline, apa, washout)
+                        all_expphases = []
+                        for pidx, p in enumerate(starts):
+                            count = 0
+                            phase_chunks = []
+                            # iterate through each chunk (number depends on chunk size)
+                            for c in range(0, int(numruns[pidx]/chunk_size)):
+                                val = [np.nanmean(measureALLRuns_all[rpidx].loc[p + count*chunk_size:p + (count + 1)*chunk_size - 1, 'mean']),
+                                       np.nanstd(measureALLRuns_all[rpidx].loc[p + count*chunk_size:p + (count + 1)*chunk_size - 1, 'mean'])]
+                                count+=1
+                                phase_chunks.append(val)
+                            all_expphases.append(phase_chunks)
+                        all_runphases.append(all_expphases)
 
-                measureAPA_1_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
-                measureAPA_1_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
-                measureAPA_1_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]:numruns[0]+int(n_apa1)-1,'mean'])]
-
-                measureAPA_2_pre = [np.nanmean(measureAllRuns_pre.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_pre.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
-                measureAPA_2_apa = [np.nanmean(measureAllRuns_apa.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_apa.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
-                measureAPA_2_post = [np.nanmean(measureAllRuns_post.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean']), np.nanstd(measureAllRuns_post.loc[numruns[0]+int(n_apa1):numruns[0]+numruns[1]-1,'mean'])]
-
-
-                data_measure[con][mouseID] = {
-                    'pre': measureAllRuns_pre,
-                    'apa': measureAllRuns_apa,
-                    'post': measureAllRuns_post,
-                    'pre_mean_std': {
-                        'baseline': measureBaseline_pre,
-                        'apa': measureAPA_pre,
-                        'apa_1': measureAPA_1_pre,
-                        'apa_2': measureAPA_2_pre,
-                        'washout': measureWashout_pre
-                    },
-                    'apa_mean_std': {
-                        'baseline': measureBaseline_apa,
-                        'apa': measureAPA_apa,
-                        'apa_1': measureAPA_1_apa,
-                        'apa_2': measureAPA_2_apa,
-                        'washout': measureWashout_apa
-                    },
-                    'post_mean_std': {
-                        'baseline': measureBaseline_post,
-                        'apa': measureAPA_post,
-                        'apa_1': measureAPA_1_post,
-                        'apa_2': measureAPA_2_post,
-                        'washout': measureWashout_post
+                if chunked == False:
+                    data_measure[con][mouseID] = {
+                        'pre': measureAllRuns_pre,
+                        'apa': measureAllRuns_apa,
+                        'post': measureAllRuns_post,
+                        'pre_mean_std': {
+                            'baseline': measureBaseline_ALL[0],
+                            'apa': measureAPA_pre,
+                            'apa_1': measureAPA_1_pre,
+                            'apa_2': measureAPA_2_pre,
+                            'washout': measureWashout_ALL[0]
+                        },
+                        'apa_mean_std': {
+                            'baseline': measureBaseline_ALL[1],
+                            'apa': measureAPA_apa,
+                            'apa_1': measureAPA_1_apa,
+                            'apa_2': measureAPA_2_apa,
+                            'washout': measureWashout_ALL[1]
+                        },
+                        'post_mean_std': {
+                            'baseline': measureBaseline_ALL[2],
+                            'apa': measureAPA_post,
+                            'apa_1': measureAPA_1_post,
+                            'apa_2': measureAPA_2_post,
+                            'washout': measureWashout_ALL[2]
+                        }
                     }
-                }
+                elif chunked == True:
+                    runphases = ['pre', 'apa', 'post']
+                    expphases = ['Baseline', 'APA', 'Washout']
+                    # fill in the dict with the whole run data
+                    data_measure[con][mouseID] = {
+                        'pre': measureAllRuns_pre,
+                        'apa': measureAllRuns_apa,
+                        'post': measureAllRuns_post
+                    }
+                    # then fill in the dict with as many chunks as have been calculated
+                    for r, rnph in enumerate(all_runphases):
+                        runphase_name = '%s_mean_std' % runphases[r]
+                        data_measure[con][mouseID][runphase_name] = {}
+                        for e, exph in enumerate(rnph):
+                            ch_count = 0
+                            for c, ch in enumerate(exph):
+                                expphase_name = '%s_%s' % (expphases[e], ch_count)
+                                data_measure[con][mouseID][runphase_name][expphase_name] = ch
+                                # print(expphase_name)
+                                ch_count += 1
 
         return data_measure
 
@@ -567,7 +660,7 @@ class Plot():
         return realspeed
 
 
-    def setupForPlotting(self, conditions, means, measure_type, view, runphase, timelocked, n_apa1, means_all=False):
+    def setupForPlotting(self, conditions, means, measure_type, view, runphase, timelocked, n_apa1, chunked, chunk_size, means_all=False):
         '''
 
         :param conditions:
@@ -626,7 +719,8 @@ class Plot():
                             groupData[con][r].loc(axis=1)[mouseID] = data[con][mouseID][r]
 
         if means == True:
-            chunks = ['baseline', 'apa', 'apa_1', 'apa_2', 'washout']
+            #chunks = ['baseline', 'apa', 'apa_1', 'apa_2', 'washout'] ######################################################################################################################################### Chnage this to be more flexible ###########################################################################################################################################################
+            chunks = list(data[con][mouseID]['pre_mean_std'].keys())
             groupData = dict.fromkeys(conditions)
             for cidx, con in enumerate(data.keys()):
                 groupData[con] = dict.fromkeys(runphase)
@@ -832,7 +926,7 @@ class Plot():
             # pxto1mm = pxtocm*10
 
 
-    def PlotByPhaseChunk(self, measure_type, view, conditions, runphase, n_apa1=10, meanbyrun='bysubject', meanstd='mean', style='group', variance='sem', legend=True, transparent=False, save=False, timelocked=True, userlabels=False, username=False):
+    def PlotByPhaseChunk(self, measure_type, view, conditions, runphase, chunked, chunk_size, n_apa1=10, meanbyrun='bysubject', meanstd='mean', style='group', variance='sem', legend=True, transparent=False, save=False, timelocked=True, userlabels=False, username=False):
         '''
         Plots measures as averages for APA (first and second half) and washout, all normalised to baseline
         :param meanbyrun:
@@ -953,11 +1047,15 @@ class Plot():
                                 run_variance_chunks = np.std(cv,axis=1) / np.sqrt(len(cv.columns))
 
 
-                        means = [run_means_chunks['baseline'], run_means_chunks['apa_1'], run_means_chunks['apa_2'],
-                                 run_means_chunks['washout']]
-                        var = [run_variance_chunks['baseline'], run_variance_chunks['apa_1'],
-                               run_variance_chunks['apa_2'],
-                               run_variance_chunks['washout']]
+                        # means = [run_means_chunks['baseline'], run_means_chunks['apa_1'], run_means_chunks['apa_2'],
+                        #          run_means_chunks['washout']]
+                        # var = [run_variance_chunks['baseline'], run_variance_chunks['apa_1'],
+                        #        run_variance_chunks['apa_2'],
+                        #        run_variance_chunks['washout']]
+
+                        means = list(run_means_chunks.values)
+                        var = list(run_variance_chunks.values)
+
                         if labels == 'conditions':
                             barlabel = con
                             if userlabels == True:
@@ -966,9 +1064,17 @@ class Plot():
                             barlabel = r
                             if userlabels == True:
                                 barlabel = input('Type in new label for: %s' % r)
-                        ax.bar([count * spacing + 1, count * spacing + 2, count * spacing + 3, count * spacing + 4],
-                               means, yerr=var,
-                               color=sub_colors[count], width=spacing, align='edge', label=barlabel)
+
+                        if chunked == False:
+                            ax.bar([count * spacing + 1, count * spacing + 2, count * spacing + 3, count * spacing + 4],
+                                   means, yerr=var,
+                                   color=sub_colors[count], width=spacing, align='edge', label=barlabel)
+                        else:
+                            if chunk_size == 5:
+                                ax.bar([count * spacing + 1, count * spacing + 2, count * spacing + 3, count * spacing + 4,
+                                        count * spacing + 5, count * spacing + 6, count * spacing + 7, count * spacing + 8],
+                                       means, yerr=var,
+                                       color=sub_colors[count], width=spacing, align='edge', label=barlabel)
                         print('bar should be plotted, value is %s' %value)
                         count += 1
 
@@ -1040,8 +1146,22 @@ class Plot():
 
         # if legend == True:
         #     ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
-        ax.set_xticks([1.4, 2.4, 3.4, 4.4])
-        ax.set_xticklabels(['Baseline', 'APA\nPhase\n1', 'APA\nPhase\n2', 'Washout'])
+        if chunked == False:
+            ax.set_xticks([1.4, 2.4, 3.4, 4.4])
+            ax.set_xticklabels(['Baseline', 'APA\nPhase\n1', 'APA\nPhase\n2', 'Washout'])
+        else:
+            if chunk_size == 5:
+                ax.set_xticks(list(np.array(range(0,9)) + 0.4))
+                ax.set_xticklabels(
+                    ['Baseline\n1', 'Baseline\n2', 'APA\nPhase\n1', 'APA\nPhase\n2', 'APA\nPhase\n3', 'APA\nPhase\n4',
+                     'Washout\n1', 'Washout\n2'])
+            if chunk_size == 2:
+                ax.set_xticks(list(np.array(range(0,21)) + 0.4))
+                ax.set_xticklabels(
+                    ['Baseline\n1', 'Baseline\n2', 'Baseline\n3', 'Baseline\n4', 'Baseline\n5',
+                     'APA\n1', 'APA\n2', 'APA\n3', 'APA\n4', 'APA\n5', 'APA\n6', 'APA\n7', 'APA\n8', 'APA\n9', 'APA\n10',
+                     'Washout\n1', 'Washout\n2', 'Washout\n3', 'Washout\n4', 'Washout\n5'])
+
         ax.set_xlim([0.8, ax.get_xlim()[1]])
         if meanstd == 'mean' and measure_type == 'Back Height':
             ax.set_ylim([75,105])

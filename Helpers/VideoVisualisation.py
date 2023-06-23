@@ -4,13 +4,13 @@ import Locomotion
 import Plot
 import numpy as np
 
-video_file = r"Z:\Holly\Data\Behaviour\Dual-belt_APAs\videos\Raw_videos\Round_2\20220826\HM_20220826_APAChar_FAA-1034976_MNone_side_1.avi"
-conditions = ['APAChar_LowHigh_Repeats_NoWash_Day3']
+video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
+conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
 con = conditions[0]
-mouseID = 'FAA-1034976'
+mouseID = 'FAA-1035243'
 view = 'Side'
 
-frame_num = 140377
+frame_num = 228718
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)
@@ -97,7 +97,7 @@ def plotTail():
 
 # Get data for stance and swing
 df = Plot.Plot().GetDFs(conditions)
-df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID)
+df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, xy='y')
 stsw = getStSwFramesForVid(df, con, mouseID, view)
 
 # Start at the first frame

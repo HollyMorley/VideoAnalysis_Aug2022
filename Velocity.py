@@ -13,6 +13,8 @@ import statsmodels.api as sm
 from statsmodels.stats.anova import AnovaRM
 from statsmodels.stats.multicomp import MultiComparison
 from scipy.stats import shapiro, levene
+import pingouin as pg
+# Assuming 'df' is your original DataFrame with missing values
 from pingouin import rm_anova, pairwise_ttests
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -49,6 +51,38 @@ class Velocity:
         # backmean = allBackx_confx.mean(axis=1)
         # plt.plot(backmean.index.get_level_values(level='FrameIdx'),v.values)
 
+
+    def getVelocity_specific_limb(self, limb, r, data, con, mouseID, view, windowsize, markerstuff):
+        # find velocity of mouse, based on tail base
+        mask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff
+        dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'x'][mask].rolling(window=windowsize,
+                                                                                                 center=True,
+                                                                                                 min_periods=None).apply(
+            lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
+
+        # create column with windowsize values, dependent on the available frames
+        dxempty = np.where(
+            data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][mask].rolling(window=windowsize,
+                                                                                                center=True,
+                                                                                                min_periods=None).apply(
+                lambda x: x[-1] - x[0]).isnull().values)[0]
+        middle = np.where(np.diff(dxempty) > 1)[0][0]
+        startpos = dxempty[0:middle + 1]
+        endpos = dxempty[middle + 1:len(dxempty)]
+        windowstart = np.array(range(0, windowsize, 2))
+        windowend = np.flip(windowstart)[0:-1]
+        Dx = dx.to_frame(name='dx')
+        window = np.full([len(Dx)], windowsize)
+        window[startpos] = windowstart
+        window[endpos] = windowend
+        Dx['window'] = window
+
+        dxcm = Dx['dx'] * markerstuff['pxtocm']
+        dt = (1 / fps) * windowsize
+        # dt = (1 /fps) * Dx['window']
+        v = dxcm / dt
+
+        return v
 
     def getVelocityInfo(self, data, con, mouseID, zeroed, view, xaxis, windowsize, markerstuff, f):
 
@@ -447,6 +481,7 @@ class Velocity:
             Veldata = []
             for con in conditions:
                 allmice = []
+                micenames = list(data[con].keys())
                 for m, mouseID in enumerate(data[con]):
                     try:
                         veldata = self.plotSpeed_SingleMouse_Means(data=data, con=con, mouseID=mouseID, zeroed=False, view=view, expphase=[e], plotfig=False)
@@ -473,11 +508,12 @@ class Velocity:
                             interpolated_runs.append(interpolated_y)
                         except:
                             interpolated_runs.append([])
-                            print('Cant plot mouse %s for phase %s' % (mouseID, e))
+                            print('Cant plot mouse %s for phase %s' % (micenames[i], e))
                             na_mask = np.nan
                             x = np.nan
                             y = np.nan
                             interpolated_y = np.nan
+                            #interpolated_runs.append(interpolated_y)
 
                     # Calculate average
                     try:
@@ -520,8 +556,13 @@ class Velocity:
                 # calculate transition position for experiment
                 trans_mean = np.mean(allmice[:, 4])
 
-                Stats.append(np.array(interpolated_runs_filtered)[:,xpos]) # getting all values for the 'transition' point for each condition
-                Veldata.append([common_x, upper_bound, lower_bound, average_interpolated_runs, transition_x_mean_est, transition_y, trans_mean])
+                try:
+                    arr_for_stats = np.full(len(interp_mask), np.nan)
+                    arr_for_stats[interp_mask] = np.array(interpolated_runs_filtered)[:,xpos]
+                    Stats.append(arr_for_stats) # getting all values for the 'transition' point for each condition
+                    Veldata.append([common_x, upper_bound, lower_bound, average_interpolated_runs, transition_x_mean_est, transition_y, trans_mean])
+                except:
+                    print('Cant contain data for condition: %s, phase: %s' %(con,e))
 
             if plotfig == False:
                 # Create a DataFrame with the data in long format
@@ -545,15 +586,29 @@ class Velocity:
                         print(f"{cond} is not normally distributed (reject H0)")
 
                 # Repeated measures ANOVA
-                aovrm = AnovaRM(df, 'speed', 'mouse', within=['condition'])
-                res = aovrm.fit()
-                print(res)
+                try:
+                    aovrm = AnovaRM(df, 'speed', 'mouse', within=['condition'])
+                    res = aovrm.fit()
+                    print(res)
+                except:
+                    print('Couldnt run anova, possibly because of missing values, here is an anova using pingouin package....')
+                    # Perform repeated measures ANOVA
+                    rm_anova = pg.rm_anova(data=df, dv='speed', within='condition', subject='mouse')
+                    # Print the ANOVA results
+                    print(rm_anova)
 
                 # Post hoc tests using Tukey's HSD
                 from statsmodels.stats.multicomp import MultiComparison
                 mc = MultiComparison(df['speed'], df['condition'])
                 posthoc = mc.tukeyhsd()
                 print(posthoc)
+
+                '''
+                for reference:
+                if getting nan values, use this instead:
+                # Perform post hoc tests (e.g., Tukey's test)
+                posthoc = pg.pairwise_ttests(data=df, dv='speed', within='condition', subject='mouse', parametric=True, padjust='bonf')
+                '''
 
 
                 # # Run the repeated measures ANOVA
@@ -604,6 +659,7 @@ class Velocity:
         for m, mouseID in enumerate(data[con]):
             for e in phases:
                 self.plotSpeed_SingleMouse_AllRunsInPhase(data,con,mouseID, zeroed, view='Side', expphase=e, xaxis=xaxis, n=n, exclStat=exclStat)
+
 
 
 

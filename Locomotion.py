@@ -416,6 +416,29 @@ class Locomotion():
 
         return swstdf
 
+    def findslope(self, chunk, return_value):
+        slope, intercept, r_value, p_value, std_err = stats.linregress(chunk.index.get_level_values(level='FrameIdx'),
+                                                                       chunk.values)
+        if return_value == 'slope':
+            return slope
+        if return_value == 'intercept':
+            return intercept
+        elif return_value == 'r_value':
+            return r_value
+        elif return_value == 'p_value':
+            return p_value
+        elif return_value == 'std_err':
+            return std_err
+
+    def calculate_slope_height(self, x, vel_slope, vel_intercept):
+        lastframe = x.index.get_level_values(level='FrameIdx')[-1]
+        firstframe = x.index.get_level_values(level='FrameIdx')[0]
+        slope_height = (lastframe * vel_slope.xs(lastframe, level='FrameIdx') + vel_intercept.xs(lastframe,
+                                                                                                 level='FrameIdx').values) - (
+                                   firstframe * vel_slope.xs(lastframe, level='FrameIdx') + vel_intercept.xs(lastframe,
+                                                                                                             level='FrameIdx'))
+        return slope_height
+
     def getLocoPeriods(self, data, con, mouseID, xy, fillvalues=True, view='Side', n=30):
         warnings.filterwarnings("ignore", message="The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.")
         limblist = ['ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawToeL']
@@ -436,6 +459,23 @@ class Locomotion():
                 t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[mask]
                 xS = pd.Series(data=x, index=t)
 
+
+                # get velocity data for this limb
+                vel_limb = Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', 33, data, con, mouseID, view, # get the velocity data for this body part (limb)
+                                                                         math.ceil((fps / 30) / 2.) * 2, markerstuff)
+                vel_limb_mask = np.isin(vel_limb.index.get_level_values(level='FrameIdx'), t)
+                vel_limb_cropped = vel_limb[vel_limb_mask]
+                vel_slope = vel_limb_cropped.rolling(window=10).apply(lambda h: self.findslope(h, 'slope'))
+                vel_intercept = vel_limb_cropped.rolling(window=10).apply(lambda h: self.findslope(h, 'intercept'))
+                vel_slope_height = vel_limb_cropped.rolling(window=10).apply(
+                    lambda x: self.calculate_slope_height(x, vel_slope, vel_intercept))
+                upwards_sloping_vals = vel_slope_height[vel_slope_height > 30].index.get_level_values(level='FrameIdx')
+                upwards_sloping_blocks = utils.Utils().find_blocks(upwards_sloping_vals, 20)
+                Swing_borders = []
+                for i in range(len(upwards_sloping_blocks)):
+                    swing_borders = [upwards_sloping_blocks[i][0] - 10, upwards_sloping_blocks[i][1]]
+                    Swing_borders.append(swing_borders)
+
                 # get y values where y has been normalised to 180 deg line (so can find stationary periods better)
                 slope, intercept, r_value, p_value, std_err = stats.linregress(t, y)
                 normy = y - ((slope * t).values + intercept)
@@ -449,6 +489,36 @@ class Locomotion():
                 # check if there is an alternating pattern (in x here) and correct if not
                 swstdf = self.check_swst_pattern(swingstart, stancestart, stancestart_rot0, normy, xS, r, y, l)
 
+                ######## compare all values, priority: speed swing borders, y, x #########
+                Real_Swing = []
+                Poss_Missing_Swing_y = []
+                Poss_Swing_x = []
+                for i in range(len(Swing_borders)):
+                    y_detected = np.where(np.logical_and(y_swstdf.index > Swing_borders[i][0], y_swstdf.index < Swing_borders[i][1]))
+                    if np.any(y_detected):
+                        real_swing = y_swstdf.iloc[y_detected]
+                        if len(y_detected[0]) == 1:
+                            Real_Swing.append(real_swing)
+                        else:
+                            detected_swing = np.where(y_swstdf.iloc[y_detected].values.flatten() == 'swing')[0]
+                            if len(detected_swing) == 1:
+                                real_swing = y_swstdf.iloc[detected_swing]
+                            else:
+                                raise ValueError('There are multiple swings detected, not sure what to do!')
+                    else:
+                        # note middle frame between the borders to later check if this should be a detection
+                        poss_missing_swing_y = np.mean(Swing_borders[i]).astype(int)
+                        Poss_Missing_Swing_y.append(poss_missing_swing_y)
+
+                        # note any possible x-found swings in this period
+                        x_detected = np.where(np.logical_and(swstdf.index > Swing_borders[i][0], swstdf.index < Swing_borders[i][1]))
+                        if np.any(x_detected):
+                            poss_swing_x = swstdf.iloc[x_detected]
+                            Poss_Swing_x.append(poss_swing_x)
+
+
+
+                ''' 
                 # compare stsw from y and x data
                 matched_pairs = []
 
@@ -481,6 +551,7 @@ class Locomotion():
                 if any(duplicate_values):
                     print('There are duplicate values which indicate a MISSING VALUE in run %s (mouse: %s) at frame(/s): %s' %(r,mouseID,duplicate_values))
                 #################################################################################
+                '''
 
                 # # temp - code to compare number/pattern of sw/st from x and y - depending on which one has more values, the comparison will either be against x or y
                 # if len(y_swstdf) > len(swstdf):  # shorter = maindf

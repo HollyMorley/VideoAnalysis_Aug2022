@@ -55,17 +55,10 @@ class Velocity:
     def getVelocity_specific_limb(self, limb, r, data, con, mouseID, view, windowsize, markerstuff):
         # find velocity of mouse, based on tail base
         mask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff
-        dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'x'][mask].rolling(window=windowsize,
-                                                                                                 center=True,
-                                                                                                 min_periods=None).apply(
-            lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
+        dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'x'][mask].rolling(window=windowsize,center=True,min_periods=None).apply(lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
 
         # create column with windowsize values, dependent on the available frames
-        dxempty = np.where(
-            data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][mask].rolling(window=windowsize,
-                                                                                                center=True,
-                                                                                                min_periods=None).apply(
-                lambda x: x[-1] - x[0]).isnull().values)[0]
+        dxempty = np.where(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][mask].rolling(window=windowsize,center=True,min_periods=None).apply(lambda x: x[-1] - x[0]).isnull().values)[0]
         middle = np.where(np.diff(dxempty) > 1)[0][0]
         startpos = dxempty[0:middle + 1]
         endpos = dxempty[middle + 1:len(dxempty)]

@@ -10,7 +10,7 @@ con = conditions[0]
 mouseID = 'FAA-1035243'
 view = 'Side'
 
-frame_num = 228718
+frame_num = 57200
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)
@@ -97,6 +97,14 @@ def plotSwSt(stsw):
         if frame_num in stsw[l]['Swing']['idx']:
             position = np.where(stsw[l]['Swing']['idx'] == frame_num)
             plt.scatter(stsw[l]['Swing']['x'][position], stsw[l]['Swing']['y'][position], color=colors[l], marker='s', s=markersize)
+
+        # same for bkwds if present
+        if frame_num in stsw[l]['Stance_bkwd']['idx']:
+            position = np.where(stsw[l]['Stance_bkwd']['idx'] == frame_num)
+            plt.scatter(stsw[l]['Stance_bkwd']['x'][position], stsw[l]['Stance']['y'][position], facecolors='none', edgecolors=colors[l], marker='o', s=markersize)
+        if frame_num in stsw[l]['Swing_bkwd']['idx']:
+            position = np.where(stsw[l]['Swing_bkwd']['idx'] == frame_num)
+            plt.scatter(stsw[l]['Swing_bkwd']['x'][position], stsw[l]['Swing']['y'][position], facecolors='none', edgecolors=colors[l], marker='s', s=markersize)
 
 def plotTail():
     tailx = df[con][mouseID]['Side'].loc(axis=0)[:, ['TrialStart', 'RunStart', 'Transition', 'RunEnd'], frame_num].loc(axis=1)['Tail1', 'x'].values[0]

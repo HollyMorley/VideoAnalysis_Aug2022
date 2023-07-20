@@ -397,7 +397,7 @@ class Utils:
 
         return phase_starts
 
-    def find_blocks(self, array, gap_threshold):
+    def find_blocks(self, array, gap_threshold, block_min_size):
         blocks = []
         start = None
         for i in range(len(array) - 1):
@@ -408,6 +408,16 @@ class Utils:
                 start = None
         if start is not None:
             blocks.append((start, array[-1]))
+
+        blocks = np.array(blocks)
+
+        block_under_thresh = []
+        for i in range(len(blocks)):
+            b = blocks[i, 1] - blocks[i, 0] < block_min_size
+            block_under_thresh.append(b)
+
+        blocks = blocks[~np.array(block_under_thresh)]
+
         return blocks
 
 

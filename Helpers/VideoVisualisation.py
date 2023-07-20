@@ -10,14 +10,14 @@ con = conditions[0]
 mouseID = 'FAA-1035243'
 view = 'Side'
 
-frame_num = 57200
+frame_num = 57744
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)
 
 # Get data for stance and swing
 df = Plot.Plot().GetDFs(conditions)
-df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, xy='y')
+df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods_old(df, con, mouseID, xy='comb', fillvalues=False)
 
 def getStSwFramesForVid(data, con, mouseID, view):
     stsw_FR = Locomotion.Locomotion().getStanceSwingFrames(data, con, mouseID, view, 'ForepawToeR')
@@ -49,6 +49,12 @@ def update_image():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         # Clear the current plot
         plt.clf()
+        legend_elements = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='darkblue', markersize=10, label='Stance'),
+            plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='darkblue', markersize=10, label='Swing')
+        ]
+        # Create the legend
+        plt.legend(handles=legend_elements, loc='upper left')
         # Display the frame in the Matplotlib window
         plt.imshow(frame)
         # Update the frame number display
@@ -118,6 +124,14 @@ update_image()
 # Connect the key press event to the figure
 fig = plt.gcf()
 fig.canvas.mpl_connect('key_press_event', on_key_press)
+
+legend_elements = [
+    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='darkblue', markersize=10, label='Stance'),
+    plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='darkblue', markersize=10, label='Swing')
+]
+
+# Create the legend
+plt.legend(handles=legend_elements, loc='upper right')
 
 # Show the Matplotlib window
 plt.show()

@@ -4,20 +4,28 @@ import Locomotion
 import Plot
 import numpy as np
 
-video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
+#######################################################################################################################
+#######################################################################################################################
+######################### CONFIGURATIONS ##############################
+video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_front_1.avi"
 conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
 con = conditions[0]
 mouseID = 'FAA-1035243'
-view = 'Side'
 
-frame_num = 57744
+###################### UPDATE EVERY TRIAL ############################
+view = 'Front'
+frame_num = 247350
+
+#######################################################################################################################
+#######################################################################################################################
 
 # Open the video file
 cap = cv2.VideoCapture(video_file)
 
-# Get data for stance and swing
-df = Plot.Plot().GetDFs(conditions)
-df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods_old(df, con, mouseID, xy='comb', fillvalues=False)
+if view == 'Side':
+    # Get data for stance and swing
+    df = Plot.Plot().GetDFs(conditions)
+    df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, fillvalues=False)
 
 def getStSwFramesForVid(data, con, mouseID, view):
     stsw_FR = Locomotion.Locomotion().getStanceSwingFrames(data, con, mouseID, view, 'ForepawToeR')
@@ -34,7 +42,8 @@ def getStSwFramesForVid(data, con, mouseID, view):
 
     return stsw
 
-stsw = getStSwFramesForVid(df, con, mouseID, view)
+if view == 'Side':
+    stsw = getStSwFramesForVid(df, con, mouseID, view)
 
 # Define a variable to toggle clearing of plotted points
 clear_points = True
@@ -59,9 +68,11 @@ def update_image():
         plt.imshow(frame)
         # Update the frame number display
         plt.title('Frame %d' % frame_num)
-        # Update the scatter plots
-        plotSwSt(stsw)
-        plotTail()
+
+        if view == 'Side':
+            # Update the scatter plots
+            plotSwSt(stsw)
+            plotTail()
         # Refresh the plot
         plt.draw()
 

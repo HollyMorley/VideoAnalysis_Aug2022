@@ -7,14 +7,14 @@ import numpy as np
 #######################################################################################################################
 #######################################################################################################################
 ######################### CONFIGURATIONS ##############################
-video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_front_1.avi"
+video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
 conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
 con = conditions[0]
 mouseID = 'FAA-1035243'
 
 ###################### UPDATE EVERY TRIAL ############################
-view = 'Front'
-frame_num = 247350
+view = 'Side'
+frame_num = 86000
 
 #######################################################################################################################
 #######################################################################################################################
@@ -22,10 +22,10 @@ frame_num = 247350
 # Open the video file
 cap = cv2.VideoCapture(video_file)
 
-if view == 'Side':
-    # Get data for stance and swing
-    df = Plot.Plot().GetDFs(conditions)
-    df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, fillvalues=False)
+# if view == 'Side':
+# Get data for stance and swing
+df = Plot.Plot().GetDFs(conditions)
+df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, fillvalues=False)
 
 def getStSwFramesForVid(data, con, mouseID, view):
     stsw_FR = Locomotion.Locomotion().getStanceSwingFrames(data, con, mouseID, view, 'ForepawToeR')
@@ -42,8 +42,8 @@ def getStSwFramesForVid(data, con, mouseID, view):
 
     return stsw
 
-if view == 'Side':
-    stsw = getStSwFramesForVid(df, con, mouseID, view)
+# if view == 'Side':
+stsw = getStSwFramesForVid(df, con, mouseID, view)
 
 # Define a variable to toggle clearing of plotted points
 clear_points = True
@@ -69,9 +69,15 @@ def update_image():
         # Update the frame number display
         plt.title('Frame %d' % frame_num)
 
+        # if view == 'Side':
+        # Update the scatter plots
+        if view == 'Front':
+            try:
+                plotFL()
+            except:
+                pass
+        plotSwSt(stsw)
         if view == 'Side':
-            # Update the scatter plots
-            plotSwSt(stsw)
             plotTail()
         # Refresh the plot
         plt.draw()
@@ -128,6 +134,12 @@ def plotTail():
     taily = df[con][mouseID]['Side'].loc(axis=0)[:, ['TrialStart', 'RunStart', 'Transition', 'RunEnd'], frame_num].loc(axis=1)['Tail1', 'y'].values[0]
     markersize = 10
     plt.scatter(tailx, taily, color='red', marker='s', s=markersize)
+
+def plotFL():
+    FLx = df[con][mouseID]['Front'].loc(axis=0)[:, ['TrialStart', 'RunStart', 'Transition', 'RunEnd'], frame_num].loc(axis=1)['ForepawToeL', 'x'].values[0]
+    FLy = df[con][mouseID]['Front'].loc(axis=0)[:, ['TrialStart', 'RunStart', 'Transition', 'RunEnd'], frame_num].loc(axis=1)['ForepawToeL', 'y'].values[0]
+    markersize = 10
+    plt.scatter(FLx, FLy, color='red', marker='s', s=markersize)
 
 # Start at the first frame
 update_image()

@@ -15,7 +15,7 @@ from scipy import stats
 from tqdm import tqdm
 import math
 import warnings
-# from statsmodels.nonparametric.smoothers_lowess import lowess
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 
 class Locomotion():
@@ -678,82 +678,22 @@ class Locomotion():
             StepCycleFilledAll = []
             for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
                 try:
-                    commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
-                    mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'likelihood'].values > pcutoff  # change so that NO LONGER excluding when mouse stationary (at this stage)
-
-                    # get vel data for whole mouse, remove sitting periods from available data, and identify runs with sitting
-                    mouse_stat_mask = abs(velstuff['runs_lowess'][r][1].diff()) < 0.01
-                    if sum(mouse_stat_mask) > 100:
-                        mouse_stat_blocks = utils.Utils().find_blocks(velstuff['runs_lowess'][r][1][mouse_stat_mask].index.get_level_values(level='FrameIdx'),10,20)
-                        if np.any(mouse_stat_blocks):
-                            mouse_stat_blocks_total = []
-                            for b in range(len(mouse_stat_blocks)):
-                                idxs = np.arange(mouse_stat_blocks[b][0],mouse_stat_blocks[b][1])
-                                mouse_stat_blocks_total.append(idxs)
-                            mouse_stat_blocks_total = np.concatenate(mouse_stat_blocks_total)
-                            mouse_stat_blocks_mask = np.isin(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].index.get_level_values(level='FrameIdx'), mouse_stat_blocks_total)
-                            mask = mask & ~mouse_stat_blocks_mask
-
-                    # get vel data for limb
-                    vel_limb = Velocity.Velocity().getVelocity_specific_limb(l, r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff,xy='x') # get the velocity data for this body part (limb)
-                    vel_limb = vel_limb.loc[['RunStart','Transition','RunEnd']]
-
-                    # get basic info
-                    x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].values[mask]
-                    y = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'y'][mask]
-                    t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[mask]
-
-                    swst_sequence = self.get_limb_speed(l,r,t,vel_limb,sitting_log)
-
-                    # find if there are any backwards steps and relabel
-                    if np.any(swst_sequence == 'neg_peak'):
-                        backwards_pos = np.where(swst_sequence['val_type'] == 'neg_peak')[0]
-                        for i in range(len(backwards_pos)):
-                            backwards_swing_pos = backwards_pos[i] - 1
-                            backwards_stance_pos = backwards_pos[i] + 1
-                            swst_sequence.iloc[backwards_swing_pos] = 'swing_bkwd'
-                            swst_sequence.iloc[backwards_stance_pos] = 'stance_bkwd'
-
-                    # remove the peaks data from the final dataframe
-                    swst = swst_sequence[swst_sequence['val_type'].isin(['stance', 'swing', 'stance_bkwd', 'swing_bkwd'])]
-
-                    # plt.figure()
-                    # plt.plot(t,x)
-                    # plt.vlines(x=swst[swst.values=='swing'].index.values.astype(int), ymin=100, ymax=1900, colors='red')
-                    # plt.vlines(x=swst[swst.values=='stance'].index.values.astype(int), ymin=100, ymax=1900, colors='green')
-                    # plt.vlines(x=swst[swst.values=='swing_bkwd'].index.values.astype(int), ymin=100, ymax=1900, colors='darkred', linestyle='--')
-                    # plt.vlines(x=swst[swst.values=='stance_bkwd'].index.values.astype(int), ymin=100, ymax=1900, colors='darkgreen', linestyle='--')
-                    # plt.title(r)
-                    # path = r'%s\Locomotion\individual_runs\%s\%s\x' % (plotting_destfolder, mouseID, l)
-                    # isExist = os.path.exists(path)
-                    # if not isExist:
-                    #     os.makedirs(path)
-                    # plt.savefig(r'%s\%s_%s_%s.png' % (path, mouseID, r, l), bbox_inches='tight', transparent=False,
-                    #             format='png')
-                    # plt.clf()
-
-                    stancestart = swst.index[(swst.loc(axis=1)['val_type'].values == 'stance').flatten()]
-                    swingstart = swst.index[(swst.loc(axis=1)['val_type'].values == 'swing').flatten()]
-                    stancestart_bkwd = swst.index[(swst.loc(axis=1)['val_type'].values == 'stance_bkwd').flatten()]
-                    swingstart_bkwd = swst.index[(swst.loc(axis=1)['val_type'].values == 'swing_bkwd').flatten()]
+                    swst_dict = self.get_FR_HR_HL_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
 
                     # put first swing and stance frames into df
                     StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)
-                    swingmask = np.isin(data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,
-                                        swingstart)
-                    stancemask = np.isin(
-                        data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values, stancestart)
-                    swingmask_bkwd = np.isin(
-                        data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,
-                        swingstart_bkwd)
-                    stancemask_bkwd = np.isin(
-                        data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,
-                        stancestart_bkwd)
+                    swingmask = np.isin(data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,swst_dict['swingstart'])
+                    stancemask = np.isin(data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values, swst_dict['stancestart'])
 
                     StepCycle[stancemask] = 0
                     StepCycle[swingmask] = 1
-                    StepCycle[stancemask_bkwd] = 2
-                    StepCycle[swingmask_bkwd] = 3
+
+                    if l != 'ForepawToeL': # cant see this (currently) as only using front cam to detect FL
+                        swingmask_bkwd = np.isin(data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,swst_dict['swingstart_bkwd'])
+                        stancemask_bkwd = np.isin(data[con][mouseID][view].loc(axis=0)[r].index.get_level_values(level='FrameIdx').values,swst_dict['stancestart_bkwd'])
+
+                        StepCycle[stancemask_bkwd] = 2
+                        StepCycle[swingmask_bkwd] = 3
 
                     if not np.any(swingmask & stancemask):
                         if fillvalues == True:
@@ -788,7 +728,7 @@ class Locomotion():
 
         return data[con][mouseID]
 
-    def get_FR_HR_HL_sidecam(self, data, con, mouseID, r, velstuff, sitting_log, view='Side'):
+    def get_FR_HR_HL_sidecam(self, data, con, mouseID, r, l, velstuff, markerstuff, sitting_log, view='Side'):
         commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
         mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
                    l, 'likelihood'].values > pcutoff  # change so that NO LONGER excluding when mouse stationary (at this stage)
@@ -808,6 +748,15 @@ class Locomotion():
                                                                                           'RunEnd'], commonidx].index.get_level_values(
                     level='FrameIdx'), mouse_stat_blocks_total)
                 mask = mask & ~mouse_stat_blocks_mask
+
+        ####### NEW ##########
+        # fill in the gaps of missing data to avoid erronous velocity data being calculated CURRENTLY ONLY FOR FL
+        if l == 'ForepawToeL':
+            interpolated_x = self.fill_in_FL_gaps(data,con,mouseID,r,mask,commonidx)
+            index_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='FrameIdx'), interpolated_x.index)
+            temp_data = data[con][mouseID][view].loc(axis=1)[l, 'x'].values
+            temp_data[index_mask] = interpolated_x.values
+            data[con][mouseID][view].loc(axis=1)[l, 'x'] = temp_data
 
         # get vel data for limb
         vel_limb = Velocity.Velocity().getVelocity_specific_limb(l, r, data, con, mouseID, view,
@@ -867,19 +816,141 @@ class Locomotion():
 
         return swst_dict
 
-    def get_FL_swst_frontcam(self, data, con, mouseID, r, view='Front'):
-        markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID]['Side'])
-        vel_y = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff, xy='y')
-        limb_mask = data[con][mouseID][view].loc(axis=1)['ForepawToeL', 'likelihood'].loc(axis=0)[r].loc(axis=0)[vel_y.index] > 0.99999 # higher cutoff
-        vel_y = vel_y[limb_mask]
-        peaks, info = scipy.signal.find_peaks(vel_y, distance=10, width=5, height=6, prominence=5, wlen=50)
-        stancestart = vel_y.index.get_level_values(level='FrameIdx')[peaks]
-        swingstart = vel_y.index.get_level_values(level='FrameIdx')[info['right_bases']]
+    def fill_in_FL_gaps(self, data, con, mouseID, r, mask, commonidx, view='Side'):
+        # mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
+        #            'ForepawToeL', 'likelihood'] > pcutoff
+        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
+            'ForepawToeL', 'x'].values[
+            mask]
+        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
+            'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[mask]
+        present = pd.DataFrame(data=x, index=t)[0]
+        from scipy.interpolate import CubicSpline
+        cs = CubicSpline(t, x)
+        missing_t = \
+        data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
+            'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[~mask]
+        missing_x = cs(
+            data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
+                'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[~mask])
+        missing = pd.DataFrame(data=missing_x, index=missing_t)[0]
+        end_mask = np.logical_and(missing.index <= t[-1], missing.index >= t[1])
+        missing = missing[end_mask]
+        interpolated_x = pd.concat([present, missing], axis=0).sort_index()
+        return interpolated_x
 
-        swst_dict = {
-            'stancestart': stancestart,
-            'swingstart': swingstart
-        }
+    def get_FL_swst_frontcam(self, data, con, mouseID, r, velstuff, markerstuff, beltspeed=6, n=30, view='Front'):
+        from statsmodels.nonparametric.smoothers_lowess import lowess
+        windowsize = math.ceil((fps / n) / 2.) * 2
+
+        ######################################### TEMP ######################################################
+        mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
+                   l, 'likelihood'] > pcutoff
+        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'x'].values[
+            mask]
+        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
+            l, 'x'].index.get_level_values(level='FrameIdx')[mask]
+        present = pd.DataFrame(data=x,index=t)[0]
+        from scipy.interpolate import CubicSpline
+        cs = CubicSpline(t, x)
+        missing_t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
+            l, 'x'].index.get_level_values(level='FrameIdx')[~mask]
+        missing_x = cs(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
+                           l, 'x'].index.get_level_values(level='FrameIdx')[~mask])
+        missing = pd.DataFrame(data=missing_x,index=missing_t)[0]
+        end_mask = np.logical_and(missing.index <= t[-1], missing.index >= t[1])
+        missing = missing[end_mask]
+        interpolated_x = pd.concat([present, missing], axis=0).sort_index()
+
+        plt.figure()
+        plt.scatter(interpolated_x.index, interpolated_x.values)
+        plt.title(r)
+
+        #####################################################################################################
+
+
+        # get y data
+        vel_y = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff, xy='y')
+
+        # trim vel_y to remove stationary periods
+        vel_y_trimmed = vel_y.reindex(velstuff['runs_raw'][r][1].index)
+        vel_y_moving = vel_y_trimmed[velstuff['runs_raw'][r][1] > beltspeed]
+        vel_y_moving = vel_y_moving[~vel_y_moving.isna()] # remove na values
+
+        # smooth y
+        vel_smooth = pd.DataFrame(index=vel_y_moving.index, data=np.array(lowess(vel_y_moving, vel_y_moving.index.get_level_values(level='FrameIdx'),frac=.08))[:, 1])[0]
+
+        limb_mask = data[con][mouseID][view].loc(axis=1)['ForepawToeL', 'likelihood'].loc(axis=0)[r].loc(axis=0)[
+                    vel_smooth.index] > pcutoff #0.99999 # higher cutoff
+        vel_smooth = vel_smooth[limb_mask]
+        peaks, info = scipy.signal.find_peaks(vel_smooth, distance=10, width=5, prominence=3, wlen=50)
+
+        stancestart = vel_smooth.index.get_level_values(level='FrameIdx')[peaks]
+        #swingstart = vel_y.index.get_level_values(level='FrameIdx')[info['right_bases']]
+
+        # refine swing values
+        y = data[con][mouseID][view].loc(axis=0)[r].loc(axis=0)[vel_smooth.index].loc(axis=1)['ForepawToeL', 'y'][limb_mask]
+
+        # get slope based on a shorter snippet of y, defined by the area where stances have been found (to try remove messy parts of the data, e.g. stationary sections)
+        if len(stancestart > 0):
+            if len(stancestart > 1):
+                sequence = range(stancestart[0] - 20, stancestart[-1] + 20)
+                index_mask = y.index.isin(sequence,level=1)
+                short_y = y[index_mask]
+                slope, intercept, r_value, p_value, std_err = stats.linregress(short_y.index.get_level_values(level='FrameIdx'), short_y)
+            else:
+                slope, intercept, r_value, p_value, std_err = stats.linregress(y.index.get_level_values(level='FrameIdx'), y)
+
+            y_corr = y - ((y.index.get_level_values(level='FrameIdx') - y.index.get_level_values(level='FrameIdx')[0]) * slope)  # y corrected horizontally
+            from statsmodels.nonparametric.smoothers_lowess import lowess
+            y_smooth = pd.DataFrame(index=y_corr.index, data=np.array(lowess(y_corr, y_corr.index.get_level_values(level='FrameIdx'),frac=.08))[:, 1])
+            y_smooth = y_smooth[0]
+
+            peaks, info = scipy.signal.find_peaks(y_smooth, distance=10, wlen=50)
+            peaks_idx = y_smooth.index.get_level_values(level='FrameIdx')[peaks]
+
+            dist = peaks_idx.values - stancestart.values[:, np.newaxis]
+            dist = dist.astype(float)
+            dist[np.logical_or(dist < 0, dist > 20)] = np.nan
+            if np.all(np.isnan(dist[-1])):
+                dist = dist[:-1]
+            potentialClosestpos = np.nanargmin(dist, axis=1)
+            closestFound, closestCounts = np.unique(potentialClosestpos, return_counts=True)
+            if np.any(closestCounts > 1):
+                raise ValueError('found the same peak for two stancestarts, inducating a missing peak')
+            stance_peak = peaks_idx[potentialClosestpos]
+
+            swingstart = []
+            for i, peak in enumerate(stance_peak):
+                target_y = y_smooth.xs(key=stancestart[i], level='FrameIdx').values
+                ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
+                                               y_smooth.values < target_y))
+                if sum(ymask) > 0:
+                    new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
+                else:
+                    target_y = y_smooth.xs(key=stancestart[i]+1, level='FrameIdx').values
+                    ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
+                                                   y_smooth.values < target_y))
+                    if sum(ymask) > 0:
+                        new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
+                    else:
+                        target_y = y_smooth.xs(key=stancestart[i] + 2, level='FrameIdx').values
+                        ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
+                                                       y_smooth.values < target_y))
+                        if sum(ymask) > 0:
+                            new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
+                        elif i == len(stance_peak) - 1: # if the final stance, there may be no visible following swing
+                            pass
+                        else:
+                            raise ValueError('Cant detect swing for stance %s' %i)
+                swingstart.append(new_swing)
+
+            swst_dict = {
+                'stancestart': stancestart,
+                'swingstart': swingstart
+            }
+        else:
+            raise ValueError('No detections')
 
         return swst_dict
 
@@ -905,6 +976,10 @@ class Locomotion():
 
             #####
             vel_y = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff, xy='y')
+            vel_y_smooth = pd.DataFrame(index=vel_y[5:-3].index, data=np.array(
+                lowess(vel_y[5:-3], vel_y[5:-3].index.get_level_values(level='FrameIdx'),
+                       frac=.08))[:, 1])
+            vel_y_smooth = vel_y_smooth[0]
             peaks, info = scipy.signal.find_peaks(vel_y, distance=10, height=10, prominence=5, wlen=20)
             peaks_idx = vel_y.index.get_level_values(level='FrameIdx')[peaks]
             swingstart = vel_y.index.get_level_values(level='FrameIdx')[info['left_bases']]
@@ -1013,6 +1088,8 @@ class Locomotion():
             stancex_bkwd = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'x'].values[stancemask_bkwd]
             swingx_bkwd = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'x'].values[swingmask_bkwd]
 
+            stancey = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'y'].values[stancemask]
+            swingy = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'y'].values[swingmask]
             stancey_bkwd = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'y'].values[stancemask_bkwd]
             swingy_bkwd = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'y'].values[swingmask_bkwd]
         else:

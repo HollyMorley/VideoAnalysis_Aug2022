@@ -54,7 +54,13 @@ class Velocity:
 
     def getVelocity_specific_limb(self, limb, r, data, con, mouseID, view, windowsize, markerstuff, xy):
         # find velocity of mouse, based on available frames where tail base (side view) is visible
-        mask = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff
+        # mask = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff
+        # mask = np.logical_and.reduce((data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff))
+        if limb == 'ForepawToeL':
+            mask = np.logical_and(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff)
+        else:
+            mask = np.logical_and.reduce((data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff))
+
         dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, xy][mask].rolling(window=windowsize,center=True,min_periods=None).apply(lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
 
         # create column with windowsize values, dependent on the available frames

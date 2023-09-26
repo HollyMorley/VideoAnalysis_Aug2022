@@ -9,7 +9,8 @@ import csv
 import math
 from tqdm import tqdm
 import Helpers.utils as utils
-from Helpers.Config import *
+#from Helpers.Config import *
+from Helpers.Config_23 import *
 from pathlib import Path
 from scipy.signal import find_peaks
 from scipy import stats
@@ -28,11 +29,11 @@ class GetRuns:
         files = utils.Utils().GetlistofH5files(files=files) # gets dictionary of side, front and overhead files
 
         if exp == 'Char':
-            runs = APACharRuns
+            runs = expstuff['condition_exp_lengths']['APACharRuns']
         elif exp == 'Per':
-            runs = APAPerRuns
+            runs = expstuff['condition_exp_lengths']['APAPerRuns']
         elif exp == 'VMT':
-            runs = APAVmtRuns
+            runs = expstuff['condition_exp_lengths']['APAVmtRuns']
         else:
             raise ValueError('Entered exp argument incorrectly')
 
@@ -94,25 +95,25 @@ class GetRuns:
                     # Get (and clean up) dataframes for one mouse (/vid) for each view point
                     DataframeCoor_side = pd.read_hdf(files['Side'][j])
                     try:
-                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side].copy()
+                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[vidstuff['scorers']['side']].copy()
                     except:
-                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[scorer_side_new].copy()
+                        DataframeCoor_side = DataframeCoor_side.loc(axis=1)[vidstuff['scorers']['side_new']].copy()
 
                     DataframeCoor_front = pd.read_hdf(files['Front'][j])
-                    DataframeCoor_front = DataframeCoor_front.loc(axis=1)[scorer_front].copy()
+                    DataframeCoor_front = DataframeCoor_front.loc(axis=1)[vidstuff['scorers']['front']].copy()
 
                     DataframeCoor_overhead = pd.read_hdf(files['Overhead'][j])
-                    DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[scorer_overhead].copy()
+                    DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[vidstuff['scorers']['overhead']].copy()
                     print("Starting analysis...")
 
                     data = self.filterData(DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff, filename=files['Side'][j])
 
                     if 'APAChar' in Path(files['Side'][j]).stem:
-                        runnumbers = APACharRuns
+                        runnumbers = expstuff['condition_exp_lengths']['APACharRuns']
                     elif 'APAPer' in Path(files['Side'][j]).stem:
-                        runnumbers = APAPerRuns
+                        runnumbers = expstuff['condition_exp_lengths']['APAPerRuns']
                     elif 'APAVmt' in Path(files['Side'][j]).stem:
-                        runnumbers = APAVmtRuns
+                        runnumbers = expstuff['condition_exp_lengths']['APAVmtRuns']
                     else:
                         print('Experiment name in filename wrong for %s' %Path(files['Side'][j]).stem)
 
@@ -730,7 +731,7 @@ class GetRuns:
         ### based on the above need to show where multiple run attempts are. presumably this is clear by, if a runback is present, only considering the second instance of the run (oe RunStart, Transition and RunEnd)
 
         # Tidy up run stages frames by deleting any after the first RunEnd (because these will be where the mouse has run about post trial)
-        for rsidx, rs in enumerate(RunStages):
+        for rsidx, rs in enumerate(expstuff['exp_chunks']['RunStages']):
             err_mask = np.isin(runstages[rs].index, np.array(DataframeCoor_side.index))
             if len(runstages[rs]) != len(runstages[rs][err_mask == True]):
                 numerr = len(runstages[rs]) - len(runstages[rs][err_mask == True])
@@ -744,7 +745,7 @@ class GetRuns:
         DataframeCoor_front.loc(axis=1)['RunStage'] = RunStage
         DataframeCoor_overhead.loc(axis=1)['RunStage'] = RunStage
 
-        for rsidx, rs in enumerate(RunStages):
+        for rsidx, rs in enumerate(expstuff['exp_chunks']['RunStages']):
             DataframeCoor_side.at[runstages[rs].index, 'RunStage'] = rs
             DataframeCoor_front.at[runstages[rs].index, 'RunStage'] = rs
             DataframeCoor_overhead.at[runstages[rs].index, 'RunStage'] = rs
@@ -998,10 +999,10 @@ class GetRuns:
         walldiffLRy = np.diff(np.array(landmarksy['Wall']))
         beltdiffLRy = np.diff(np.array(landmarksy['Belt']))
 
-        cmtopx = (landmarksx['Wall'][2] - landmarksx['Wall'][0])/(distancescm[1]+distancescm[0])
+        cmtopx = (landmarksx['Wall'][2] - landmarksx['Wall'][0])/(expstuff['setup']['distancescm'][1]+expstuff['setup']['distancescm'][0])
         pxtocm = 1 / cmtopx
 
-        distancescmtopx = np.array(distancescm) * int(cmtopx)
+        distancescmtopx = np.array(expstuff['setup']['distancescm']) * int(cmtopx)
 
         # check if any discrepancies, if not make each marker value an average between belt and wall 'x' values
         if np.logical_or.reduce(((abs(distancescmtopx - walldiffLRx) > 2*cmtopx).any(), np.isnan(distancescmtopx - walldiffLRx).any(), walldiffLRy.any() > 10, np.isnan(walldiffLRy.any()))):

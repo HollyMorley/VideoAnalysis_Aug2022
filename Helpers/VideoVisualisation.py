@@ -1,6 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import Locomotion
+from Helpers import GetRuns
 import Plot
 import numpy as np
 
@@ -11,10 +12,11 @@ video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
 conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
 con = conditions[0]
 mouseID = 'FAA-1035243'
+already_loco_analysed = True
 
 ###################### UPDATE EVERY TRIAL ############################
 view = 'Side'
-frame_num = 86000
+frame_num = 189220
 
 #######################################################################################################################
 #######################################################################################################################
@@ -23,9 +25,15 @@ frame_num = 86000
 cap = cv2.VideoCapture(video_file)
 
 # if view == 'Side':
-# Get data for stance and swing
-df = Plot.Plot().GetDFs(conditions)
-df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, fillvalues=False)
+
+
+if not already_loco_analysed:
+    # Get data for stance and swing
+    df = Plot.Plot().GetDFs(conditions)
+    markerstuff = GetRuns.GetRuns().findMarkers(df[con][mouseID]['Side'])
+    df[con][mouseID] = Locomotion.Locomotion().getLocoPeriods(df, con, mouseID, markerstuff, fillvalues=False)
+else:
+    df = Plot.Plot().GetDFs(conditions,reindexed_loco=True)
 
 def getStSwFramesForVid(data, con, mouseID, view):
     stsw_FR = Locomotion.Locomotion().getStanceSwingFrames(data, con, mouseID, view, 'ForepawToeR')

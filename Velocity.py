@@ -1,6 +1,7 @@
 import Plot
 import Helpers.utils as utils
-from Helpers.Config import *
+# from Helpers.Config import *
+from Helpers.Config_23 import *
 import Helpers.BodyCentre as BodyCentre
 import Helpers.GetRuns as GetRuns
 import matplotlib.pyplot as plt
@@ -163,18 +164,24 @@ class Velocity:
 
                 # find x position of tail base
                 x = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][tailmask]
-                x = x.loc(axis=0)[['RunStart', 'Transition', 'RunEnd']]
+                try:
+                    expstage_pattern = ['RunStart', 'Transition', 'RunEnd']
+                    x = x.loc(axis=0)[expstage_pattern]
+                except:
+                    expstage_pattern = ['RunStart', 'Transition']
+                    x = x.loc(axis=0)[expstage_pattern]
+
                 xcm = x * markerstuff['pxtocm']
 
                 # find the frame where transition starts
                 transition_idx = v.loc(axis=0)['Transition'].index[0]
                 # Normalise the time/frame values to the transition (transition is 1)
-                centered_transition_f = v.loc(axis=0)[['RunStart', 'Transition', 'RunEnd']].index.get_level_values(
+                centered_transition_f = v.loc(axis=0)[expstage_pattern].index.get_level_values(
                     level='FrameIdx') / transition_idx
                 # find the velocity at transition
-                transition_v = v.loc(axis=0)[['RunStart', 'Transition', 'RunEnd'], transition_idx]
+                transition_v = v.loc(axis=0)[expstage_pattern, transition_idx]
                 # Normalise velocity values to that at transition
-                centered_transition_v = v.loc(axis=0)[['RunStart', 'Transition', 'RunEnd']].values - transition_v.values
+                centered_transition_v = v.loc(axis=0)[expstage_pattern].values - transition_v.values
 
                 if xaxis == 'x':
                     xplot = xcm
@@ -184,7 +191,7 @@ class Velocity:
                 if zeroed == True:
                     yplot = centered_transition_v
                 else:
-                    yplot = v.loc(axis=0)[['RunStart', 'Transition', 'RunEnd']]
+                    yplot = v.loc(axis=0)[expstage_pattern]
 
                 from statsmodels.nonparametric.smoothers_lowess import lowess
                 # lowess = lowess(yplot[int(windowsize / 2):], xplot[:-int(windowsize / 2)], frac=.3)

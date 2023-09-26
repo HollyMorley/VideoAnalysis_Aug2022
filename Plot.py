@@ -1,36 +1,33 @@
-from pathlib import Path
 import numpy as np
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import Helpers.utils as utils
 from Helpers.Config import *
-from scipy.stats import skew, sem, shapiro, levene
+from scipy.stats import skew, shapiro, levene
 import warnings
-from statsmodels.stats.anova import AnovaRM
 import pingouin as pg
-from pathlib import Path
-import Helpers.GetRuns as GetRuns
-from scipy import stats
-from glob import glob
-from matplotlib.patches import Rectangle
+
 
 class Plot():
     def __init__(self):
         super().__init__()
 
-    def GetDFs(self, conditions=[]):
+    def GetDFs(self, conditions=[], reindexed_loco=False):
         '''
         :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats
         :return: dictionary holding all dataframes held under the requested conditions
         '''
-
+        if reindexed_loco:
+            file_suffix = 'Runs__IdxCorr'
+        else:
+            file_suffix = 'Runs'
         print('Conditions to be loaded:\n%s' %conditions)
         data = dict.fromkeys(conditions)
         for conidx, con in enumerate(conditions):
             if 'Day' not in con:
                 #files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s" %(con), filtered=True)
-                files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True)
+                files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True, suffix=file_suffix)
             else:
                 splitcon = con.split('_')
                 conname = "_".join(splitcon[0:2])
@@ -38,9 +35,11 @@ class Plot():
                 w = splitcon[-2]
                 # files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
                 if 'Repeats' in con:
-                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Repeats\%s\%s" %(filtereddata_folder, conname, w, dayname), filtered=True)
+                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Repeats\%s\%s" %(filtereddata_folder, conname, w, dayname), filtered=True, suffix=file_suffix)
                 elif 'Extended' in con:
-                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Extended\%s" %(filtereddata_folder, conname, dayname), filtered=True)
+                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Extended\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
+                else:
+                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
             mouseIDALL = list()
             dateALL = list()
 

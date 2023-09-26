@@ -4,7 +4,8 @@ from glob import glob
 from fnmatch import fnmatch
 import matplotlib.pyplot as plt
 from pathlib import Path
-from Helpers.Config import *
+# from Helpers.Config import *
+from Helpers.Config_23 import *
 import sys
 import numpy as np
 import re
@@ -25,16 +26,24 @@ class Utils:
         return vidfiles
 
 
-    def GetlistofH5files(self, files=None, directory=None, filtered=None): #### update and change name to Getlistofanalysedfiles
+    def GetlistofH5files(self, files=None, directory=None, filtered=None, suffix=None): #### update and change name to Getlistofanalysedfiles
         if directory is not None and files is None:
-            if filtered is None:
+            if filtered is None and suffix is None:
                 datafiles_side = glob("%s\\*%s*.h5" % (directory, 'side')) # !!!!!!!!!!!!GOT RID OF scorer_side!!!!!!!!!!!!!!!!!!!!!!!!!!
-                datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
-                datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
-            if filtered is True:
-                datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', scorer_side))
-                datafiles_front = glob("%s\\*%s*%s_Runs.h5" % (directory, 'front', scorer_front))
-                datafiles_overhead = glob("%s\\*%s*%s_Runs.h5" % (directory, 'overhead', scorer_overhead))
+                # datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
+                # datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
+                datafiles_front = glob("%s\\*%s*.h5" % (directory, 'front'))
+                datafiles_overhead = glob("%s\\*%s*.h5" % (directory, 'overhead'))
+            elif filtered is True and suffix is None:
+                datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', vidstuff['scorers']['side']))
+                datafiles_front = glob("%s\\*%s*%s_Runs.h5" % (directory, 'front', vidstuff['scorers']['front']))
+                datafiles_overhead = glob("%s\\*%s*%s_Runs.h5" % (directory, 'overhead', vidstuff['scorers']['overhead']))
+
+            ## this is horrible code this way as just overwriting the above (if suffix not None) but cant be bothered to go back through all uses of this function to change atm
+            if suffix is not None:
+                datafiles_side = glob("%s\\*%s*_%s.h5" % (directory, 'side',suffix))
+                datafiles_front = glob("%s\\*%s*_%s.h5" % (directory, 'front',suffix))
+                datafiles_overhead = glob("%s\\*%s*_%s.h5" % (directory, 'overhead',suffix))
 
             datafiles_side.sort()
             datafiles_front.sort()
@@ -81,9 +90,9 @@ class Utils:
         if type(files) is dict:
             files = sorted({x for v in files.values() for x in v})
 
-        for m in range(0, len(mice_ID)):
-            mousefiles = [s for s in files if mice_ID[m] in s]
-            match = [f for f in mousefiles if mice_name[m] in f]
+        for m in range(0, len(micestuff['mice_ID'])):
+            mousefiles = [s for s in files if micestuff['mice_ID'][m] in s]
+            match = [f for f in mousefiles if micestuff['mice_ID'][m] in f]
             if mousefiles != match:
                 mislabeled = set(mousefiles) ^ set(match)
                 print('The following file is labeled incorrectly:\n%s' % mislabeled)
@@ -338,7 +347,7 @@ class Utils:
         return mean
 
 
-    def getSpeedConditions(self, con, speed=list(speeds.keys())):
+    def getSpeedConditions(self, con, speed=list(expstuff['speeds'].keys())):
         matches = re.findall('|'.join(speed), con)
         if len(matches) == 2:
             if con.index(matches[0]) < con.index(matches[1]):
@@ -361,8 +370,8 @@ class Utils:
         print('%s mins, %s secs' % (min, sec))
 
     def combinetwohdfs(self):
-        scorers = [scorer_side, scorer_front, scorer_overhead]
-        for v, view in enumerate(cams):
+        scorers = [vidstuff['scorers']['side'], vidstuff['scorers']['front'], vidstuff['scorers']['overhead']]
+        for v, view in enumerate(vidstuff['cams']):
             df1 = pd.read_hdf(
                 r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230317\bin\HM_20230317_APACharExt_FAA-1035244_L_%s_1%s.h5" % (
                 view, scorers[v]))

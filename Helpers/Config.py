@@ -1,4 +1,7 @@
-### User-set values
+########################################################################################################################
+################################################### User-set values ####################################################
+########################################################################################################################
+
 cams = ['side','front','overhead']
 scorer_side = "DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000"
 scorer_side_new = "DLC_resnet50_DLC_DualBeltJul25shuffle1_1020000"
@@ -29,20 +32,17 @@ APAPerRuns = [10,20,10] #### warning if change i have sometimes used the apachar
 APAVmtRuns = [10,15,10]
 APA_lengthruns = 25#100#25
 after_lengthruns = 25
+literature_apa_length = 100 #ms ## this isnt acutally correct, check this
 preruns_CharLow = 2
 preruns_CharMidHigh = 5
 filtereddata_folder = r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round2_Jan23"
 plotting_destfolder = r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\July23'
 fps = 247
 speeds = {'Low': 6, 'Mid': 18, 'High': 30}
-# pcutoffWeb = 0.6
-# webcamWrongMultiple = 2
-# webcamFPS = 30
-# sideFPS = 330
-# sideViewBeltLength = 30
-# LongSideBeltLength = 35
-# ShortSideBeltLength = 33
-# midBeltLength = (LongSideBeltLength + ShortSideBeltLength)/2
-# LongSideBeltLengthQuad = LongSideBeltLength/4
-# ShortSideBeltLengthQuad = ShortSideBeltLength/4
-# midBeltLengthQuad = midBeltLength/4
+swst_vals = {
+    'st': 0,
+    'sw': 1,
+    'st_bkwd': 2,
+    'sw_bkwd': 3
+}
+

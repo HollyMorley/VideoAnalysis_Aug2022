@@ -6,7 +6,8 @@ import pandas as pd
 import Helpers.utils as utils
 import Helpers.GetRuns as GetRuns
 import Velocity
-from Helpers.Config import *
+# from Helpers.Config import *
+from Helpers.Config_23 import *
 import Plot
 import scipy
 from scipy.signal import savgol_filter
@@ -510,11 +511,10 @@ class Locomotion():
             df = df.iloc[to_keep]
         except:
             df = df
-
-
         return df
 
     def check_swst_pattern_limb_speed(self,swst_sequence,r,sitting_log):
+        ## should alternate between stance and swing but there should also be a peak (pos or neg) detected after swing to prove the validity of this swing
         val_types = swst_sequence['val_type'].tolist()
         # Define the pattern
         pattern = ["stance", "swing", ["pos_peak", "neg_peak"]]
@@ -530,37 +530,46 @@ class Locomotion():
                     raise ValueError("Pattern mismatch: 'swing' should be followed by either 'pos_peak' or 'neg_peak'.")
             elif current_val in pattern[2] and next_val != "stance":
                 if next_val == "pos_peak":
-                    print('Two peaks detected but probably just slowed down, assuming ok but check!')
+                    print('Two peaks detected for run %s but probably just slowed down, assuming ok but check!' %r)
                 else:
                     if r not in sitting_log:
                         raise ValueError("Pattern mismatch: 'pos_peak' or 'neg_peak' should be followed by 'stance'.")
-        print("The swing-stance pattern is followed in run %s" %r)
+        #print("The swing-stance pattern is followed in run %s" %r)
 
 
+    def find_stat_blocks(self, vel):
+        frame_shift = vel.shift(1) - vel
+        stationary_mask = np.abs(frame_shift) < 5
+        stationary_mean = np.mean(vel[stationary_mask].values)
+        stationary_sem = np.std(vel[stationary_mask].values) / np.sqrt(len(vel[stationary_mask]))
+        stationary_window_mask = np.logical_and(vel.values > 2, vel.values < stationary_mean + stationary_sem * 0.5)
+        stance_raw = vel[stationary_window_mask]
+        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 10, 2))[:, 0]
+        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 10, 2))[:, 1]
 
-    def get_limb_speed(self,l,r,t,vel_limb,sitting_log):
-        vel_limb_mask = np.isin(vel_limb.index.get_level_values(level='FrameIdx'), t)
-        vel_limb_cropped = vel_limb[vel_limb_mask]
-        vel_limb_cropped_nan = vel_limb_cropped[~vel_limb_cropped.isna()]
+        return stance_start_idx, stance_end_idx
+
+
+    def get_limb_speed(self,l,r,vel_limb,sitting_log):
+        #vel_limb_mask = np.isin(vel_limb.index.get_level_values(level='FrameIdx'), t)
+        #vel_limb_cropped = vel_limb[vel_limb_mask]
+        #vel_limb_cropped_nan = vel_limb_cropped[~vel_limb_cropped.isna()]
+        vel_limb_cropped_nan = vel_limb[~vel_limb.isna()]
         from statsmodels.nonparametric.smoothers_lowess import lowess
+
+        # smooth limb velocity data, depending on quality of data from each limb
         if l == 'ForepawToeR':
             vel_limb_smoothed = pd.DataFrame(index=vel_limb_cropped_nan.index, data=np.array(lowess(vel_limb_cropped_nan,vel_limb_cropped_nan.index.get_level_values(level='FrameIdx'), frac=.04))[:,1])
         else:
             vel_limb_smoothed = pd.DataFrame(index=vel_limb_cropped_nan.index, data=np.array(lowess(vel_limb_cropped_nan,vel_limb_cropped_nan.index.get_level_values(level='FrameIdx'), frac=.08))[:,1])
         vel_limb_smoothed = vel_limb_smoothed[0]
-        # if l == 'ForepawToeR' or l == 'ForepawToeL':
-        #     val = vel_limb_cropped_nan
-        # elif l == 'HindpawToeR' or l == 'HindpawToeL':
-        #     val = vel_limb_smoothed
 
-        # find peaks of swings
+        ############################### find peaks of velocity data to find swings #####################################
         # pos_mask = vel_limb_smoothed > base_speed
-        peaks, info = scipy.signal.find_peaks(vel_limb_smoothed, distance=10, height=30, prominence=20)
-        n_peaks, neg_info = scipy.signal.find_peaks(-1*vel_limb_smoothed, distance=10, height=10, prominence=10)
+        peaks, info = scipy.signal.find_peaks(vel_limb_smoothed, distance=10, height=25, prominence=20) # heigh changed from 30 to 25 on 14/8/23
+        n_peaks, neg_info = scipy.signal.find_peaks(-1*vel_limb_smoothed, distance=10, height=25, prominence=10) # height changed from 10 to 25 on 15/8/23
         peaks_idx = vel_limb_smoothed.index.get_level_values(level='FrameIdx')[peaks]
         neg_peaks_idx = vel_limb_smoothed.index.get_level_values(level='FrameIdx')[n_peaks]
-        left_base_idx = vel_limb_smoothed.index.get_level_values(level='FrameIdx')[info['left_bases']]
-        right_base_idx = vel_limb_smoothed.index.get_level_values(level='FrameIdx')[info['right_bases']]
 
         # find rising and falling periods
         try:
@@ -573,24 +582,25 @@ class Locomotion():
             rising = vel_limb_smoothed[peaks[1:]].values - vel_limb_smoothed[peaks[1:] - 10].values
         if np.all(falling > 0) and np.all(rising > 0):
             pass
+        elif np.all(falling[:-1] > 0) and np.all(rising[1:] > 0):
+            print('First or last peak is close to edge for run %s, leaving it as true.' %r)
         else:
             raise ValueError('This is not a real peak for swing')
 
-        # find stationary blocks
-        frame_shift = vel_limb_smoothed.shift(1) - vel_limb_smoothed
-        stationary_mask = np.abs(frame_shift) < 5
-        stationary_mean = np.mean(vel_limb_smoothed[stationary_mask].values)
-        stationary_sem = np.std(vel_limb_smoothed[stationary_mask].values)/np.sqrt(len(vel_limb_smoothed[stationary_mask]))
-        stationary_window_mask = np.logical_and(vel_limb_smoothed.values > 2,
-                                                vel_limb_smoothed.values < stationary_mean + stationary_sem * 0.5)
-        stance_raw = vel_limb_smoothed[stationary_window_mask]
-        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'),10,2))[:,0]
-        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'),10,2))[:,1]
+        ################## find stationary blocks in velocity data to find beginning and end of stance #################
+        #### new ###
+        slope, intercept, r_value, p_value, std_err = stats.linregress(vel_limb_smoothed.index.get_level_values(level='FrameIdx'), vel_limb_smoothed.values)
+        rot_vel_limb_smoothed = vel_limb_smoothed.values - ((vel_limb_smoothed.index.get_level_values(level='FrameIdx') - vel_limb_smoothed.index.get_level_values(level='FrameIdx')[0]) * slope)
+        rot_vel_limb_smoothed = pd.Series(data=rot_vel_limb_smoothed, index=vel_limb_smoothed.index)
+        rot_vel_limb_smoothed = rot_vel_limb_smoothed + abs(rot_vel_limb_smoothed.min())
+        ############
+        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel_limb_smoothed)
+        stance_start_idx_bkup, stance_end_idx_bkup = self.find_stat_blocks(rot_vel_limb_smoothed)
+
 
         # check if any of these values are the result of gaps in the data and remove accordingly
         frame_blocks = utils.Utils().find_blocks(vel_limb_smoothed.index.get_level_values(level='FrameIdx'),10,0)
         matching_values_start = np.intersect1d(stance_start_idx[1:], frame_blocks[:, 0])
-
         if len(matching_values_start) > 0:
             for i in range(len(matching_values_start)):
                 current_start = vel_limb_smoothed[np.where(vel_limb_smoothed.index.get_level_values(level='FrameIdx') == matching_values_start[i])[0][0]]
@@ -601,84 +611,84 @@ class Locomotion():
         if len(matching_values_end) > 0:
             stance_end_idx = np.setdiff1d(stance_end_idx, matching_values_end)
 
-        # form dfs of each data point to then combine together
+        ########################## form dfs of each data point to then combine together ################################
         pos_peaks = pd.DataFrame(data=['pos_peak'] * len(peaks_idx), index=peaks_idx, columns=['val_type'])
         neg_peaks = pd.DataFrame(data=['neg_peak'] * len(neg_peaks_idx), index=neg_peaks_idx, columns=['val_type'])
         stance = pd.DataFrame(data=['stance'] * len(stance_start_idx), index=stance_start_idx, columns=['val_type'])
         swing = pd.DataFrame(data=['swing'] * len(stance_end_idx), index=stance_end_idx, columns=['val_type'])
+        stance_bkup = pd.DataFrame(data=['stance'] * len(stance_start_idx_bkup), index=stance_start_idx_bkup, columns=['val_type'])
+        swing_bkup = pd.DataFrame(data=['swing'] * len(stance_end_idx_bkup), index=stance_end_idx_bkup, columns=['val_type'])
         swst_sequence = pd.concat([pos_peaks, neg_peaks, stance, swing])
         swst_sequence = swst_sequence.sort_index()
+        swst_sequence_bkup = pd.concat([pos_peaks, neg_peaks, stance_bkup, swing_bkup])
+        swst_sequence_bkup = swst_sequence_bkup.sort_index()
 
-        # check sequence
-        self.check_swst_pattern_limb_speed(swst_sequence,r,sitting_log)
+        #### pre-check the pattern to remove erronous neg peaks for FL which occur as a result of poor data quality and interpolation
+        if l == 'ForepawToeL':
+            to_del_neg = []
+            for i in range(0,len(neg_peaks_idx)):
+                # if the previous value is stance and the next is swing then this must be wrong so delete (if previous is swing and next stance this would indicate a missing peak, aka backwards swing)
+                if swst_sequence.shift(-1).loc[neg_peaks_idx[i]].values == 'swing' and swst_sequence.shift(1).loc[neg_peaks_idx].values == 'stance':
+                    to_del_neg.append(neg_peaks_idx[i])
+            if np.any(to_del_neg):
+                swst_sequence = swst_sequence.drop(to_del_neg)
+                swst_sequence_bkup = swst_sequence_bkup.drop(to_del_neg)
+
+
+        ########################################### check sequence #####################################################
+        try:
+            self.check_swst_pattern_limb_speed(swst_sequence,r,sitting_log)
+            #print("The swing-stance pattern is followed in run %s" % r)
+        except:
+            self.check_swst_pattern_limb_speed(swst_sequence_bkup,r,sitting_log) # use rotated values in case missing st or sw. Data will be less accurate but detections there at least
+            #print("The swing-stance pattern is followed in run %s ** ONLY WITH ROTATION - LESS ACCURATE **" %r)
 
         return swst_sequence
 
 
-    def get_limb_speed_borders(self,l,r,data,con,mouseID,view,t,markerstuff,vel_limb):
-        ### get velocity data for this limb
-        # vel_limb = Velocity.Velocity().getVelocity_specific_limb(l, r, data, con, mouseID, view,
-        #                                                          # get the velocity data for this body part (limb)
-        #                                                          math.ceil((fps / 30) / 2.) * 2, markerstuff)
-        vel_limb_mask = np.isin(vel_limb.index.get_level_values(level='FrameIdx'), t)
-        vel_limb_cropped = vel_limb[vel_limb_mask]
-        vel_limb_cropped_nan = vel_limb_cropped[~vel_limb_cropped.isna()]
-        from statsmodels.nonparametric.smoothers_lowess import lowess
-        vel_limb_smoothed = pd.DataFrame(index=vel_limb_cropped_nan.index, data=np.array(lowess(vel_limb_cropped_nan,vel_limb_cropped_nan.index.get_level_values(level='FrameIdx'), frac=.04))[:,1])
-        vel_limb_smoothed = vel_limb_smoothed[0]
-        if l == 'ForepawToeR' or l == 'ForepawToeL':
-            val = vel_limb_cropped_nan
-        elif l == 'HindpawToeR' or l == 'HindpawToeL':
-            val = vel_limb_smoothed
-        vel_slope = val.rolling(window=10).apply(lambda h: self.findslope(h, 'slope'))
-        vel_intercept = val.rolling(window=10).apply(lambda h: self.findslope(h, 'intercept'))
-        vel_slope_height = val.rolling(window=10).apply(lambda x: self.calculate_slope_height(x, vel_slope, vel_intercept))
-        upwards_sloping_vals = vel_slope_height[vel_slope_height > 30].index.get_level_values(level='FrameIdx')
-        upwards_sloping_blocks = utils.Utils().find_blocks(upwards_sloping_vals, 10, 1)
-        Swing_borders = []
-        for i in range(len(upwards_sloping_blocks)):
-            swing_borders = [upwards_sloping_blocks[i][0] - 10, upwards_sloping_blocks[i][1]]
-            Swing_borders.append(swing_borders)
+    def getSittingRuns(self, data, con, mouseID, view, velstuff):
+        # take record of which runs include a period of sitting
+        sitting_log_mask = []
+        for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
+            try:
+                mouse_stat_mask = abs(velstuff['runs_lowess'][r][1].diff()) < 0.01
+                if sum(mouse_stat_mask) > 100:
+                    mouse_stat_blocks = utils.Utils().find_blocks(velstuff['runs_lowess'][r][1][mouse_stat_mask].index.get_level_values(level='FrameIdx'), 10, 20)
+                    if np.any(mouse_stat_blocks):
+                        sitting_log_mask.append(True)
+                    else:
+                        sitting_log_mask.append(False)
+                else:
+                    sitting_log_mask.append(False)
+            except:
+                sitting_log_mask.append(True)  # mark as sitting if cant get velocity data
+        sitting_log = data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int)[
+            sitting_log_mask].to_numpy()
 
-        # check what direction the changes in limb speed are going in that are captured by Swing_borders
-        peaks, info = scipy.signal.find_peaks(vel_limb_smoothed, distance=10, height=50)
-        neg_peaks, neg_info = scipy.signal.find_peaks(vel_limb_smoothed * -1, distance=10, height=10)
-        neg_idx = vel_limb_smoothed.index.get_level_values(level='FrameIdx')[neg_peaks]
-        step_direction = np.array(['fwd'] * len(Swing_borders))
-        for i in range(len(neg_idx)):
-            bkwds_mask = np.logical_and(np.array(neg_idx)[i] < np.array(Swing_borders)[:,1], np.array(neg_idx)[i] > np.array(Swing_borders)[:,0])
-            step_direction[bkwds_mask] = 'bwd'
+        return sitting_log
 
-        return Swing_borders, step_direction
-
-    def getLocoPeriods(self, data, con, mouseID, view='Side', fillvalues=True, n=30):
+    def getLocoPeriods(self, data, con, mouseID, markerstuff, view='Side', fillvalues=True, n=30):
         warnings.filterwarnings("ignore", message="The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.")
         warnings.filterwarnings("ignore", message="The behavior of indexing on a MultiIndex with a nested sequence of labels is deprecated and will change in a future version.")
         limblist = ['ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawToeL']
         windowsize = math.ceil((fps / n) / 2.) * 2
-        markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
+        # markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
         velstuff = Velocity.Velocity().getVelocityInfo(data, con, mouseID, zeroed=False, view=view, xaxis='x', windowsize=windowsize, markerstuff=markerstuff, f=range(0,int(data[con][mouseID][view].index.get_level_values(level='Run').unique().max()+1)))
 
         # take record of which runs include a period of sitting
-        sitting_log_mask = []
-        for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
-            mouse_stat_mask = abs(velstuff['runs_lowess'][r][1].diff()) < 0.01
-            if sum(mouse_stat_mask) > 100:
-                mouse_stat_blocks = utils.Utils().find_blocks(velstuff['runs_lowess'][r][1][mouse_stat_mask].index.get_level_values(level='FrameIdx'), 10, 20)
-                if np.any(mouse_stat_blocks):
-                    sitting_log_mask.append(True)
-                else:
-                    sitting_log_mask.append(False)
-            else:
-                sitting_log_mask.append(False)
-        sitting_log = data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int)[sitting_log_mask].to_numpy()
+        sitting_log = self.getSittingRuns(data, con, mouseID, view, velstuff)
+        sitting_r_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='Run'), sitting_log)
+        sitting_r = sitting_r_mask*1
+        for v in ['Side', 'Front', 'Overhead']:
+            data[con][mouseID][v].loc(axis=1)['Sitting'] = sitting_r
 
-        for l in tqdm(limblist):
+        for l in limblist:
+            print('\n{}Finding locomotor periods for %s...{}\n------------------------------------------>>>'.format('\033[1m', '\033[0m') %l)
             StepCycleAll = []
             StepCycleFilledAll = []
             for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
                 try:
-                    swst_dict = self.get_FR_HR_HL_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
+                    swst_dict = self.get_limb_swst_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
 
                     # put first swing and stance frames into df
                     StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)
@@ -717,6 +727,7 @@ class Locomotion():
                     print('Cant get sw/st data for run: %s, limb: %s' % (r, l))
                     StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)
                     StepCycleAll.append(StepCycle)
+                    StepCycleFilledAll.append(StepCycle)
 
             StepCycleAll_flt = np.concatenate(StepCycleAll).ravel()
             for v in ['Side', 'Front', 'Overhead']:
@@ -728,7 +739,7 @@ class Locomotion():
 
         return data[con][mouseID]
 
-    def get_FR_HR_HL_sidecam(self, data, con, mouseID, r, l, velstuff, markerstuff, sitting_log, view='Side'):
+    def get_limb_swst_sidecam(self, data, con, mouseID, r, l, velstuff, markerstuff, sitting_log, view='Side'):
         commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
         mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
                    l, 'likelihood'].values > pcutoff  # change so that NO LONGER excluding when mouse stationary (at this stage)
@@ -751,29 +762,27 @@ class Locomotion():
 
         ####### NEW ##########
         # fill in the gaps of missing data to avoid erronous velocity data being calculated CURRENTLY ONLY FOR FL
-        if l == 'ForepawToeL':
-            interpolated_x = self.fill_in_FL_gaps(data,con,mouseID,r,mask,commonidx)
-            index_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='FrameIdx'), interpolated_x.index)
-            temp_data = data[con][mouseID][view].loc(axis=1)[l, 'x'].values
-            temp_data[index_mask] = interpolated_x.values
-            data[con][mouseID][view].loc(axis=1)[l, 'x'] = temp_data
+        #if l == 'ForepawToeL':
+        interpolated_x = self.fill_in_limb_x_gaps(data,con,mouseID,r,l,mask,commonidx)
+        index_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='FrameIdx'), interpolated_x.index)
+        temp_data = data[con][mouseID][view].loc(axis=1)[l, 'x'].values
+        temp_data[index_mask] = interpolated_x.values
+        data[con][mouseID][view].loc(axis=1)[l, 'x'] = temp_data
 
         # get vel data for limb
         vel_limb = Velocity.Velocity().getVelocity_specific_limb(l, r, data, con, mouseID, view,
                                                                  math.ceil((fps / 30) / 2.) * 2, markerstuff,
                                                                  xy='x')  # get the velocity data for this body part (limb)
-        vel_limb = vel_limb.loc[['RunStart', 'Transition', 'RunEnd']]
+        vel_limb = vel_limb.loc[['RunStart', 'Transition', 'RunEnd'], interpolated_x.index.get_level_values(level='FrameIdx')]
 
-        # get basic info
-        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-            l, 'x'].values[mask]
-        y = \
-        data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'y'][
-            mask]
-        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-            l, 'x'].index.get_level_values(level='FrameIdx')[mask]
+        # trim velocity data by where nose still in frame at end of run (some runs seem to go beyond this)
+        nose_mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)['Nose', 'likelihood'] > pcutoff
+        last_frame = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx')[nose_mask][-1]
+        vel_end_mask = vel_limb.index.get_level_values(level='FrameIdx') <= last_frame
+        vel_limb = vel_limb[vel_end_mask]
 
-        swst_sequence = self.get_limb_speed(l, r, t, vel_limb, sitting_log)
+        # find swing stance pattern
+        swst_sequence = self.get_limb_speed(l, r, vel_limb, sitting_log)
 
         # find if there are any backwards steps and relabel
         if np.any(swst_sequence == 'neg_peak'):
@@ -786,21 +795,6 @@ class Locomotion():
 
         # remove the peaks data from the final dataframe
         swst = swst_sequence[swst_sequence['val_type'].isin(['stance', 'swing', 'stance_bkwd', 'swing_bkwd'])]
-
-        # plt.figure()
-        # plt.plot(t,x)
-        # plt.vlines(x=swst[swst.values=='swing'].index.values.astype(int), ymin=100, ymax=1900, colors='red')
-        # plt.vlines(x=swst[swst.values=='stance'].index.values.astype(int), ymin=100, ymax=1900, colors='green')
-        # plt.vlines(x=swst[swst.values=='swing_bkwd'].index.values.astype(int), ymin=100, ymax=1900, colors='darkred', linestyle='--')
-        # plt.vlines(x=swst[swst.values=='stance_bkwd'].index.values.astype(int), ymin=100, ymax=1900, colors='darkgreen', linestyle='--')
-        # plt.title(r)
-        # path = r'%s\Locomotion\individual_runs\%s\%s\x' % (plotting_destfolder, mouseID, l)
-        # isExist = os.path.exists(path)
-        # if not isExist:
-        #     os.makedirs(path)
-        # plt.savefig(r'%s\%s_%s_%s.png' % (path, mouseID, r, l), bbox_inches='tight', transparent=False,
-        #             format='png')
-        # plt.clf()
 
         stancestart = swst.index[(swst.loc(axis=1)['val_type'].values == 'stance').flatten()]
         swingstart = swst.index[(swst.loc(axis=1)['val_type'].values == 'swing').flatten()]
@@ -816,233 +810,146 @@ class Locomotion():
 
         return swst_dict
 
-    def fill_in_FL_gaps(self, data, con, mouseID, r, mask, commonidx, view='Side'):
-        # mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
-        #            'ForepawToeL', 'likelihood'] > pcutoff
-        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-            'ForepawToeL', 'x'].values[
-            mask]
-        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-            'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[mask]
+    def fill_in_limb_x_gaps(self, data, con, mouseID, r, l, mask, commonidx, view='Side'):
+        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].values[mask]
+        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[mask]
         present = pd.DataFrame(data=x, index=t)[0]
         from scipy.interpolate import CubicSpline
         cs = CubicSpline(t, x)
-        missing_t = \
-        data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-            'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[~mask]
-        missing_x = cs(
-            data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
-                'ForepawToeL', 'x'].index.get_level_values(level='FrameIdx')[~mask])
+        missing_t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask]
+        missing_x = cs(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask])
         missing = pd.DataFrame(data=missing_x, index=missing_t)[0]
         end_mask = np.logical_and(missing.index <= t[-1], missing.index >= t[1])
         missing = missing[end_mask]
         interpolated_x = pd.concat([present, missing], axis=0).sort_index()
         return interpolated_x
 
-    def get_FL_swst_frontcam(self, data, con, mouseID, r, velstuff, markerstuff, beltspeed=6, n=30, view='Front'):
-        from statsmodels.nonparametric.smoothers_lowess import lowess
-        windowsize = math.ceil((fps / n) / 2.) * 2
 
-        ######################################### TEMP ######################################################
-        mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
-                   l, 'likelihood'] > pcutoff
-        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[l, 'x'].values[
-            mask]
-        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
-            l, 'x'].index.get_level_values(level='FrameIdx')[mask]
-        present = pd.DataFrame(data=x,index=t)[0]
-        from scipy.interpolate import CubicSpline
-        cs = CubicSpline(t, x)
-        missing_t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
-            l, 'x'].index.get_level_values(level='FrameIdx')[~mask]
-        missing_x = cs(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)[
-                           l, 'x'].index.get_level_values(level='FrameIdx')[~mask])
-        missing = pd.DataFrame(data=missing_x,index=missing_t)[0]
-        end_mask = np.logical_and(missing.index <= t[-1], missing.index >= t[1])
-        missing = missing[end_mask]
-        interpolated_x = pd.concat([present, missing], axis=0).sort_index()
-
-        plt.figure()
-        plt.scatter(interpolated_x.index, interpolated_x.values)
-        plt.title(r)
-
-        #####################################################################################################
-
-
-        # get y data
-        vel_y = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff, xy='y')
-
-        # trim vel_y to remove stationary periods
-        vel_y_trimmed = vel_y.reindex(velstuff['runs_raw'][r][1].index)
-        vel_y_moving = vel_y_trimmed[velstuff['runs_raw'][r][1] > beltspeed]
-        vel_y_moving = vel_y_moving[~vel_y_moving.isna()] # remove na values
-
-        # smooth y
-        vel_smooth = pd.DataFrame(index=vel_y_moving.index, data=np.array(lowess(vel_y_moving, vel_y_moving.index.get_level_values(level='FrameIdx'),frac=.08))[:, 1])[0]
-
-        limb_mask = data[con][mouseID][view].loc(axis=1)['ForepawToeL', 'likelihood'].loc(axis=0)[r].loc(axis=0)[
-                    vel_smooth.index] > pcutoff #0.99999 # higher cutoff
-        vel_smooth = vel_smooth[limb_mask]
-        peaks, info = scipy.signal.find_peaks(vel_smooth, distance=10, width=5, prominence=3, wlen=50)
-
-        stancestart = vel_smooth.index.get_level_values(level='FrameIdx')[peaks]
-        #swingstart = vel_y.index.get_level_values(level='FrameIdx')[info['right_bases']]
-
-        # refine swing values
-        y = data[con][mouseID][view].loc(axis=0)[r].loc(axis=0)[vel_smooth.index].loc(axis=1)['ForepawToeL', 'y'][limb_mask]
-
-        # get slope based on a shorter snippet of y, defined by the area where stances have been found (to try remove messy parts of the data, e.g. stationary sections)
-        if len(stancestart > 0):
-            if len(stancestart > 1):
-                sequence = range(stancestart[0] - 20, stancestart[-1] + 20)
-                index_mask = y.index.isin(sequence,level=1)
-                short_y = y[index_mask]
-                slope, intercept, r_value, p_value, std_err = stats.linregress(short_y.index.get_level_values(level='FrameIdx'), short_y)
-            else:
-                slope, intercept, r_value, p_value, std_err = stats.linregress(y.index.get_level_values(level='FrameIdx'), y)
-
-            y_corr = y - ((y.index.get_level_values(level='FrameIdx') - y.index.get_level_values(level='FrameIdx')[0]) * slope)  # y corrected horizontally
-            from statsmodels.nonparametric.smoothers_lowess import lowess
-            y_smooth = pd.DataFrame(index=y_corr.index, data=np.array(lowess(y_corr, y_corr.index.get_level_values(level='FrameIdx'),frac=.08))[:, 1])
-            y_smooth = y_smooth[0]
-
-            peaks, info = scipy.signal.find_peaks(y_smooth, distance=10, wlen=50)
-            peaks_idx = y_smooth.index.get_level_values(level='FrameIdx')[peaks]
-
-            dist = peaks_idx.values - stancestart.values[:, np.newaxis]
-            dist = dist.astype(float)
-            dist[np.logical_or(dist < 0, dist > 20)] = np.nan
-            if np.all(np.isnan(dist[-1])):
-                dist = dist[:-1]
-            potentialClosestpos = np.nanargmin(dist, axis=1)
-            closestFound, closestCounts = np.unique(potentialClosestpos, return_counts=True)
-            if np.any(closestCounts > 1):
-                raise ValueError('found the same peak for two stancestarts, inducating a missing peak')
-            stance_peak = peaks_idx[potentialClosestpos]
-
-            swingstart = []
-            for i, peak in enumerate(stance_peak):
-                target_y = y_smooth.xs(key=stancestart[i], level='FrameIdx').values
-                ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
-                                               y_smooth.values < target_y))
-                if sum(ymask) > 0:
-                    new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
-                else:
-                    target_y = y_smooth.xs(key=stancestart[i]+1, level='FrameIdx').values
-                    ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
-                                                   y_smooth.values < target_y))
-                    if sum(ymask) > 0:
-                        new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
-                    else:
-                        target_y = y_smooth.xs(key=stancestart[i] + 2, level='FrameIdx').values
-                        ymask = np.logical_and.reduce((y_smooth.index.get_level_values(level='FrameIdx') > stance_peak[i],
-                                                       y_smooth.values < target_y))
-                        if sum(ymask) > 0:
-                            new_swing = y_smooth[ymask].index.get_level_values(level='FrameIdx')[0] - 1
-                        elif i == len(stance_peak) - 1: # if the final stance, there may be no visible following swing
-                            pass
-                        else:
-                            raise ValueError('Cant detect swing for stance %s' %i)
-                swingstart.append(new_swing)
-
-            swst_dict = {
-                'stancestart': stancestart,
-                'swingstart': swingstart
-            }
-        else:
-            raise ValueError('No detections')
-
-        return swst_dict
-
-
-    def find_first_transitioning_paw(self, data, con, mouseID):
+    def find_first_transitioning_paw(self, data, con, mouseID, r, markerstuff):
         limblist = ['ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawToeL']
+
+        nose_mask = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart','Transition','RunEnd']].loc(axis=1)['Nose','likelihood'] > pcutoff
+        nose_x = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['Nose', 'x'][nose_mask]
+
+        trans_x_far = markerstuff['DualBeltMarkers']['x_edges'][2]
+        trans_x_near = markerstuff['DualBeltMarkers']['x_edges'][3]
+
+        # find when nose passes the transition point
+        nose_trans_mask_far = nose_x > trans_x_far
+        nose_trans_idx_far = nose_x[nose_trans_mask_far].index.get_level_values(level='FrameIdx')[0]
+        nose_trans_mask_near = nose_x > trans_x_near
+        nose_trans_idx_near = nose_x[nose_trans_mask_near].index.get_level_values(level='FrameIdx')[0]
+        transition_thresh_idx = int((nose_trans_idx_near + nose_trans_idx_far)/2)
+
+        st_idx_i, st_limb_i = np.where(np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[limblist[:2],'StepCycle'] == 0, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[limblist[:2],'StepCycle'] == 2))
+        limb = np.array(limblist)[st_limb_i]
+        idx = data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx')[st_idx_i]
+
+        st_mask = idx >= transition_thresh_idx
+
+        transitioning_limb = limb[st_mask][0]
+        transitioning_idx = idx[st_mask][0]
+
+        return transitioning_idx, transitioning_limb
+
+    def update_transition_idx(self,data,con,mouseID,markerstuff):
+        warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+        RunStages_new = []
+        FrameIdx_new = []
+        for r in data[con][mouseID]['Side'].index.get_level_values(level='Run').unique():
+            try:
+                transitioning_idx, transitioning_limb = self.find_first_transitioning_paw(data,con,mouseID,r,markerstuff)
+                sorted_data = data[con][mouseID]['Side'].sort_index(level=['Run', 'RunStage'], inplace=False)
+                current_trans_idx = sorted_data.loc(axis=0)[r, 'Transition'].index[0]
+
+                idx_copy = pd.Series(data=data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='RunStage'),index=data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx'))
+
+                if transitioning_idx < current_trans_idx:
+                    new_trans_mask = np.logical_and(
+                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx') >= transitioning_idx,
+                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx') < current_trans_idx)
+                    idx_copy[new_trans_mask] = 'Transition'
+                elif transitioning_idx > current_trans_idx:
+                    new_run_mask = np.logical_and(
+                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx') < transitioning_idx,
+                        data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx') >= current_trans_idx)
+                    idx_copy[new_run_mask] = 'RunStart'
+                elif transitioning_idx == current_trans_idx:
+                    pass
+                new_idx = pd.MultiIndex.from_arrays([idx_copy.values, np.array(data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx'))])
+                #test = data[con][mouseID]['Side'].loc(axis=0)[r].index.reindex(new_idx)
+                runstages, frameidx = zip(*new_idx)
+                RunStages_new.append(np.array(runstages))
+                FrameIdx_new.append(np.array(frameidx))
+            except:
+                RunStages_new.append(np.array(data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='RunStage')))
+                FrameIdx_new.append(np.array(data[con][mouseID]['Side'].loc(axis=0)[r].index.get_level_values(level='FrameIdx')))
+
+        for v in ['Side','Overhead','Front']:
+            data[con][mouseID][v].loc(axis=1)['RunStage'] = np.concatenate(RunStages_new).ravel() ############################## DO THIS IN LOOP FOR ALL VIEWS
+            data[con][mouseID][v].loc(axis=1)['FrameIdx'] = np.concatenate(FrameIdx_new).ravel() ############################## DO THIS IN LOOP FOR ALL VIEWS
+            data[con][mouseID][v].loc(axis=1)['Run'] = data[con][mouseID][v].index.get_level_values(level='Run') ############################## DO THIS IN LOOP FOR ALL VIEWS
+
+            data[con][mouseID][v].set_index(['Run', 'RunStage', 'FrameIdx'], append=False, inplace=True)
+
+        return data[con][mouseID]
+
+
+    def create_new_file_with_loco_and_updated_transitions(self,pathname,data,con,mouseID,fillvalues=True):
+        ######### need to add in a check for if files already exist (have a overwriting parameter) ##########
+        warnings.filterwarnings("ignore", message="PerformanceWarning: your performance may suffer as PyTables will pickle object types that it cannot map directly to c-types")
         markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID]['Side'])
+        data[con][mouseID] = self.getLocoPeriods(data, con, mouseID, markerstuff, fillvalues=fillvalues)
+        data[con][mouseID] = self.update_transition_idx(data, con, mouseID, markerstuff)
 
-        for r in data[con][mouseID]['Side'].index.get_level_values(level='Run').unique().astype(int):
-            nose_mask = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart','Transition','RunEnd']].loc(axis=1)['Nose','likelihood'] > pcutoff
-            nose_x = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['Nose', 'x'][nose_mask]
-            nose_y = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['Nose', 'y'][nose_mask]
-            #t = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].index.get_level_values(level='FrameIdx')[nose_mask]
-
-            trans_x_far = markerstuff['DualBeltMarkers']['x_edges'][2]
-            trans_x_near = markerstuff['DualBeltMarkers']['x_edges'][3]
-
-            # find when nose passes the transition point
-            nose_trans_mask_far = nose_x > trans_x_far
-            nose_trans_idx_far = nose_x[nose_trans_mask_far].index.get_level_values(level='FrameIdx')[0]
-            nose_trans_mask_near = nose_x > trans_x_near
-            nose_trans_idx_near = nose_x[nose_trans_mask_near].index.get_level_values(level='FrameIdx')[0]
-
-            #####
-            vel_y = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, view, math.ceil((fps / 30) / 2.) * 2, markerstuff, xy='y')
-            vel_y_smooth = pd.DataFrame(index=vel_y[5:-3].index, data=np.array(
-                lowess(vel_y[5:-3], vel_y[5:-3].index.get_level_values(level='FrameIdx'),
-                       frac=.08))[:, 1])
-            vel_y_smooth = vel_y_smooth[0]
-            peaks, info = scipy.signal.find_peaks(vel_y, distance=10, height=10, prominence=5, wlen=20)
-            peaks_idx = vel_y.index.get_level_values(level='FrameIdx')[peaks]
-            swingstart = vel_y.index.get_level_values(level='FrameIdx')[info['left_bases']]
-            stancestart = vel_y.index.get_level_values(level='FrameIdx')[info['right_bases']]
+        # save new file format
+        for v in ['Side','Overhead','Front']:
+            if pathname.count('side') == 1:
+                if v != 'Side':
+                    pathname_cam = pathname.replace('side', v.lower()).split('.')[0]
+                else:
+                    pathname_cam = pathname.split('.')[0]
+            data[con][mouseID][v].to_hdf("%s__IdxCorr.h5" % (pathname_cam), key='Runs%s' %v, mode='w')
 
 
+    def create_BATCH_OF_NEW_FILES_with_loco_and_updated_transitions(self,all=True,condition='APAChar_LowHigh',exptype='',wash='',day=''):
+        ######### need to add in a check for if files already exist (have a overwriting parameter) ##########
+        if all == True:
+            dir_selection = filtereddata_folder
+            # get all subdirectories
+            data_subdirs = []
+            for root, subdirs, files in os.walk(dir_selection):
+                if not subdirs:
+                    if not root.endswith(('temp_bin', 'consistent_speed_up')):
+                        data_subdirs.append(root)
+        else:
+            dir_selection = os.path.join(filtereddata_folder, condition, exptype, wash, day)
+            # get all subdirectories
+            data_subdirs = []
+            for root, subdirs, files in os.walk(dir_selection):
+                if not any(sbdr in ['Day1', 'Day2', 'Day3', 'Wash', 'NoWash','Repeats','Extended','APAChar_LowHigh'] for sbdr in subdirs): # exclude parent dirs
+                    if not root.endswith(('temp_bin', 'consistent_speed_up')):
+                        data_subdirs.append(root)
+        data_subdirs.sort()
 
-
-            fp_toe_L_mask = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart','Transition','RunEnd']].loc(axis=1)['ForepawToeL','likelihood'] > pcutoff
-            fp_toe_L_x = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['ForepawToeL', 'x'][fp_toe_L_mask]
-            fp_toe_L_y = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['ForepawToeL', 'y'][fp_toe_L_mask]
-            fp_toe_L_t = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].index.get_level_values(level='FrameIdx')[fp_toe_L_mask]
-
-            slope, intercept, r_value, p_value, std_err = stats.linregress(fp_toe_L_t, fp_toe_L_y)
-            new_FL_y = fp_toe_L_y - ((fp_toe_L_t - fp_toe_L_t[0]) * slope)  # y corrected horizontally
-
-            # fp_toe_R_mask = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart','Transition','RunEnd']].loc(axis=1)['ForepawToeR','likelihood'] > pcutoff
-            # fp_toe_R_x = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['ForepawToeR', 'x'][fp_toe_R_mask]
-            # fp_toe_R_y = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)['ForepawToeR', 'y'][fp_toe_R_mask]
-            # fp_toe_R_t = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].index.get_level_values(level='FrameIdx')[fp_toe_R_mask]
-            #
-            # slope, intercept, r_value, p_value, std_err = stats.linregress(fp_toe_R_t, fp_toe_R_y)
-            # new_FR_y = fp_toe_R_y - ((fp_toe_R_t - fp_toe_R_t[0]) * slope)  # y corrected horizontally
-
-            from statsmodels.nonparametric.smoothers_lowess import lowess
-            FL_smooth = pd.DataFrame(index=new_FL_y.index, data=np.array(
-                lowess(new_FL_y, new_FL_y.index.get_level_values(level='FrameIdx'),
-                       frac=.04))[:, 1])
-            FL_smooth = FL_smooth[0]
-
-            # find stat period for fl
-            stat_mask = abs(FL_smooth.diff()) < 0.5
-            stat = FL_smooth[stat_mask]
-            stat_blocks_poss = utils.Utils().find_blocks(stat.index.get_level_values(level='FrameIdx'),2,8)
-
-            ## temp
-            # plt.figure()
-            # plt.plot(fp_toe_L_t, FL_smooth, label='L')
-            # plt.scatter(fp_toe_L_t, FL_smooth)
-            # plt.vlines(nose_trans_idx_far, ymin=145, ymax=190, linestyle='--')
-            # plt.vlines(nose_trans_idx_near, ymin=145, ymax=190, linestyle='--')
-            # plt.legend()
-            # plt.scatter(stat.index.get_level_values(level='FrameIdx'), stat.values, color='red')
-            # plt.title(r)
-
-            # get peaks to signify stance periods
-            peaks, info = scipy.signal.find_peaks(FL_smooth, distance=10, height=10)
-            peaks_idx = FL_smooth.index.get_level_values(level='FrameIdx')[peaks]
-
-            ### find velocity????
+        for s in tqdm(data_subdirs):
+            files = utils.Utils().GetlistofH5files(directory=s,run=True)
+            if np.any(files):
+                if len(files['Side']) == len(files['Front']) == len(files['Overhead']):
+                    con = '_'.join(list(filter(lambda x: len(x) > 0, s.split('\\')))[7:])
+                    data = Plot.Plot().GetDFs([con])
+                    print(
+                        '------------------------------------------------------------------------------------------------\n{}Starting analysing condition:{} %s    ------------------->\n------------------------------------------------------------------------------------------------'.format(
+                            '\033[1m', '\033[0m', '\033[1m', '\033[0m') % con)
+                    ### for each triplet of side, front and overhead
+                    for f in files['Side']:
+                        mouseID = f.split('\\')[-1].split('_')[3]
+                        print('##################################################################################################\n{}Updating index for Condition:{} %s{}, MouseID:{} %s\n##################################################################################################'.format('\033[1m', '\033[0m', '\033[1m', '\033[0m') %(con,mouseID))
+                        self.create_new_file_with_loco_and_updated_transitions(f,data,con,mouseID)
+            files = None # reset so can be subsequently checked in next loop
 
 
 
-            front_poss_trans_mask = data[con][mouseID]['Front'].index.get_level_values(level='FrameIdx') > nose_trans_idx
-            front_poss_trans = data[con][mouseID]['Front'].loc(axis=1)['ForepawToeR','y'][front_poss_trans_mask]
-
-            from statsmodels.nonparametric.smoothers_lowess import lowess
-            front_poss_trans_smoothed = pd.DataFrame(index=front_poss_trans.index, data=np.array(
-                lowess(front_poss_trans, front_poss_trans.index.get_level_values(level='FrameIdx'),
-                       frac=.08))[:, 1])
-            front_poss_trans_smoothed = front_poss_trans_smoothed[0]
-
-        # look in FRONT now and find the first frame when mouse touches either paw down
 
 
     def get_number_plots(self, root_path):
@@ -1210,9 +1117,9 @@ class Locomotion():
         return xplot, yplot
 
     def plot_overlay_runs_singleMouse(self, data, con, mouseID, expphase, view='Side', n=30):
-        warnings.filterwarnings("ignore", message="indexing past lexsort depth may impact performance.")
+        warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
-        position = np.where(np.array(ExpPhases) == expphase)[0][0]
+        position = np.where(np.array(expstuff['exp_chunks']['ExpPhases']) == expphase)[0][0]
 
         limblist = ['ForepawToeL', 'ForepawToeR', 'HindpawToeL', 'HindpawToeR']
         windowsize = math.ceil((fps / n) / 2.) * 2
@@ -1220,9 +1127,9 @@ class Locomotion():
         velstuff = Velocity.Velocity().getVelocityInfo(data, con, mouseID, zeroed=False, view=view, xaxis='x', windowsize=windowsize, markerstuff=markerstuff, f=range(0, int(data[con][mouseID][view].index.get_level_values(level='Run').unique().max() + 1)))
 
         if 'APAChar_' in con:
-            colors = utils.Utils().get_cmap(APACharRuns[position], 'cool')
-            run_start = utils.Utils().find_phase_starts(APACharRuns)[position]
-            run_num = APACharRuns[position]
+            colors = utils.Utils().get_cmap(expstuff['condition_exp_lengths']['APACharRuns'][position], 'cool')
+            run_start = utils.Utils().find_phase_starts(expstuff['condition_exp_lengths']['APACharRuns'])[position]
+            run_num = expstuff['condition_exp_lengths']['APACharRuns'][position]
         else:
             print('configure for other types of experiments')
 
@@ -1277,7 +1184,7 @@ class Locomotion():
 
         fig.suptitle('%s  -  %s' % (expphase, mouseID), fontsize=20, y=1) # do after tight layout as a cheat way of getting more space underneath
 
-        fig.savefig(r'%s\Locomotion_OVERLAY, %s, %s, %s.png' % (plotting_destfolder, con, mouseID, expphase), bbox_inches='tight', transparent=True, format='png')
+        fig.savefig(r'%s\Locomotion_OVERLAY, %s, %s, %s.png' % (paths['plotting_destfolder'], con, mouseID, expphase), bbox_inches='tight', transparent=True, format='png')
 
 
     def plot_overlay_runs_allPhases_allMice(self, conditions=['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3'], expphase=['Baseline','APA','Washout']):
@@ -1294,7 +1201,7 @@ class Locomotion():
 
 
     def plot_mean_loco_allLimbs_perMouse(self, data, con, mouseID, expphase, variance='std', x='t', y='x', view='Side', n=30):
-        warnings.filterwarnings("ignore", message="indexing past lexsort depth may impact performance.")
+        warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
         limblist = ['ForepawToeR', 'HindpawToeR'] #['ForepawToeL', 'ForepawToeR', 'HindpawToeL', 'HindpawToeR']
         colors = {'ForepawToeR': 'darkblue', 'ForepawToeL': 'lightblue', 'HindpawToeR': 'darkgreen',
@@ -1308,12 +1215,12 @@ class Locomotion():
 
         for eidx, e in enumerate(expphase):
             try:
-                position = np.where(np.array(ExpPhases) == e)[0][0]
+                position = np.where(np.array(expstuff['exp_chunks']['ExpPhases']) == e)[0][0]
 
                 if 'APAChar_' in con:
                     # colors = utils.Utils().get_cmap(APACharRuns[position], 'cool')
-                    run_start = utils.Utils().find_phase_starts(APACharRuns)[position]
-                    run_num = APACharRuns[position]
+                    run_start = utils.Utils().find_phase_starts(expstuff['condition_exp_lengths']['APACharRuns'])[position]
+                    run_num = expstuff['condition_exp_lengths']['APACharRuns'][position]
                 else:
                     print('configure for other types of experiments')
 
@@ -1402,7 +1309,7 @@ class Locomotion():
 
         fig.tight_layout()
 
-        fig.savefig(r'%s\Locomotion, %s, %s, %s.png' % (plotting_destfolder, con, mouseID, variance), bbox_inches='tight', transparent=True, format='png')
+        fig.savefig(r'%s\Locomotion, %s, %s, %s.png' % (paths['plotting_destfolder'], con, mouseID, variance), bbox_inches='tight', transparent=True, format='png')
 
 
 #common_x = All_x[0][np.logical_and(All_x[0] >= lower_bound, All_x[0] <= upper_bound)]

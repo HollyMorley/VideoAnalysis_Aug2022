@@ -929,7 +929,7 @@ class GetRuns:
             overhead.rename(index={r: r + shifted}, inplace=True)
 
 
-    def findMarkers(self, df_side):
+    def findMarkers(self, df_side,full_df=True):
         # Function to find the x and y values of the physical landmarks on the travelator (and identify if the camera shifted)
         # get points for travelator landmarks
         Wallx = list()
@@ -1032,31 +1032,38 @@ class GetRuns:
             'y_belt': y_belt
         }
 
-        # check if ALL markers (except wall2) move across video, suggesting camera moved
-        WallALL_RunsALL = list()
-        for l in range(1, 6):
-            Wall_RunsALL = list()
-            for r in df_side.index.get_level_values('Run').unique():
-                wall = np.mean(df_side.loc(axis=0)[r].loc(axis=1)['Wall%s' % l, 'x'][
-                                   df_side.loc(axis=0)[r].loc(axis=1)['Wall%s' % l, 'likelihood'] > 0.999])
-                Wall_RunsALL.append(wall)
-            WallALL_RunsALL.append(Wall_RunsALL)
+        if full_df:
+            # check if ALL markers (except wall2) move across video, suggesting camera moved
+            WallALL_RunsALL = list()
+            for l in range(1, 6):
+                Wall_RunsALL = list()
+                for r in df_side.index.get_level_values('Run').unique():
+                    wall = np.mean(df_side.loc(axis=0)[r].loc(axis=1)['Wall%s' % l, 'x'][
+                                       df_side.loc(axis=0)[r].loc(axis=1)['Wall%s' % l, 'likelihood'] > 0.999])
+                    Wall_RunsALL.append(wall)
+                WallALL_RunsALL.append(Wall_RunsALL)
 
-        cam_move = False
-        if np.logical_and(
-                sum(pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] > 0) != sum(
-                pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] < 0),
-                sum(pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] > 0) != sum(
-                    pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] < 0)
-        ):
-            cam_move = True
-            raise ValueError('The camera appears to have shifted!! Marker means for this video are not reliable')
+            cam_move = False
+            if np.logical_and(
+                    sum(pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] > 0) != sum(
+                    pd.Series(WallALL_RunsALL[4]).diff()[abs(pd.Series(WallALL_RunsALL[4]).diff()) > 1 * cmtopx] < 0),
+                    sum(pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] > 0) != sum(
+                        pd.Series(WallALL_RunsALL[0]).diff()[abs(pd.Series(WallALL_RunsALL[0]).diff()) > 1 * cmtopx] < 0)
+            ):
+                cam_move = True
+                raise ValueError('The camera appears to have shifted!! Marker means for this video are not reliable')
 
-        results = {
-            'DualBeltMarkers': DualBeltMarkers,
-            'CameraMoved': cam_move,
-            'pxtocm': pxtocm,
-            'cmtopx': cmtopx
-        }
+            results = {
+                'DualBeltMarkers': DualBeltMarkers,
+                'CameraMoved': cam_move,
+                'pxtocm': pxtocm,
+                'cmtopx': cmtopx
+            }
+        else:
+            results = {
+                'DualBeltMarkers': DualBeltMarkers,
+                'pxtocm': pxtocm,
+                'cmtopx': cmtopx
+            }
 
         return results

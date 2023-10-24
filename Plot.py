@@ -13,58 +13,58 @@ class Plot():
     def __init__(self):
         super().__init__()
 
-    def GetDFs(self, conditions=[], reindexed_loco=False):
-        '''
-        :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats
-        :return: dictionary holding all dataframes held under the requested conditions
-        '''
-        if reindexed_loco:
-            file_suffix = 'Runs__IdxCorr'
-        else:
-            file_suffix = 'Runs'
-        print('Conditions to be loaded:\n%s' %conditions)
-        data = dict.fromkeys(conditions)
-        for conidx, con in enumerate(conditions):
-            if 'Day' not in con:
-                #files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s" %(con), filtered=True)
-                files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True, suffix=file_suffix)
-            else:
-                splitcon = con.split('_')
-                conname = "_".join(splitcon[0:2])
-                dayname = splitcon[-1]
-                w = splitcon[-2]
-                # files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
-                if 'Repeats' in con:
-                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Repeats\%s\%s" %(filtereddata_folder, conname, w, dayname), filtered=True, suffix=file_suffix)
-                elif 'Extended' in con:
-                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Extended\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
-                else:
-                    files = utils.Utils().GetlistofH5files(directory=r"%s\%s\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
-            mouseIDALL = list()
-            dateALL = list()
-
-            # sort lists of filenames so that in same order for reading
-            files['Side'].sort()
-            files['Front'].sort()
-            files['Overhead'].sort()
-
-            for f in range(0,len(files['Side'])):
-                mouseID = os.path.basename(files['Side'][f]).split('_')[3]
-                mouseIDALL.append(mouseID)
-                date = os.path.basename(files['Side'][f]).split('_')[1]
-                dateALL.append(date)
-
-            # data['%s' % con] = dict.fromkeys(dateALL)
-            data['%s' % con] = dict.fromkeys(mouseIDALL)
-            for n, name in enumerate(mouseIDALL):
-                #data['%s' % con]['%s' %name] = dict.fromkeys(['Side', 'Front', 'Overhead'])
-                data['%s' %con]['%s' %name] = {
-                    'Date': dateALL[n],
-                    'Side': pd.read_hdf(files['Side'][n]),
-                    'Front': pd.read_hdf(files['Front'][n]),
-                    'Overhead': pd.read_hdf(files['Overhead'][n])
-                }
-        return data
+    # def GetDFs(self, conditions=[], reindexed_loco=False):
+    #     '''
+    #     :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats
+    #     :return: dictionary holding all dataframes held under the requested conditions
+    #     '''
+    #     if reindexed_loco:
+    #         file_suffix = 'Runs__IdxCorr'
+    #     else:
+    #         file_suffix = 'Runs'
+    #     print('Conditions to be loaded:\n%s' %conditions)
+    #     data = dict.fromkeys(conditions)
+    #     for conidx, con in enumerate(conditions):
+    #         if 'Day' not in con:
+    #             #files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s" %(con), filtered=True)
+    #             files = utils.Utils().GetlistofH5files(directory=r"%s\%s" % (filtereddata_folder, con), filtered=True, suffix=file_suffix)
+    #         else:
+    #             splitcon = con.split('_')
+    #             conname = "_".join(splitcon[0:2])
+    #             dayname = splitcon[-1]
+    #             w = splitcon[-2]
+    #             # files = utils.Utils().GetlistofH5files(directory=r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\%s\%s" %(conname, dayname), filtered=True)
+    #             if 'Repeats' in con:
+    #                 files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Repeats\%s\%s" %(filtereddata_folder, conname, w, dayname), filtered=True, suffix=file_suffix)
+    #             elif 'Extended' in con:
+    #                 files = utils.Utils().GetlistofH5files(directory=r"%s\%s\Extended\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
+    #             else:
+    #                 files = utils.Utils().GetlistofH5files(directory=r"%s\%s\%s" %(filtereddata_folder, conname, dayname), filtered=True, suffix=file_suffix)
+    #         mouseIDALL = list()
+    #         dateALL = list()
+    #
+    #         # sort lists of filenames so that in same order for reading
+    #         files['Side'].sort()
+    #         files['Front'].sort()
+    #         files['Overhead'].sort()
+    #
+    #         for f in range(0,len(files['Side'])):
+    #             mouseID = os.path.basename(files['Side'][f]).split('_')[3]
+    #             mouseIDALL.append(mouseID)
+    #             date = os.path.basename(files['Side'][f]).split('_')[1]
+    #             dateALL.append(date)
+    #
+    #         # data['%s' % con] = dict.fromkeys(dateALL)
+    #         data['%s' % con] = dict.fromkeys(mouseIDALL)
+    #         for n, name in enumerate(mouseIDALL):
+    #             #data['%s' % con]['%s' %name] = dict.fromkeys(['Side', 'Front', 'Overhead'])
+    #             data['%s' %con]['%s' %name] = {
+    #                 'Date': dateALL[n],
+    #                 'Side': pd.read_hdf(files['Side'][n]),
+    #                 'Front': pd.read_hdf(files['Front'][n]),
+    #                 'Overhead': pd.read_hdf(files['Overhead'][n])
+    #             }
+    #     return data
 
     def maskRunPhases(self, data, con, mouseID, view, measure_type, prepruns, timelocked):
         ########################## Here use locomotion code to idenitfy more accurate timestamps for beginning and transition of run #############################

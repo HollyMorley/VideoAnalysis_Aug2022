@@ -58,7 +58,11 @@ class Velocity:
         # mask = data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff
         # mask = np.logical_and.reduce((data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff))
         if limb == 'ForepawToeL':
-            mask = np.logical_and(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff)
+            if view == 'Side':
+                mask = np.logical_and(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff)
+            elif view == 'Front':
+                mask = np.logical_and(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff)
+
         else:
             mask = np.logical_and.reduce((data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)['Tail2', 'likelihood'].values > pcutoff))
 
@@ -85,21 +89,80 @@ class Velocity:
 
         return v
 
-    def getVelocityInfo(self, data, con, mouseID, zeroed, view, xaxis, windowsize, markerstuff, f):
+    def check_missed_rb(self, data, con, mouseID, view, v):
+        if sum(v.loc(axis=0)['RunStart'] < -30) > 10:
+            # get indexes of where RunStart should be RunBack
+            negmask = v.loc(axis=0)['RunStart'] < -30
+            lastnegidx = v.loc(axis=0)['RunStart'][negmask].index[-1]
+            firstidx = v.loc(axis=0)['RunStart'].index[0]
 
-        # if expphase == 'Baseline':
-        #     f = range(2, 12)
-        # elif expphase == 'APA':
-        #     f = range(12, 32)
-        # elif expphase == 'Washout':
-        #     f = range(32, 42)
-        #
-        # #blues = utils.Utils().get_cmap((len(f) + 5), 'PuBu')
-        # #plt.figure()
-        # markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
-        #
-        # windowsize = math.ceil((fps / n) / 2.) * 2
-        # windowsize_s = 1000 / n
+            # Change and reassign index
+            RunStage = np.array(data[con][mouseID][view].index.get_level_values(level='RunStage'))
+            FrameIdx = np.array(data[con][mouseID][view].index.get_level_values(level='FrameIdx'))
+            Run = np.array(data[con][mouseID][view].index.get_level_values(level='Run'))
+
+            data_subset = data[con][mouseID][view].loc(axis=0)[r, 'RunStart', range(firstidx, lastnegidx)]
+            Mask = []
+            for i in data[con][mouseID][view].index:
+                if i in data_subset.index:
+                    Mask.append(True)
+                else:
+                    Mask.append(False)
+            RunStage[Mask] = 'RunBack'
+
+            for vw in ['Side', 'Front', 'Overhead']:
+                data[con][mouseID][vw].loc(axis=1)['RunStage'] = RunStage
+                data[con][mouseID][vw].loc(axis=1)['FrameIdx'] = FrameIdx
+                data[con][mouseID][vw].loc(axis=1)['Run'] = Run
+
+                data[con][mouseID][vw].set_index(['Run', 'RunStage', 'FrameIdx'], append=False, inplace=True)
+
+            # update v array to not include the runback
+            startidx = v.index.get_level_values(level='FrameIdx')[0]
+            v.drop(index=range(startidx, lastnegidx), level='FrameIdx', inplace=True)
+
+            print('Missed runback for %s. Real run starts after frame %s (check this!!)' % (mouseID, lastnegidx))
+
+    def calculate_v(self, data, con, mouseID, view, r, windowsize, markerstuff, limb='Tail1'):
+        tailmask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'likelihood'].values > pcutoff
+        dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'x'][tailmask].rolling(window=windowsize,center=True,min_periods=None).apply(lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
+
+        # create column with windowsize values, dependent on the available frames
+        dxempty = np.where(
+            data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)[limb, 'x'][tailmask].rolling(window=windowsize,center=True,min_periods=None).apply(lambda x: x[-1] - x[0]).isnull().values)[0]
+        middle = np.where(np.diff(dxempty) > 1)[0][0]
+        startpos = dxempty[0:middle + 1]
+        endpos = dxempty[middle + 1:len(dxempty)]
+        windowstart = np.array(range(0, windowsize, 2))
+        windowend = np.flip(windowstart)[0:-1]
+        Dx = dx.to_frame(name='dx')
+        window = np.full([len(Dx)], windowsize)
+        window[startpos] = windowstart
+        window[endpos] = windowend
+        Dx['window'] = window
+
+        dxcm = Dx['dx'] * markerstuff['pxtocm']
+        dt = (1 / fps) * windowsize
+        v = dxcm / dt
+
+        return v
+
+
+    def getVelocityInfo(self, data, con, mouseID, zeroed, view, xaxis, windowsize, markerstuff, f):
+        '''
+        function to return either raw or smoothed velocity profiles for a single/list of runs for a single mouse. Can either be returned with relative time or position values). Can also be zeroed to transition speed and/or time/position point.
+        :param data:
+        :param con:
+        :param mouseID:
+        :param zeroed: whether to zero the velocity data to the transitioning velocity
+        :param view:
+        :param xaxis: The value relative to velocity data to return. 'x' for position or 'time' for time point (in frames)
+        :param windowsize:
+        :param markerstuff:
+        :param f:
+        :return: x and y coordinates (first and second array,respectively) for raw and smoothed velocity data and also transition x and y values for raw and smoothed data
+        '''
+
         runs_lowess = list()
         runs_raw = list()
         trans_lowess = list()
@@ -108,93 +171,43 @@ class Velocity:
             try:
                 # find velocity of mouse, based on tail base
                 tailmask = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'likelihood'].values > pcutoff
-                dx = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][tailmask].rolling(window=windowsize, center=True, min_periods=None).apply(lambda x: x[-1] - x[0])  # .shift(int(-windowsize/2))
 
                 # create column with windowsize values, dependent on the available frames
-                dxempty = np.where(data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][tailmask].rolling(window=windowsize, center=True, min_periods=None).apply(lambda x: x[-1] - x[0]).isnull().values)[0]
-                middle = np.where(np.diff(dxempty) > 1)[0][0]
-                startpos = dxempty[0:middle + 1]
-                endpos = dxempty[middle + 1:len(dxempty)]
-                windowstart = np.array(range(0, windowsize, 2))
-                windowend = np.flip(windowstart)[0:-1]
-                Dx = dx.to_frame(name='dx')
-                window = np.full([len(Dx)], windowsize)
-                window[startpos] = windowstart
-                window[endpos] = windowend
-                Dx['window'] = window
-
-                dxcm = Dx['dx'] * markerstuff['pxtocm']
-                dt = (1 / fps) * windowsize
-                # dt = (1 /fps) * Dx['window']
-                v = dxcm / dt
+                v = self.calculate_v(data, con, mouseID, view, r, windowsize,markerstuff)
 
                 # Check if missed any runbacks
-                if sum(v.loc(axis=0)['RunStart'] < -30) > 10:
-                    # get indexes of where RunStart should be RunBack
-                    negmask = v.loc(axis=0)['RunStart'] < -30
-                    lastnegidx = v.loc(axis=0)['RunStart'][negmask].index[-1]
-                    firstidx = v.loc(axis=0)['RunStart'].index[0]
+                self.check_missed_rb(data,con,mouseID,view,v)
 
-                    # Change and reassign index
-                    RunStage = np.array(data[con][mouseID][view].index.get_level_values(level='RunStage'))
-                    FrameIdx = np.array(data[con][mouseID][view].index.get_level_values(level='FrameIdx'))
-                    Run = np.array(data[con][mouseID][view].index.get_level_values(level='Run'))
-
-                    data_subset = data[con][mouseID][view].loc(axis=0)[r, 'RunStart', range(firstidx, lastnegidx)]
-                    Mask = []
-                    for i in data[con][mouseID][view].index:
-                        if i in data_subset.index:
-                            Mask.append(True)
-                        else:
-                            Mask.append(False)
-                    RunStage[Mask] = 'RunBack'
-
-                    for vw in ['Side', 'Front', 'Overhead']:
-                        data[con][mouseID][vw].loc(axis=1)['RunStage'] = RunStage
-                        data[con][mouseID][vw].loc(axis=1)['FrameIdx'] = FrameIdx
-                        data[con][mouseID][vw].loc(axis=1)['Run'] = Run
-
-                        data[con][mouseID][vw].set_index(['Run', 'RunStage', 'FrameIdx'], append=False, inplace=True)
-
-                    # update v array to not include the runback
-                    startidx = v.index.get_level_values(level='FrameIdx')[0]
-                    v.drop(index=range(startidx, lastnegidx), level='FrameIdx', inplace=True)
-
-                    print('Missed runback for %s. Real run starts after frame %s (check this!!)' % (mouseID, lastnegidx))
-
-                # find x position of tail base
+                # find x position of tail base in relevant frames
                 x = data[con][mouseID][view].loc(axis=0)[r].loc(axis=1)['Tail1', 'x'][tailmask]
-                try:
-                    expstage_pattern = ['RunStart', 'Transition', 'RunEnd']
-                    x = x.loc(axis=0)[expstage_pattern]
-                except:
-                    expstage_pattern = ['RunStart', 'Transition']
-                    x = x.loc(axis=0)[expstage_pattern]
+                desired_stages = ['RunStart', 'Transition', 'RunEnd']
+                expstage_pattern = [t for t in desired_stages if
+                                    t in x.index.get_level_values(level='RunStage').unique()]
+                x = x.loc(axis=0)[expstage_pattern]
 
+                # convert x position in px to cm
                 xcm = x * markerstuff['pxtocm']
 
-                # find the frame where transition starts
+                # find the frame where transition starts and normalise the time/frame values to the transition (transition is 1)
                 transition_idx = v.loc(axis=0)['Transition'].index[0]
-                # Normalise the time/frame values to the transition (transition is 1)
-                centered_transition_f = v.loc(axis=0)[expstage_pattern].index.get_level_values(
-                    level='FrameIdx') / transition_idx
-                # find the velocity at transition
+                lowest_val = v.loc(axis=0)[expstage_pattern].index.get_level_values(level='FrameIdx')[0]
+                centered_transition_f = (v.loc(axis=0)[expstage_pattern].index.get_level_values(level='FrameIdx') - lowest_val) / (transition_idx - lowest_val)
+
+                # find the velocity at transition and shift/normalise to transition speed = 0
                 transition_v = v.loc(axis=0)[expstage_pattern, transition_idx]
-                # Normalise velocity values to that at transition
                 centered_transition_v = v.loc(axis=0)[expstage_pattern].values - transition_v.values
 
                 if xaxis == 'x':
                     xplot = xcm
                 elif xaxis == 'time':
-                    xplot = centered_transition_f
+                    xplot = pd.Series(data=centered_transition_f,index=xcm.index)
 
                 if zeroed == True:
-                    yplot = centered_transition_v
+                    yplot = pd.Series(data=centered_transition_v,index=v.loc(axis=0)[expstage_pattern].index)
                 else:
                     yplot = v.loc(axis=0)[expstage_pattern]
 
                 from statsmodels.nonparametric.smoothers_lowess import lowess
-                # lowess = lowess(yplot[int(windowsize / 2):], xplot[:-int(windowsize / 2)], frac=.3)
                 lowesslist = lowess(yplot, xplot, frac=.3)
                 lowessdf = pd.DataFrame(lowesslist, index=yplot.index[yplot.notnull().values], columns=['x', 'lowess'])
 
@@ -217,12 +230,20 @@ class Velocity:
                 trans_raw.append([np.nan, np.nan])
                 print('Cant plot run %s, mouse %s' % (r, mouseID))
 
-        vel = {
-            'runs_lowess': np.array(runs_lowess,dtype=object),
-            'runs_raw': np.array(runs_raw,dtype=object),
-            'trans_lowess': np.array(trans_lowess,dtype=float),
-            'trans_raw': np.array(trans_raw, dtype=float)
-        }
+        if len(f) > 1:
+            vel = {
+                'runs_lowess': np.array(runs_lowess,dtype=object),
+                'runs_raw': np.array(runs_raw,dtype=object),
+                'trans_lowess': np.array(trans_lowess,dtype=float),
+                'trans_raw': np.array(trans_raw, dtype=float)
+            }
+        else:
+            vel = {
+                'runs_lowess': runs_lowess,  # np.array(runs_lowess,dtype=object),
+                'runs_raw': runs_raw,  # np.array(runs_raw,dtype=object),
+                'trans_lowess': trans_lowess,
+                'trans_raw': trans_raw
+            }
         return vel
 
 
@@ -661,7 +682,7 @@ class Velocity:
         #             veldata = self.plotSpeed_SingleMouse_Means(data[con][mouseID][view], con=con, mouseID=mouseID,zeroed=False,view=view,expphase=e,plotfig=False)
 
 
-    def plotAllMice(self, con, data, zeroed, n=5, xaxis='x', phases=ExpPhases, exclStat=False):
+    def plotAllMice(self, con, data, zeroed, n=5, xaxis='x', phases=expstuff['exp_chunks']['ExpPhases'], exclStat=False):
         print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWarning: I am manually removing prep frames here!!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         for m, mouseID in enumerate(data[con]):
             for e in phases:

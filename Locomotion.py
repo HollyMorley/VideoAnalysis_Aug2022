@@ -537,15 +537,15 @@ class Locomotion():
         #print("The swing-stance pattern is followed in run %s" %r)
 
 
-    def find_stat_blocks(self, vel):
+    def find_stat_blocks(self, vel, frame_diff_thresh=5, speed_thresh=2, allowance=0.5):
         frame_shift = vel.shift(1) - vel
-        stationary_mask = np.abs(frame_shift) < 5
+        stationary_mask = np.abs(frame_shift) < frame_diff_thresh
         stationary_mean = np.mean(vel[stationary_mask].values)
         stationary_sem = np.std(vel[stationary_mask].values) / np.sqrt(len(vel[stationary_mask]))
-        stationary_window_mask = np.logical_and(vel.values > 2, vel.values < stationary_mean + stationary_sem * 0.5)
+        stationary_window_mask = np.logical_and(vel.values > speed_thresh, vel.values < stationary_mean + stationary_sem * allowance)
         stance_raw = vel[stationary_window_mask]
-        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 10, 2))[:, 0]
-        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 10, 2))[:, 1]
+        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 5, 2))[:, 0]
+        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 5, 2))[:, 1]
 
         return stance_start_idx, stance_end_idx
 
@@ -645,15 +645,14 @@ class Locomotion():
 
         return swst_sequence
 
-
-    def getSittingRuns(self, data, con, mouseID, view, velstuff):
-        # take record of which runs include a period of sitting
+    def getPotentialSittingRuns(self, data, con, mouseID, view, velstuff):
+        # take record of which runs include a period of sitting WITHOUT limb data
         sitting_log_mask = []
         for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
             try:
-                mouse_stat_mask = abs(velstuff['runs_lowess'][r][1].diff()) < 0.01
-                if sum(mouse_stat_mask) > 100:
-                    mouse_stat_blocks = utils.Utils().find_blocks(velstuff['runs_lowess'][r][1][mouse_stat_mask].index.get_level_values(level='FrameIdx'), 10, 20)
+                slow_mask = velstuff['runs_lowess'][r][1] < 8
+                if sum(slow_mask) > 10:
+                    mouse_stat_blocks = utils.Utils().find_blocks(velstuff['runs_lowess'][r][1][slow_mask].index.get_level_values(level='FrameIdx'), 10, 20)
                     if np.any(mouse_stat_blocks):
                         sitting_log_mask.append(True)
                     else:
@@ -667,6 +666,63 @@ class Locomotion():
 
         return sitting_log
 
+    # def confirmSittingRuns(self, data, con, mouseID, sitting_runs, windowsize, markerstuff):
+    #     for r in sitting_runs:
+    #         FL = Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, 'Front', windowsize, markerstuff, 'y').loc(axis=0)[['RunStart','Transition']]
+    #         FR = Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', r, data, con, mouseID, 'Front', windowsize, markerstuff, 'y').loc(axis=0)[['RunStart','Transition']]
+    #         HL = Velocity.Velocity().getVelocity_specific_limb('HindpawToeL', r, data, con, mouseID, 'Side', windowsize, markerstuff, 'x').loc(axis=0)[['RunStart','Transition']]
+    #         HR = Velocity.Velocity().getVelocity_specific_limb('HindpawToeR', r, data, con, mouseID, 'Side', windowsize, markerstuff, 'x').loc(axis=0)[['RunStart','Transition']]
+    #
+    #
+    # # to show when all 4 limbs are in stance
+    # FL = \
+    #     Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, 'Front', windowsize,
+    #                                                   markerstuff,
+    #                                                   'y').loc(axis=0)[['RunStart', 'Transition']]
+    # FR = \
+    #     Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', r, data, con, mouseID, 'Front', windowsize,
+    #                                                   markerstuff,
+    #                                                   'y').loc(axis=0)[['RunStart', 'Transition']]
+    # HL = \
+    #     Velocity.Velocity().getVelocity_specific_limb('HindpawToeL', r, data, con, mouseID, 'Side', windowsize,
+    #                                                   markerstuff,
+    #                                                   'x').loc(axis=0)[['RunStart', 'Transition']]
+    # HR = \
+    #     Velocity.Velocity().getVelocity_specific_limb('HindpawToeR', r, data, con, mouseID, 'Side', windowsize,
+    #                                                   markerstuff,
+    #                                                   'x').loc(axis=0)[['RunStart', 'Transition']]
+    # FR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #             'ForepawToeR', 'StepCycleFill'] == 0
+    # FL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #             'ForepawToeL', 'StepCycleFill'] == 0
+    # HR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #             'HindpawToeR', 'StepCycleFill'] == 0
+    # HL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #             'HindpawToeL', 'StepCycleFill'] == 0
+    # FR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #     'ForepawToeR', 'StepCycleFill'].isna()
+    # FL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #     'ForepawToeL', 'StepCycleFill'].isna()
+    # HR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #     'HindpawToeR', 'StepCycleFill'].isna()
+    # HL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+    #     'HindpawToeL', 'StepCycleFill'].isna()
+    # FR_mask = FR_st | FR_na
+    # FL_mask = FL_st | FL_na
+    # HR_mask = HR_st | HR_na
+    # HL_mask = HL_st | HL_na
+    # plt.figure()
+    # for lidx, l in enumerate(['FL', 'FR', 'HL', 'HR']):
+    #     plt.plot(eval(l).index.get_level_values(level='FrameIdx'), eval(l).values, color=colors[lidx], label=l)
+    # idx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].index.get_level_values(level='FrameIdx')
+    # idx[FR_mask]
+    # plt.scatter(idx[FR_mask], len(idx[FR_mask]) * [-15], color='blue')
+    # plt.scatter(idx[FL_mask], len(idx[FL_mask]) * [-25], color='lightblue')
+    # plt.scatter(idx[HR_mask], len(idx[HR_mask]) * [-35], color='green')
+    # plt.scatter(idx[HL_mask], len(idx[HL_mask]) * [-45], color='lightgreen')
+    # plt.title(r)
+    # plt.legend()
+
     def getLocoPeriods(self, data, con, mouseID, markerstuff, view='Side', fillvalues=True, n=30):
         warnings.filterwarnings("ignore", message="The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.")
         warnings.filterwarnings("ignore", message="The behavior of indexing on a MultiIndex with a nested sequence of labels is deprecated and will change in a future version.")
@@ -676,7 +732,7 @@ class Locomotion():
         velstuff = Velocity.Velocity().getVelocityInfo(data, con, mouseID, zeroed=False, view=view, xaxis='x', windowsize=windowsize, markerstuff=markerstuff, f=range(0,int(data[con][mouseID][view].index.get_level_values(level='Run').unique().max()+1)))
 
         # take record of which runs include a period of sitting
-        sitting_log = self.getSittingRuns(data, con, mouseID, view, velstuff)
+        sitting_log = self.getPotentialSittingRuns(data, con, mouseID, view, velstuff)
         sitting_r_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='Run'), sitting_log)
         sitting_r = sitting_r_mask*1
         for v in ['Side', 'Front', 'Overhead']:
@@ -688,7 +744,10 @@ class Locomotion():
             StepCycleFilledAll = []
             for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
                 try:
-                    swst_dict = self.get_limb_swst_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
+                    if 'Fore' in l:
+                        swst_dict = self.get_limb_swst_frontcam(data, con, mouseID, r, l, velstuff)
+                    elif 'Hind' in l:
+                        swst_dict = self.get_limb_swst_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
 
                     # put first swing and stance frames into df
                     StepCycle = np.full([len(data[con][mouseID][view].loc(axis=0)[r])], np.nan)
@@ -739,6 +798,30 @@ class Locomotion():
 
         return data[con][mouseID]
 
+    def get_limb_swst_frontcam(self, data, con, mouseID, r, l, velstuff, view='Front'):
+        commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
+        front_mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'likelihood'].values > 0.99
+        front_y = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'y'][front_mask]
+
+        y = - front_y.values
+        t = front_y.index.get_level_values(level='FrameIdx')
+        slope, intercept, r_value, p_value, std_err = stats.linregress(t, y)
+        front_y_rot = (y - slope * t) - intercept
+        front_y_rot_ser = pd.Series(data=front_y_rot, index=t)
+        front_y_rot_ser = front_y_rot_ser + abs(front_y_rot_ser.min())
+
+        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel=front_y_rot_ser, frame_diff_thresh=0.5,
+                                                                 speed_thresh=0, allowance=0.5)
+
+        swst_dict = {
+            'stancestart': stance_start_idx,
+            'swingstart': stance_end_idx,
+            'stancestart_bkwd': [],
+            'swingstart_bkwd': []
+        }
+
+        return swst_dict
+
     def get_limb_swst_sidecam(self, data, con, mouseID, r, l, velstuff, markerstuff, sitting_log, view='Side'):
         commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
         mask = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[
@@ -761,7 +844,7 @@ class Locomotion():
                 mask = mask & ~mouse_stat_blocks_mask
 
         ####### NEW ##########
-        # fill in the gaps of missing data to avoid erronous velocity data being calculated CURRENTLY ONLY FOR FL
+        # fill in the gaps of missing data to avoid erronous velocity data being calculated
         #if l == 'ForepawToeL':
         interpolated_x = self.fill_in_limb_x_gaps(data,con,mouseID,r,l,mask,commonidx)
         index_mask = np.isin(data[con][mouseID][view].index.get_level_values(level='FrameIdx'), interpolated_x.index)
@@ -811,13 +894,14 @@ class Locomotion():
         return swst_dict
 
     def fill_in_limb_x_gaps(self, data, con, mouseID, r, l, mask, commonidx, view='Side'):
-        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].values[mask]
-        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[mask]
+        outlier_mask = utils.Utils().find_outliers(xdf=data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'], mask=True)
+        x = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].values[mask & ~outlier_mask]
+        t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[mask & ~outlier_mask]
         present = pd.DataFrame(data=x, index=t)[0]
         from scipy.interpolate import CubicSpline
         cs = CubicSpline(t, x)
-        missing_t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask]
-        missing_x = cs(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask])
+        missing_t = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask | outlier_mask]
+        missing_x = cs(data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd'], commonidx].loc(axis=1)[l, 'x'].index.get_level_values(level='FrameIdx')[~mask | outlier_mask])
         missing = pd.DataFrame(data=missing_x, index=missing_t)[0]
         end_mask = np.logical_and(missing.index <= t[-1], missing.index >= t[1])
         missing = missing[end_mask]
@@ -826,6 +910,7 @@ class Locomotion():
 
 
     def find_first_transitioning_paw(self, data, con, mouseID, r, markerstuff):
+        # improve this - instead or as well as looking at when nose is over the transition, look at when either paw is over this point
         limblist = ['ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawToeL']
 
         nose_mask = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart','Transition','RunEnd']].loc(axis=1)['Nose','likelihood'] > pcutoff
@@ -839,7 +924,18 @@ class Locomotion():
         nose_trans_idx_far = nose_x[nose_trans_mask_far].index.get_level_values(level='FrameIdx')[0]
         nose_trans_mask_near = nose_x > trans_x_near
         nose_trans_idx_near = nose_x[nose_trans_mask_near].index.get_level_values(level='FrameIdx')[0]
-        transition_thresh_idx = int((nose_trans_idx_near + nose_trans_idx_far)/2)
+        nose_transition_thresh_idx = int((nose_trans_idx_near + nose_trans_idx_far)/2)
+
+        # find when **a** paw passes the transition point
+        l_paw_mask = np.logical_and(data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)['ForepawToeL', 'likelihood'] > pcutoff,data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx') > nose_transition_thresh_idx)
+        r_paw_mask = np.logical_and(data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)['ForepawToeR', 'likelihood'] > pcutoff,data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].index.get_level_values(level='FrameIdx') > nose_transition_thresh_idx)
+        l_paw_x = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)['ForepawToeL', 'x'][l_paw_mask]
+        r_paw_x = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].loc(axis=1)['ForepawToeR', 'x'][r_paw_mask]
+        trans_x_mid = np.mean([trans_x_far,trans_x_near])
+        l_paw_first = l_paw_x[l_paw_x > trans_x_mid].index.get_level_values(level='FrameIdx')[0]
+        r_paw_first = r_paw_x[r_paw_x > trans_x_mid].index.get_level_values(level='FrameIdx')[0]
+
+        transition_thresh_idx = l_paw_first if l_paw_first < r_paw_first else r_paw_first
 
         st_idx_i, st_limb_i = np.where(np.logical_or(data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[limblist[:2],'StepCycle'] == 0, data[con][mouseID]['Side'].loc(axis=0)[r].loc(axis=1)[limblist[:2],'StepCycle'] == 2))
         limb = np.array(limblist)[st_limb_i]
@@ -915,7 +1011,7 @@ class Locomotion():
     def create_BATCH_OF_NEW_FILES_with_loco_and_updated_transitions(self,all=True,condition='APAChar_LowHigh',exptype='',wash='',day=''):
         ######### need to add in a check for if files already exist (have a overwriting parameter) ##########
         if all == True:
-            dir_selection = filtereddata_folder
+            dir_selection = paths['filtereddata_folder']
             # get all subdirectories
             data_subdirs = []
             for root, subdirs, files in os.walk(dir_selection):
@@ -923,7 +1019,7 @@ class Locomotion():
                     if not root.endswith(('temp_bin', 'consistent_speed_up')):
                         data_subdirs.append(root)
         else:
-            dir_selection = os.path.join(filtereddata_folder, condition, exptype, wash, day)
+            dir_selection = os.path.join(paths['filtereddata_folder'], condition, exptype, wash, day)
             # get all subdirectories
             data_subdirs = []
             for root, subdirs, files in os.walk(dir_selection):
@@ -933,19 +1029,20 @@ class Locomotion():
         data_subdirs.sort()
 
         for s in tqdm(data_subdirs):
-            files = utils.Utils().GetlistofH5files(directory=s,run=True)
+            files = utils.Utils().GetlistofH5files(directory=s)
             if np.any(files):
                 if len(files['Side']) == len(files['Front']) == len(files['Overhead']):
                     con = '_'.join(list(filter(lambda x: len(x) > 0, s.split('\\')))[7:])
-                    data = Plot.Plot().GetDFs([con])
+                    data = utils.Utils().GetDFs([con])
                     print(
                         '------------------------------------------------------------------------------------------------\n{}Starting analysing condition:{} %s    ------------------->\n------------------------------------------------------------------------------------------------'.format(
                             '\033[1m', '\033[0m', '\033[1m', '\033[0m') % con)
                     ### for each triplet of side, front and overhead
                     for f in files['Side']:
-                        mouseID = f.split('\\')[-1].split('_')[3]
-                        print('##################################################################################################\n{}Updating index for Condition:{} %s{}, MouseID:{} %s\n##################################################################################################'.format('\033[1m', '\033[0m', '\033[1m', '\033[0m') %(con,mouseID))
-                        self.create_new_file_with_loco_and_updated_transitions(f,data,con,mouseID)
+                        if not f.endswith('_IdxCorr.h5'):
+                            mouseID = f.split('\\')[-1].split('_')[3]
+                            print('##################################################################################################\n{}Updating index for Condition:{} %s{}, MouseID:{} %s\n##################################################################################################'.format('\033[1m', '\033[0m', '\033[1m', '\033[0m') %(con,mouseID))
+                            self.create_new_file_with_loco_and_updated_transitions(f,data,con,mouseID)
             files = None # reset so can be subsequently checked in next loop
 
 

@@ -1,20 +1,76 @@
 # Some useful helper functions for video analysis
-
 from glob import glob
-from fnmatch import fnmatch
 import matplotlib.pyplot as plt
 from pathlib import Path
-# from Helpers.Config import *
 from Helpers.Config_23 import *
 import sys
 import numpy as np
 import re
 import math
 import pandas as pd
+import os
 
 class Utils:
     def __init__(self):
         super().__init__()
+
+    def GetDFs(self, conditions, reindexed_loco=False):
+        '''
+        :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats
+        :return: dictionary holding all dataframes held under the requested conditions
+        '''
+        if reindexed_loco:
+            file_suffix = 'Runs__IdxCorr'
+        else:
+            file_suffix = 'Runs'
+        print('Conditions to be loaded:\n%s' % conditions)
+        data = dict.fromkeys(conditions)
+        for conidx, con in enumerate(conditions):
+            if 'Day' not in con:
+                files = self.GetlistofH5files(directory=r"%s\%s" % (paths['filtereddata_folder'], con), filtered=True,
+                                                       suffix=file_suffix)
+            else:
+                splitcon = con.split('_')
+                conname = "_".join(splitcon[0:2])
+                dayname = splitcon[-1]
+                w = splitcon[-2]
+                if 'Repeats' in con:
+                    files = self.GetlistofH5files(
+                        directory=r"%s\%s\Repeats\%s\%s" % (paths['filtereddata_folder'], conname, w, dayname), filtered=True,
+                        suffix=file_suffix)
+                elif 'Extended' in con:
+                    files = self.GetlistofH5files(
+                        directory=r"%s\%s\Extended\%s" % (paths['filtereddata_folder'], conname, dayname), filtered=True,
+                        suffix=file_suffix)
+                else:
+                    files = self.GetlistofH5files(
+                        directory=r"%s\%s\%s" % (paths['filtereddata_folder'], conname, dayname), filtered=True,
+                        suffix=file_suffix)
+            mouseIDALL = list()
+            dateALL = list()
+
+            # sort lists of filenames so that in same order for reading
+            files['Side'].sort()
+            files['Front'].sort()
+            files['Overhead'].sort()
+
+            for f in range(0, len(files['Side'])):
+                mouseID = os.path.basename(files['Side'][f]).split('_')[3]
+                mouseIDALL.append(mouseID)
+                date = os.path.basename(files['Side'][f]).split('_')[1]
+                dateALL.append(date)
+
+            # data['%s' % con] = dict.fromkeys(dateALL)
+            data['%s' % con] = dict.fromkeys(mouseIDALL)
+            for n, name in enumerate(mouseIDALL):
+                # data['%s' % con]['%s' %name] = dict.fromkeys(['Side', 'Front', 'Overhead'])
+                data['%s' % con]['%s' % name] = {
+                    'Date': dateALL[n],
+                    'Side': pd.read_hdf(files['Side'][n]),
+                    'Front': pd.read_hdf(files['Front'][n]),
+                    'Overhead': pd.read_hdf(files['Overhead'][n])
+                }
+        return data
 
     def Getlistofvideofiles(self, view, directory, filetype=".avi"):
         # function to get a list of video files in a directory. Current use is for bulk DLC analysis of videos with different models in each directory
@@ -428,6 +484,17 @@ class Utils:
         blocks = blocks[~np.array(block_under_thresh)]
 
         return blocks
+
+    def find_outliers(self, xdf, thresh=50, mask=False):
+        neg_diff = xdf.diff()
+        pos_diff = xdf.shift(-1).diff()
+        outlier_mask = np.logical_and(abs(neg_diff) > thresh, abs(pos_diff) > thresh)
+        outlier_idx = outlier_mask.index.get_level_values(level='FrameIdx')[outlier_mask==True]
+        if mask:
+            return outlier_mask
+        else:
+            return outlier_idx
+
 
 
 

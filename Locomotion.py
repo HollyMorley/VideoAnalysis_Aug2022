@@ -537,15 +537,15 @@ class Locomotion():
         #print("The swing-stance pattern is followed in run %s" %r)
 
 
-    def find_stat_blocks(self, vel, frame_diff_thresh=5, speed_thresh=2, allowance=0.5):
+    def find_stat_blocks(self, vel, gap_thresh, frame_diff_thresh=5, speed_thresh=2, allowance=0.5):
         frame_shift = vel.shift(1) - vel
         stationary_mask = np.abs(frame_shift) < frame_diff_thresh
         stationary_mean = np.mean(vel[stationary_mask].values)
         stationary_sem = np.std(vel[stationary_mask].values) / np.sqrt(len(vel[stationary_mask]))
         stationary_window_mask = np.logical_and(vel.values > speed_thresh, vel.values < stationary_mean + stationary_sem * allowance)
         stance_raw = vel[stationary_window_mask]
-        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 5, 2))[:, 0]
-        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), 5, 2))[:, 1]
+        stance_start_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), gap_thresh, 2))[:, 0] # was 5
+        stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), gap_thresh, 2))[:, 1] # was 5
 
         return stance_start_idx, stance_end_idx
 
@@ -594,8 +594,8 @@ class Locomotion():
         rot_vel_limb_smoothed = pd.Series(data=rot_vel_limb_smoothed, index=vel_limb_smoothed.index)
         rot_vel_limb_smoothed = rot_vel_limb_smoothed + abs(rot_vel_limb_smoothed.min())
         ############
-        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel_limb_smoothed)
-        stance_start_idx_bkup, stance_end_idx_bkup = self.find_stat_blocks(rot_vel_limb_smoothed)
+        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel_limb_smoothed, gap_thresh=10)
+        stance_start_idx_bkup, stance_end_idx_bkup = self.find_stat_blocks(rot_vel_limb_smoothed, gap_thresh=10)
 
 
         # check if any of these values are the result of gaps in the data and remove accordingly
@@ -672,56 +672,7 @@ class Locomotion():
     #         FR = Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', r, data, con, mouseID, 'Front', windowsize, markerstuff, 'y').loc(axis=0)[['RunStart','Transition']]
     #         HL = Velocity.Velocity().getVelocity_specific_limb('HindpawToeL', r, data, con, mouseID, 'Side', windowsize, markerstuff, 'x').loc(axis=0)[['RunStart','Transition']]
     #         HR = Velocity.Velocity().getVelocity_specific_limb('HindpawToeR', r, data, con, mouseID, 'Side', windowsize, markerstuff, 'x').loc(axis=0)[['RunStart','Transition']]
-    #
-    #
-    # # to show when all 4 limbs are in stance
-    # FL = \
-    #     Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, 'Front', windowsize,
-    #                                                   markerstuff,
-    #                                                   'y').loc(axis=0)[['RunStart', 'Transition']]
-    # FR = \
-    #     Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', r, data, con, mouseID, 'Front', windowsize,
-    #                                                   markerstuff,
-    #                                                   'y').loc(axis=0)[['RunStart', 'Transition']]
-    # HL = \
-    #     Velocity.Velocity().getVelocity_specific_limb('HindpawToeL', r, data, con, mouseID, 'Side', windowsize,
-    #                                                   markerstuff,
-    #                                                   'x').loc(axis=0)[['RunStart', 'Transition']]
-    # HR = \
-    #     Velocity.Velocity().getVelocity_specific_limb('HindpawToeR', r, data, con, mouseID, 'Side', windowsize,
-    #                                                   markerstuff,
-    #                                                   'x').loc(axis=0)[['RunStart', 'Transition']]
-    # FR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #             'ForepawToeR', 'StepCycleFill'] == 0
-    # FL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #             'ForepawToeL', 'StepCycleFill'] == 0
-    # HR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #             'HindpawToeR', 'StepCycleFill'] == 0
-    # HL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #             'HindpawToeL', 'StepCycleFill'] == 0
-    # FR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #     'ForepawToeR', 'StepCycleFill'].isna()
-    # FL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #     'ForepawToeL', 'StepCycleFill'].isna()
-    # HR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #     'HindpawToeR', 'StepCycleFill'].isna()
-    # HL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
-    #     'HindpawToeL', 'StepCycleFill'].isna()
-    # FR_mask = FR_st | FR_na
-    # FL_mask = FL_st | FL_na
-    # HR_mask = HR_st | HR_na
-    # HL_mask = HL_st | HL_na
-    # plt.figure()
-    # for lidx, l in enumerate(['FL', 'FR', 'HL', 'HR']):
-    #     plt.plot(eval(l).index.get_level_values(level='FrameIdx'), eval(l).values, color=colors[lidx], label=l)
-    # idx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].index.get_level_values(level='FrameIdx')
-    # idx[FR_mask]
-    # plt.scatter(idx[FR_mask], len(idx[FR_mask]) * [-15], color='blue')
-    # plt.scatter(idx[FL_mask], len(idx[FL_mask]) * [-25], color='lightblue')
-    # plt.scatter(idx[HR_mask], len(idx[HR_mask]) * [-35], color='green')
-    # plt.scatter(idx[HL_mask], len(idx[HL_mask]) * [-45], color='lightgreen')
-    # plt.title(r)
-    # plt.legend()
+
 
     def getLocoPeriods(self, data, con, mouseID, markerstuff, view='Side', fillvalues=True, n=30):
         warnings.filterwarnings("ignore", message="The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.")
@@ -805,13 +756,12 @@ class Locomotion():
 
         y = - front_y.values
         t = front_y.index.get_level_values(level='FrameIdx')
-        slope, intercept, r_value, p_value, std_err = stats.linregress(t, y)
-        front_y_rot = (y - slope * t) - intercept
+        model = np.poly1d(np.polyfit(t, y, 2))
+        front_y_rot = y - model(t)
         front_y_rot_ser = pd.Series(data=front_y_rot, index=t)
         front_y_rot_ser = front_y_rot_ser + abs(front_y_rot_ser.min())
 
-        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel=front_y_rot_ser, frame_diff_thresh=0.5,
-                                                                 speed_thresh=0, allowance=0.5)
+        stance_start_idx, stance_end_idx = self.find_stat_blocks(vel=front_y_rot_ser, gap_thresh=5, frame_diff_thresh=0.5, speed_thresh=0, allowance=0.5)
 
         swst_dict = {
             'stancestart': stance_start_idx,
@@ -1044,10 +994,6 @@ class Locomotion():
                             print('##################################################################################################\n{}Updating index for Condition:{} %s{}, MouseID:{} %s\n##################################################################################################'.format('\033[1m', '\033[0m', '\033[1m', '\033[0m') %(con,mouseID))
                             self.create_new_file_with_loco_and_updated_transitions(f,data,con,mouseID)
             files = None # reset so can be subsequently checked in next loop
-
-
-
-
 
     def get_number_plots(self, root_path):
         limbs = ['ForepawToeL', 'ForepawToeR', 'HindpawToeL', 'HindpawToeR']
@@ -1421,71 +1367,70 @@ class Locomotion():
                         self.plot_mean_loco_allLimbs_perMouse(data=data,con=con,mouseID=mouseID,expphase=expphase)
                     except:
                         print('Cant plot for mouse: %s and expphase: %s' %(mouseID))
-'''
-                ########################################################################################################
-                ############################## FINDING BELT SPEED IN EACH CONDITION ####################################
-                ########################################################################################################
-                if 'APAChar' in con:
-                    runs = APACharRuns
-                elif 'Perception' in con:
-                    runs = APAPerRuns
-                elif 'VMT' in con:
-                    runs = APAVmtRuns
-
-                beltspeeds = utils.Utils().getSpeedConditions(con=con)
-
-                ....
-
-                belt1speed = None
-                belt2speed = None
-                # Calculate the velocity
-                velocity = np.gradient(x, t)
-                .....
-                
-                ##### find first stance frames and first swing frames
-                markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
-
-                if 'APAChar' in con or 'Perception' in con: ############################ !!!!!!!!!!!!!! COULD ADD IN HERE AN AND STATEMENT TO SAY AND NO E.G. REPEAT OR EXTENDED TO SIGNIFY ITS THE ORIGINAL EXP FORMAT !!!!!!!!!!!!! #########################
-                    # define perception test as always low-high but this isnt in con name
-                    if 'Perception' in con:
-                        beltspeeds = ('Low', 'High')
-
-                    # based on the phase of the experiment, define the speed of each belt
-                    belt1speed = speeds[beltspeeds[0]]
-                    if r < runs[0] or runs[0] + runs[1] <= r < runs[0] + runs[1] + runs[2]:
-                        belt2speed = speeds[beltspeeds[0]]
-                    elif runs[0] <= r < runs[0] + runs[1]:
-                        belt2speed = speeds[beltspeeds[1]]
-                    else:
-                        raise ValueError('There are too many runs here')
-                elif 'VMT' in con:
-                    if 'pd' in con:
-                        belt1speed = speeds[beltspeeds[0]]
-                        belt2speed = speeds[beltspeeds[1]]
-                    elif 'ac' in con:
-                        print('!!!!!!!!!!!!!!WARNING!!!!!!!!!!!!!!!\nWARNING MESSAGE: Are you still using mid as the transformed belt2 speed for both ac and pd??? If not, change the code!')
-                        # based on the phase of the experiment, define the speed of each belt
-                        belt1speed = speeds[beltspeeds[0]]
-                        if r < runs[0] or runs[0] + runs[1] <= r < runs[0] + runs[1] + runs[2]:
-                            belt2speed = speeds[beltspeeds[1]]
-                        elif runs[0] <= r < runs[0] + runs[1]:
-                            belt2speed = speeds['Mid']
-                        else:
-                            raise ValueError('There are too many runs here')
-                else:
-                    raise ValueError('Something has gone wrong with run phase identification....')
-
-                # now need to specify the velocity threshold based on if each limb is past the transition line
-                beltmask = x_smooth > markerstuff['DualBeltMarkers']['x_edges'][3] # not sure if i should use x_smooth or raw x here
-                belt1speed_px = ((markerstuff['cmtopx'] * belt1speed) / fps) + 1
-                belt2speed_px = ((markerstuff['cmtopx'] * belt2speed) / fps) + 1
-                prethreshmask = velocity[~beltmask] > belt1speed_px
-                postthreshmask = velocity[beltmask] > belt2speed_px
-                swingthreshmask = np.concatenate((prethreshmask,postthreshmask))
-                
-                ########################################################################################################
-                ########################################################################################################
-'''
 
 
+    def plot_limb_speed_and_stance_periods(self, data, con, mouseID, view, n=30):
+        colors = ['lightblue', 'blue', 'lightgreen', 'green']
+        windowsize = math.ceil((fps / n) / 2.) * 2
+        markerstuff = GetRuns.GetRuns().findMarkers(data[con][mouseID][view])
+
+        for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
+            # to show when all 4 limbs are in stance
+            FL = \
+                Velocity.Velocity().getVelocity_specific_limb('ForepawToeL', r, data, con, mouseID, 'Front', windowsize,
+                                                              markerstuff,
+                                                              'y').loc(axis=0)[['RunStart', 'Transition']]
+            FR = \
+                Velocity.Velocity().getVelocity_specific_limb('ForepawToeR', r, data, con, mouseID, 'Front', windowsize,
+                                                              markerstuff,
+                                                              'y').loc(axis=0)[['RunStart', 'Transition']]
+            HL = \
+                Velocity.Velocity().getVelocity_specific_limb('HindpawToeL', r, data, con, mouseID, 'Side', windowsize,
+                                                              markerstuff,
+                                                              'x').loc(axis=0)[['RunStart', 'Transition']]
+            HR = \
+                Velocity.Velocity().getVelocity_specific_limb('HindpawToeR', r, data, con, mouseID, 'Side', windowsize,
+                                                              markerstuff,
+                                                              'x').loc(axis=0)[['RunStart', 'Transition']]
+            FR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                        'ForepawToeR', 'StepCycleFill'] == 0
+            FL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                        'ForepawToeL', 'StepCycleFill'] == 0
+            HR_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                        'HindpawToeR', 'StepCycleFill'] == 0
+            HL_st = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                        'HindpawToeL', 'StepCycleFill'] == 0
+            FR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                'ForepawToeR', 'StepCycleFill'].isna()
+            FL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                'ForepawToeL', 'StepCycleFill'].isna()
+            HR_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                'HindpawToeR', 'StepCycleFill'].isna()
+            HL_na = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].loc(axis=1)[
+                'HindpawToeL', 'StepCycleFill'].isna()
+            # FR_mask = FR_st | FR_na
+            # FL_mask = FL_st | FL_na
+            # HR_mask = HR_st | HR_na
+            # HL_mask = HL_st | HL_na
+            plt.figure()
+            for lidx, l in enumerate(['FL', 'FR', 'HL', 'HR']):
+                plt.plot(eval(l).index.get_level_values(level='FrameIdx'), eval(l).values, color=colors[lidx], label=l)
+            idx = data[con][mouseID][view].loc(axis=0)[r, ['RunStart', 'Transition']].index.get_level_values(level='FrameIdx')
+            # plt.scatter(idx[FR_mask], len(idx[FR_mask]) * [-15], color='blue')
+            # plt.scatter(idx[FL_mask], len(idx[FL_mask]) * [-25], color='lightblue')
+            # plt.scatter(idx[HR_mask], len(idx[HR_mask]) * [-35], color='green')
+            # plt.scatter(idx[HL_mask], len(idx[HL_mask]) * [-45], color='lightgreen')
+
+            plt.scatter(idx[FR_st], len(idx[FR_st]) * [-15], color='blue')
+            plt.scatter(idx[FL_st], len(idx[FL_st]) * [-25], color='lightblue')
+            plt.scatter(idx[HR_st], len(idx[HR_st]) * [-35], color='green')
+            plt.scatter(idx[HL_st], len(idx[HL_st]) * [-45], color='lightgreen')
+
+            plt.scatter(idx[FR_na], len(idx[FR_na]) * [-15], color='black')
+            plt.scatter(idx[FL_na], len(idx[FL_na]) * [-25], color='black')
+            plt.scatter(idx[HR_na], len(idx[HR_na]) * [-35], color='black')
+            plt.scatter(idx[HL_na], len(idx[HL_na]) * [-45], color='black')
+
+            plt.title(r)
+            plt.legend()
 

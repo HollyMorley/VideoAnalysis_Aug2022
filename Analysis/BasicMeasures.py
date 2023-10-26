@@ -46,7 +46,7 @@ class calculate_body():
 
         if calculation == 'skew':
             result = skew(back_y_heights,axis=1)
-        elif calculation == 'height':
-            result =
+        # elif calculation == 'height':
+        #     result =
 
         result_mean = np.mean(result)

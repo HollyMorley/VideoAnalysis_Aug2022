@@ -548,6 +548,7 @@ class Locomotion():
         stance_end_idx = np.array(utils.Utils().find_blocks(stance_raw.index.get_level_values(level='FrameIdx'), gap_thresh, 2))[:, 1] # was 5
 
         return stance_start_idx, stance_end_idx
+    #### if sitting make allowance 20
 
 
     def get_limb_speed(self,l,r,vel_limb,sitting_log):
@@ -696,6 +697,7 @@ class Locomotion():
             for r in data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
                 try:
                     if 'Fore' in l:
+                        #swst_dict = self.get_limb_swst_bothcam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
                         swst_dict = self.get_limb_swst_frontcam(data, con, mouseID, r, l, velstuff)
                     elif 'Hind' in l:
                         swst_dict = self.get_limb_swst_sidecam(data,con,mouseID,r,l,velstuff,markerstuff,sitting_log)
@@ -748,6 +750,52 @@ class Locomotion():
                     data[con][mouseID][v].loc(axis=1)[l, 'StepCycleFill'] = StepCycleFilledAll_flt
 
         return data[con][mouseID]
+
+    def get_limb_swst_bothcam(self, data, con, mouseID, r, l, velstuff, markerstuff, sitting_log):
+        ## only use for front paws
+        # find periods where each cam has most confidence
+        front_likli = data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)[
+            l, 'likelihood']
+        side_likli = data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition','RunEnd']].loc(axis=1)[
+            l, 'likelihood']
+        mask = front_likli > side_likli
+        best_cam = mask.replace({True: 'Front', False: 'Side'})
+
+        # get swst data
+        front_swst = self.get_limb_swst_frontcam(data, con, mouseID, r, l, velstuff)
+        side_swst = self.get_limb_swst_sidecam(data, con, mouseID, r, l, velstuff, markerstuff, sitting_log)
+
+        # prioritising front cam, go through identified st and sw frames and check which cam was most reliable and keep/chuck based on this
+        final_st = []
+        for s in front_swst['stancestart']:
+            if best_cam.xs(s, axis=0, level='FrameIdx').values[0] == 'Front' and front_likli.xs(s,axis=0,level='FrameIdx').values[0] > 0.99:
+                final_st.append(s)
+        for s in side_swst['stancestart']:
+            if best_cam.xs(s, axis=0, level='FrameIdx').values[0] == 'Side':
+                final_st.append(s)
+        final_st.sort()
+
+        final_sw = []
+        for s in front_swst['swingstart']:
+            if best_cam.xs(s, axis=0, level='FrameIdx').values[0] == 'Front' and front_likli.xs(s,axis=0,level='FrameIdx').values[0] > 0.99:
+                final_sw.append(s)
+        for s in side_swst['swingstart']:
+            if best_cam.xs(s, axis=0, level='FrameIdx').values[0] == 'Side':
+                final_sw.append(s)
+        final_sw.sort()
+
+        ######## WHAT IF LOSE WHOLE EG STANCES BECAUSE THE ONLY DETECTED ST AT THIS TIME WAS WHEN CONF WAS LOWER???? ####
+
+        ## INCORPORATE BACKWARDS ST AND SW
+
+        swst_dict = {
+            'stancestart': final_st,
+            'swingstart': final_sw,
+            'stancestart_bkwd': [],
+            'swingstart_bkwd': []
+        }
+
+        return swst_dict
 
     def get_limb_swst_frontcam(self, data, con, mouseID, r, l, velstuff, view='Front'):
         commonidx = velstuff['runs_lowess'][int(r), 1].index.get_level_values(level='FrameIdx')
@@ -1421,15 +1469,15 @@ class Locomotion():
             # plt.scatter(idx[HR_mask], len(idx[HR_mask]) * [-35], color='green')
             # plt.scatter(idx[HL_mask], len(idx[HL_mask]) * [-45], color='lightgreen')
 
-            plt.scatter(idx[FR_st], len(idx[FR_st]) * [-15], color='blue')
+            plt.scatter(idx[FR_st], len(idx[FR_st]) * [-35], color='blue')
             plt.scatter(idx[FL_st], len(idx[FL_st]) * [-25], color='lightblue')
-            plt.scatter(idx[HR_st], len(idx[HR_st]) * [-35], color='green')
-            plt.scatter(idx[HL_st], len(idx[HL_st]) * [-45], color='lightgreen')
+            plt.scatter(idx[HR_st], len(idx[HR_st]) * [-45], color='green')
+            plt.scatter(idx[HL_st], len(idx[HL_st]) * [-15], color='lightgreen')
 
-            plt.scatter(idx[FR_na], len(idx[FR_na]) * [-15], color='black')
+            plt.scatter(idx[FR_na], len(idx[FR_na]) * [-35], color='black')
             plt.scatter(idx[FL_na], len(idx[FL_na]) * [-25], color='black')
-            plt.scatter(idx[HR_na], len(idx[HR_na]) * [-35], color='black')
-            plt.scatter(idx[HL_na], len(idx[HL_na]) * [-45], color='black')
+            plt.scatter(idx[HR_na], len(idx[HR_na]) * [-45], color='black')
+            plt.scatter(idx[HL_na], len(idx[HL_na]) * [-15], color='black')
 
             plt.title(r)
             plt.legend()

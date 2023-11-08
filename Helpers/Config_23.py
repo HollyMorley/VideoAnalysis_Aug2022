@@ -31,6 +31,10 @@ expstuff = {
         'preruns_CharMidHigh': 5
     }
 }
+structural_stuff = {
+    'belt_width': 52, # mm
+    'belt_length_sideviewrange': 600 # mm
+}
 locostuff = {
     'swst_vals': {
         'st': 0,

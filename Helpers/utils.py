@@ -495,6 +495,9 @@ class Utils:
         else:
             return outlier_idx
 
+    def Rotate2D(self, pts, cnt, ang):
+        '''pts = {} Rotates points(nx2) about center cnt(2) by angle ang(1) in radian'''
+        return np.dot(pts-cnt,np.array([[np.cos(ang),np.sin(ang)],[-np.sin(ang),np.cos(ang)]]))+cnt
 
 
 

@@ -33,7 +33,8 @@ expstuff = {
 }
 structural_stuff = {
     'belt_width': 52, # mm
-    'belt_length_sideviewrange': 600 # mm
+    'belt_length_sideviewrange': 600, # mm
+    'belt_length_sideviewend': 130 # mm
 }
 locostuff = {
     'swst_vals': {

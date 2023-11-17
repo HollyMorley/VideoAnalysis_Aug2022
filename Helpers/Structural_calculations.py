@@ -68,25 +68,19 @@ class GetRealDistances:
 
         return coords
 
-    def estimate_end_coordinates(self, view, side_rect_coords):
-        slope, _, _, _, _ = stats.linregress([side_rect_coords[3][0], side_rect_coords[2][0]],
-                                             [side_rect_coords[3][1], side_rect_coords[2][1]])
-        slope_top, intercept_top, _, _, _ = stats.linregress([side_rect_coords[3][0], side_rect_coords[2][0]],
-                                                             [side_rect_coords[3][1], side_rect_coords[2][1]])
-        slope_side, _, _, _, _ = stats.linregress([side_rect_coords[3][0], side_rect_coords[0][0]],
-                                                  [side_rect_coords[3][1], side_rect_coords[0][1]])
-
-
-        tilt = np.arctan(slope)
-        side_rect_coords_rot = utils.Utils().Rotate2D(side_rect_coords,
-                                                      np.array([side_rect_coords[3][0], side_rect_coords[3][1]]),
-                                                      -tilt)
+    def estimate_end_coordinates_side(self, rect): #rect = side_rect_coords
+        slope, _, _, _, _ = stats.linregress([rect[3][0], rect[2][0]],
+                                             [rect[3][1], rect[2][1]])
+        slope_top, intercept_top, _, _, _ = stats.linregress([rect[3][0], rect[2][0]],
+                                                             [rect[3][1], rect[2][1]])
+        slope_side, _, _, _, _ = stats.linregress([rect[3][0], rect[0][0]],
+                                                  [rect[3][1], rect[0][1]])
 
         x_l = []
         y_r = []
-        for r in self.data[self.con][self.mouseID][view].index.get_level_values(level='Run').unique().astype(int):
-            x_l.append(np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'x']))
-            y_r.append(np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'y']))
+        for r in self.data[self.con][self.mouseID]['Side'].index.get_level_values(level='Run').unique().astype(int):
+            x_l.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'x']))
+            y_r.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'y']))
 
         # L side
         x_L = np.mean(x_l)
@@ -95,10 +89,7 @@ class GetRealDistances:
         # R side
         y_R = np.mean(y_r)
 
-
-
-        side_rect_coords_ext = np.array(
-            [side_rect_coords[0], side_rect_coords[1], [x_L, y_R], side_rect_coords[2], side_rect_coords[3]])
+        # calculate missing x_R value
         side_angle = abs(np.rad2deg(np.arctan(slope_side)))
         angle = abs(np.rad2deg(np.arctan(slope)))
         internal_angle = 180 - (side_angle + angle)
@@ -107,45 +98,41 @@ class GetRealDistances:
 
         x_R = x_L + (y_R / new_slope)
 
-        # side_rect_coords_ext_rot = utils.Utils().Rotate2D(side_rect_coords_ext,
-        #                                                   np.array(
-        #                                                       [side_rect_coords_ext[4][0], side_rect_coords_ext[4][1]]),
-        #                                                   -angle)
-        # slope_top, intercept_top, _, _, _ = stats.linregress(
-        #     [side_rect_coords_ext_rot[4][0], side_rect_coords_ext_rot[3][0]],
-        #     [side_rect_coords_ext_rot[4][1], side_rect_coords_ext_rot[3][1]])
-        # y_L_rot = slope_top * x_L + intercept_top
-        # side_rect_coords_ext_rot_new = side_rect_coords_ext_rot.copy()
-        # side_rect_coords_ext_rot_new[2][1] = y_L_rot
-        # slope_side_rot, intercept_side_rot, _, _, _ = stats.linregress(
-        #     [side_rect_coords_ext_rot_new[4][0], side_rect_coords_ext_rot_new[0][0]],
-        #     [side_rect_coords_ext_rot_new[4][1], side_rect_coords_ext_rot_new[0][1]])
-        # diff = (slope_side_rot * -1 * side_rect_coords_ext_rot_new[4][0] + intercept_side_rot) - (
-        #             slope_side_rot * side_rect_coords_ext_rot_new[2][0] + intercept_side_rot)
-        # x_R = (y_R - (intercept_side_rot - diff)) / -slope_side_rot
+        coords = {
+            'L': {
+                'x': x_L,
+                'y': y_L
+            },
+            'R': {
+                'x': x_R,
+                'y': y_R
+            }
+        }
 
-        # angle_in_degrees = 90 - (180 - (
-        #             (180 - (abs() + abs(np.rad2deg(np.arctan(slope))))) - abs(
-        #         np.rad2deg(np.arctan(slope)))))
-        # # Convert angle to radians
-        # angle_in_radians = math.radians(angle_in_degrees)
-        # # Choose a specific y-coordinate where you want to find the corresponding x-coordinate
-        # specific_y = y_R  # Replace with the desired y-coordinate
-        # # Use the tangent function to find the slope
-        # new_slope = math.tan(angle_in_radians)
-        # # Use the slope to find the x-coordinate at the specific y-coordinate
-        # x_R = start_point[0] + specific_y / new_slope
+        return coords
 
-        # y dimension (aka depth of the travellator)
-        y_L = []
-        y_R = []
-        # x dimension (aka length of the travellator)
-        x_L = []
-        x_R = []
-        for r in self.data[self.con][self.mouseID][view].index.get_level_values(level='Run').unique().astype(int):
-            y_L.append(np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['TransitionL', 'y']))
-            x_L.append(np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'x']))
-            y_R.append(np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'y']))
+    def estimate_end_coordinates_front(self, rect): # rect= front_rect_coords
+        x_L = rect[2][0] + 20
+        x_R = rect[1][0] + 20
+
+        slope_r, intercept_r, _, _, _ = stats.linregress([rect[0][0], rect[1][0]], [rect[0][1], rect[1][1]])
+        slope_l, intercept_l, _, _, _ = stats.linregress([rect[2][0], rect[3][0]], [rect[2][1], rect[3][1]])
+
+        # extrapolate these slopes to y_L and y_R
+        y_L = slope_l*x_L + intercept_l
+        y_R = slope_r*x_R + intercept_r
+
+        coords = {
+            'L': {
+                'x': x_L,
+                'y': y_L
+            },
+            'R': {
+                'x': x_R,
+                'y': y_R
+            }
+        }
+        return coords
 
     def assign_coordinates(self):
         """
@@ -157,18 +144,20 @@ class GetRealDistances:
         start_coords_side = self.get_belt_coordinates(position='start', view='Side')
         trans_coords_side = self.get_belt_coordinates(position='trans', view='Side')
 
+        start_coords_side['L']['y'] = start_coords_side['L']['y'] + 2
+
         s = {
             '0': {'x': start_coords_side['R']['x'], 'y': start_coords_side['R']['y']},
-            '1': {'x': start_coords_side['L']['x'], 'y': start_coords_side['L']['y']},
+            '1': {'x': trans_coords_side['R']['x'], 'y': trans_coords_side['R']['y']},
             '2': {'x': trans_coords_side['L']['x'], 'y': trans_coords_side['L']['y']},
-            '3': {'x': trans_coords_side['R']['x'], 'y': trans_coords_side['R']['y']}
+            '3': {'x': start_coords_side['L']['x'], 'y': start_coords_side['L']['y']}
         }
 
         f = {
             '0': {'x': start_coords_front['R']['x'], 'y':  start_coords_front['R']['y']},
-            '1': {'x': start_coords_front['L']['x'], 'y': start_coords_front['L']['y']},
+            '1': {'x': trans_coords_front['R']['x'], 'y':  trans_coords_front['R']['y']},
             '2': {'x': trans_coords_front['L']['x'], 'y': trans_coords_front['L']['y']},
-            '3': {'x': trans_coords_front['R']['x'], 'y':  trans_coords_front['R']['y']}
+            '3': {'x': start_coords_front['L']['x'], 'y': start_coords_front['L']['y']}
         }
 
         return s, f
@@ -252,13 +241,16 @@ class GetRealDistances:
 
         s, f = self.assign_coordinates()
 
-        side_rect_coords = np.array([[s['0']['x'], s['0']['y']], [s['3']['x'], s['3']['y']], [s['2']['x'], s['2']['y']], [s['1']['x'], s['1']['y'] + 2]])
-        front_rect_coords = np.array([[f['0']['y'], f['0']['x']], [f['3']['y'], f['3']['x']], [f['2']['y'], f['2']['x']], [f['1']['y'], f['1']['x']]])
+        # side_rect_coords = np.array([[s['0']['x'], s['0']['y']], [s['1']['x'], s['1']['y']+ 2], [s['2']['x'], s['2']['y']], [s['3']['x'], s['3']['y']]])
+        # front_rect_coords = np.array([[f['0']['y'], f['0']['x']], [f['1']['y'], f['1']['x']], [f['2']['y'], f['2']['x']], [f['3']['y'], f['3']['x']]])
+        side_rect_coords = np.array([(point['x'], point['y']) for point in s.values()])
+        front_rect_coords = np.array([(point['y'], point['x']) for point in f.values()])
 
-        # slope, _, _, _, _ = stats.linregress([side_rect_coords[0][0], side_rect_coords[1][0]],
-        #                                      [side_rect_coords[0][1], side_rect_coords[1][1]])
-        # angle = np.arctan(slope)
-        # side_rect_coords_rot = utils.Utils().Rotate2D(side_rect_coords, np.array([side_rect_coords[0][0], side_rect_coords[0][1]]), -angle)
+        side_end = self.estimate_end_coordinates_side(side_rect_coords)
+        front_end = self.estimate_end_coordinates_front(front_rect_coords)
+
+        side_rect_coords = np.insert(side_rect_coords,2,np.array([[side_end['R']['x'], side_end['R']['y']], [side_end['L']['x'], side_end['L']['y']]]), axis=0)
+        front_rect_coords = np.insert(front_rect_coords,2,np.array([[front_end['R']['x'], front_end['R']['y']], [front_end['L']['x'], front_end['L']['y']]]), axis=0)
 
         x, y = [], []
         if view == 'Side':

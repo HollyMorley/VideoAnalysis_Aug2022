@@ -1,6 +1,6 @@
 import cv2
 import matplotlib.pyplot as plt
-import Locomotion
+from Archive import Locomotion
 from Helpers import GetRuns
 from Helpers import utils
 import Plot
@@ -9,15 +9,15 @@ import numpy as np
 #######################################################################################################################
 #######################################################################################################################
 ######################### CONFIGURATIONS ##############################
-video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_front_1.avi"
+video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
 conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
 con = conditions[0]
 mouseID = 'FAA-1035243'
 already_loco_analysed = True
 
 ###################### UPDATE EVERY TRIAL ############################
-view = 'Front'
-frame_num = 6809
+view = 'Side'
+frame_num = 228060
 target_limb = 'ForepawToeR'
 
 #######################################################################################################################

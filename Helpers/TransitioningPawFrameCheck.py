@@ -1,9 +1,8 @@
 import cv2
 import matplotlib.pyplot as plt
-import Locomotion
+from Archive import Locomotion
 from Helpers import GetRuns
 from Helpers import utils
-import Plot
 import numpy as np
 
 #######################################################################################################################

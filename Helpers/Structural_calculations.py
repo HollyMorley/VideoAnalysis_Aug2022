@@ -68,13 +68,11 @@ class GetRealDistances:
 
         return coords
 
-    def estimate_end_coordinates_side(self, rect): #rect = side_rect_coords
-        slope, _, _, _, _ = stats.linregress([rect[3][0], rect[2][0]],
-                                             [rect[3][1], rect[2][1]])
-        slope_top, intercept_top, _, _, _ = stats.linregress([rect[3][0], rect[2][0]],
-                                                             [rect[3][1], rect[2][1]])
-        slope_side, _, _, _, _ = stats.linregress([rect[3][0], rect[0][0]],
-                                                  [rect[3][1], rect[0][1]])
+    def estimate_end_coordinates_side(self, start, trans): #rect = side_rect_coords
+        slope, intercept, _, _, _ = stats.linregress([start['L']['x'], trans['L']['x']],
+                                             [start['L']['y'], trans['L']['y']])
+        slope_side, _, _, _, _ = stats.linregress([start['L']['x'], start['R']['x']],
+                                                  [start['L']['y'], start['R']['y']])
 
         x_l = []
         y_r = []
@@ -84,7 +82,7 @@ class GetRealDistances:
 
         # L side
         x_L = np.mean(x_l)
-        y_L = slope_top * x_L + intercept_top
+        y_L = slope * x_L + intercept
 
         # R side
         y_R = np.mean(y_r)
@@ -111,12 +109,38 @@ class GetRealDistances:
 
         return coords
 
-    def estimate_end_coordinates_front(self, rect): # rect= front_rect_coords
-        x_L = rect[2][0] + 20
-        x_R = rect[1][0] + 20
+    def estimate_end_coordinates_front(self, start, trans): # rect= front_rect_coords
+        x_L = trans['L']['y'] + 20
+        x_R = trans['R']['y'] + 20
 
-        slope_r, intercept_r, _, _, _ = stats.linregress([rect[0][0], rect[1][0]], [rect[0][1], rect[1][1]])
-        slope_l, intercept_l, _, _, _ = stats.linregress([rect[2][0], rect[3][0]], [rect[2][1], rect[3][1]])
+        slope_r, intercept_r, _, _, _ = stats.linregress([start['R']['y'], trans['R']['y']],
+                                                         [start['R']['x'], trans['R']['x']])
+        slope_l, intercept_l, _, _, _ = stats.linregress([start['L']['y'], trans['L']['y']],
+                                                         [start['L']['x'], trans['L']['x']])
+        # extrapolate these slopes to y_L and y_R
+        y_L = slope_l*x_L + intercept_l
+        y_R = slope_r*x_R + intercept_r
+
+        coords = {
+            'L': {
+                'x': y_L,
+                'y': x_L
+            },
+            'R': {
+                'x': y_R,
+                'y': x_R
+            }
+        }
+        return coords
+
+    def estimate_end_coordinates_overhead(self, start, trans):
+        x_L = trans['L']['x'] + 200
+        x_R = trans['R']['x'] + 200
+
+        slope_r, intercept_r, _, _, _ = stats.linregress([start['R']['x'], trans['R']['x']],
+                                                         [start['R']['y'], trans['R']['y']])
+        slope_l, intercept_l, _, _, _ = stats.linregress([start['L']['x'], trans['L']['x']],
+                                                         [start['L']['y'], trans['L']['y']])
 
         # extrapolate these slopes to y_L and y_R
         y_L = slope_l*x_L + intercept_l
@@ -143,24 +167,43 @@ class GetRealDistances:
         trans_coords_front = self.get_belt_coordinates(position='trans', view='Front')
         start_coords_side = self.get_belt_coordinates(position='start', view='Side')
         trans_coords_side = self.get_belt_coordinates(position='trans', view='Side')
+        start_coords_overhead = self.get_belt_coordinates(position='start', view='Overhead')
+        trans_coords_overhead = self.get_belt_coordinates(position='trans', view='Overhead')
 
         start_coords_side['L']['y'] = start_coords_side['L']['y'] + 2
+
+        end_coords_front = self.estimate_end_coordinates_front(start_coords_front, trans_coords_front)
+        end_coords_side = self.estimate_end_coordinates_side(start_coords_side, trans_coords_side)
+        end_coords_overhead = self.estimate_end_coordinates_overhead(start_coords_overhead, trans_coords_overhead)
 
         s = {
             '0': {'x': start_coords_side['R']['x'], 'y': start_coords_side['R']['y']},
             '1': {'x': trans_coords_side['R']['x'], 'y': trans_coords_side['R']['y']},
-            '2': {'x': trans_coords_side['L']['x'], 'y': trans_coords_side['L']['y']},
-            '3': {'x': start_coords_side['L']['x'], 'y': start_coords_side['L']['y']}
+            '2': {'x': end_coords_side['R']['x'], 'y': end_coords_side['R']['y']},
+            '3': {'x': end_coords_side['L']['x'], 'y': end_coords_side['L']['y']},
+            '4': {'x': trans_coords_side['L']['x'], 'y': trans_coords_side['L']['y']},
+            '5': {'x': start_coords_side['L']['x'], 'y': start_coords_side['L']['y']}
         }
 
         f = {
             '0': {'x': start_coords_front['R']['x'], 'y':  start_coords_front['R']['y']},
             '1': {'x': trans_coords_front['R']['x'], 'y':  trans_coords_front['R']['y']},
-            '2': {'x': trans_coords_front['L']['x'], 'y': trans_coords_front['L']['y']},
-            '3': {'x': start_coords_front['L']['x'], 'y': start_coords_front['L']['y']}
+            '2': {'x': end_coords_front['R']['x'], 'y': end_coords_front['R']['y']},
+            '3': {'x': end_coords_front['L']['x'], 'y': end_coords_front['L']['y']},
+            '4': {'x': trans_coords_front['L']['x'], 'y': trans_coords_front['L']['y']},
+            '5': {'x': start_coords_front['L']['x'], 'y': start_coords_front['L']['y']}
         }
 
-        return s, f
+        o = {
+            '0': {'x': start_coords_overhead['R']['x'], 'y': start_coords_overhead['R']['y']},
+            '1': {'x': trans_coords_overhead['R']['x'], 'y': trans_coords_overhead['R']['y']},
+            '2': {'x': end_coords_overhead['R']['x'], 'y': end_coords_overhead['R']['y']},
+            '3': {'x': end_coords_overhead['L']['x'], 'y': end_coords_overhead['L']['y']},
+            '4': {'x': trans_coords_overhead['L']['x'], 'y': trans_coords_overhead['L']['y']},
+            '5': {'x': start_coords_overhead['L']['x'], 'y': start_coords_overhead['L']['y']}
+        }
+
+        return s, f, o
 
     def calculate_pixel_size(self, left, right, real_size):
         """
@@ -206,12 +249,12 @@ class GetRealDistances:
             depth = structural_stuff['belt_length_sideviewrange']
             width = structural_stuff['belt_width']
             near_px_size = self.calculate_pixel_size(left=fs['3']['x'], right=fs['2']['x'], real_size=width)
-            far_px_size = self.calculate_pixel_size(left=fs['0']['x'], right=fs['1']['x'], real_size=width)
+            far_px_size = self.calculate_pixel_size(left=fs['5']['x'], right=fs['0']['x'], real_size=width)
         elif view == 'Side':
             depth = structural_stuff['belt_width']
             width = structural_stuff['belt_length_sideviewrange']
-            near_px_size = self.calculate_pixel_size(left=fs['0']['x'], right=fs['3']['x'], real_size=width)
-            far_px_size = self.calculate_pixel_size(left=fs['1']['x'], right=fs['2']['x'], real_size=width)
+            near_px_size = self.calculate_pixel_size(left=fs['0']['x'], right=fs['2']['x'], real_size=width)
+            far_px_size = self.calculate_pixel_size(left=fs['5']['x'], right=fs['3']['x'], real_size=width)
         slope, intercept, r_value, p_value, std_err = stats.linregress([0, depth], [far_px_size, near_px_size])
         pixel_sizes = []
         for n in np.arange(0, depth):
@@ -227,7 +270,7 @@ class GetRealDistances:
     def get_warped_grid_coordinates(self, view):
         """
         Get warped grid coordinates for either front or side view of belt
-        :param view: 'front' or 'side'
+        :param view: 'front', 'side' or 'overhead'
         :return: x and y coordinates
         """
         standard_rect_coords = np.array([[0, 0],
@@ -239,37 +282,34 @@ class GetRealDistances:
         grid = np.array([[[x], [y], [z]] for x in range(structural_stuff['belt_length_sideviewrange']) for y in
                 range(structural_stuff['belt_width']) for z in [1]])
 
-        s, f = self.assign_coordinates()
-
-        # side_rect_coords = np.array([[s['0']['x'], s['0']['y']], [s['1']['x'], s['1']['y']+ 2], [s['2']['x'], s['2']['y']], [s['3']['x'], s['3']['y']]])
-        # front_rect_coords = np.array([[f['0']['y'], f['0']['x']], [f['1']['y'], f['1']['x']], [f['2']['y'], f['2']['x']], [f['3']['y'], f['3']['x']]])
-        side_rect_coords = np.array([(point['x'], point['y']) for point in s.values()])
-        front_rect_coords = np.array([(point['y'], point['x']) for point in f.values()])
-
-        side_end = self.estimate_end_coordinates_side(side_rect_coords)
-        front_end = self.estimate_end_coordinates_front(front_rect_coords)
-
-        side_rect_coords = np.insert(side_rect_coords,2,np.array([[side_end['R']['x'], side_end['R']['y']], [side_end['L']['x'], side_end['L']['y']]]), axis=0)
-        front_rect_coords = np.insert(front_rect_coords,2,np.array([[front_end['R']['x'], front_end['R']['y']], [front_end['L']['x'], front_end['L']['y']]]), axis=0)
+        s, f, o = self.assign_coordinates()
 
         x, y = [], []
         if view == 'Side':
-            # x, y = self.get_transformed_xy_of_point(standard_rect_coords,side_rect_coords_rot,grid)
+            side_rect_coords = np.array([(point['x'], point['y']) for point in s.values()])
             x, y = self.get_transformed_xy_of_point(standard_rect_coords, side_rect_coords, grid)
         elif view == 'Front':
-            x, y = self.get_transformed_xy_of_point(standard_rect_coords,front_rect_coords,grid) # switched to rotate the view to same orientation
+            front_rect_coords = np.array([(point['y'], point['x']) for point in f.values()])  # switched to rotate the view to same orientation
+            x, y = self.get_transformed_xy_of_point(standard_rect_coords,front_rect_coords,grid)
+        elif view == 'Overhead':
+            overhead_rect_coords = np.array([(point['x'], point['y']) for point in o.values()])
+            x, y = self.get_transformed_xy_of_point(standard_rect_coords, overhead_rect_coords, grid)
 
         return x, y
 
-    def map_pixel_sizes_to_belt(self, view):
+    def map_pixel_sizes_to_belt(self, view, yref='Front'):
         """
         Use triangulation to construct map of how pixel size changes across the flat camera field
         :return:
         """
         x, _ = self.get_warped_grid_coordinates(view='Side')
-        _, y = self.get_warped_grid_coordinates(view='Front')
+        if yref == 'Front':
+            _, y = self.get_warped_grid_coordinates(view='Front')
+        elif yref == 'Overhead':
+            _, y = self.get_warped_grid_coordinates(view='Overhead')
 
-        s, f = self.assign_coordinates()
+
+        s, f, _ = self.assign_coordinates()
         fs = []
         if view == 'Front':
             fs = f
@@ -287,19 +327,29 @@ class GetRealDistances:
     def find_interpolated_pixel_size(self, x, y, pixel_sizes, triang):
         """
         Uses previously computed map of pixel size to find true pixel size at any point in field of view
-        :param x: target x coordinate
-        :param y: target y coordinate
+        :param x: target x coordinate/s (as array)
+        :param y: target y coordinate/s (as array)
         :param pixel_sizes: array of pixel sizes in rows through length (x) of the belt
         :param triang: triangulation of the pixel size data
         :return: closest found pixel size
         """
-        # Find the index of the closest point in the triangulation
-        index = np.argmin((triang.x - x) ** 2 + (triang.y - y) ** 2)
-
-        # Get the interpolated pixel size for the closest point
-        interpolated_pixel_size = pixel_sizes[index]
+        # interpolated_pixel_size = pixel_sizes[index]
+        coordinates = np.column_stack((triang.x, triang.y))
+        # Create a 2D array of (x, y) coordinates from x_values and y_values
+        query_coordinates = np.column_stack((x, y))
+        # Calculate the squared distance for all points
+        distances_squared = np.sum((coordinates[:, np.newaxis, :] - query_coordinates) ** 2, axis=2)
+        # Find the index of the minimum distance for each point in x_values and y_values
+        indices = np.argmin(distances_squared, axis=0)
+        # Get the interpolated pixel size for each closest point
+        interpolated_pixel_size = pixel_sizes[indices]
 
         return interpolated_pixel_size
+
+
+class create_real_space_dataframes:
+    def convert_px_to_mm_WHOLE_DF(self, conditions):
+        data = utils.Utils().GetDFs(conditions, reindexed_loco=False)
 
 
 

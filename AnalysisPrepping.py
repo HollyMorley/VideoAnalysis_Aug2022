@@ -1,7 +1,7 @@
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Helpers import GetRuns
-import Velocity
+from Archive import Velocity
 import numpy as np
 import pandas as pd
 import scipy
@@ -145,7 +145,7 @@ class PrepByRunphase:
         """
         windowsize = math.ceil((fps / n) / 2.) * 2
         markerstuff = GetRuns.GetRuns().findMarkers(data[self.con][self.mouseID][self.view])
-        vel = Velocity.Velocity().getVelocityInfo(data, self.con, self.mouseID, zeroed=True, view=self.view,xaxis='time', windowsize=windowsize, markerstuff=markerstuff, f=[self.r])
+        vel = Velocity.Velocity().getVelocityInfo(data, self.con, self.mouseID, zeroed=True, view=self.view, xaxis='time', windowsize=windowsize, markerstuff=markerstuff, f=[self.r])
         window = None
         cm_travelled = None
         p0 = None

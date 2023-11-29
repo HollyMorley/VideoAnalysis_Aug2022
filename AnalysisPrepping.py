@@ -1,7 +1,8 @@
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Helpers import GetRuns
-from Archive import Velocity
+import Velocity_v2 as Velocity
+from Helpers import Structural_calculations
 import numpy as np
 import pandas as pd
 import scipy
@@ -133,7 +134,7 @@ class PrepByRunphase:
         }
         return results
 
-    def find_phase_speed_based(self, data, n=30, excl_speedup=True, return_distance=False, return_position=False):
+    def find_phase_speed_based(self, data, triang, pixel_sizes, n=30, excl_speedup=True, return_distance=False, return_position=False):
         """
         function to find the frames for each run phase based on the period where the mouse slows down
         :param data:
@@ -144,8 +145,15 @@ class PrepByRunphase:
         :return:
         """
         windowsize = math.ceil((fps / n) / 2.) * 2
-        markerstuff = GetRuns.GetRuns().findMarkers(data[self.con][self.mouseID][self.view])
-        vel = Velocity.Velocity().getVelocityInfo(data, self.con, self.mouseID, zeroed=True, view=self.view, xaxis='time', windowsize=windowsize, markerstuff=markerstuff, f=[self.r])
+        #triang_o, pixel_sizes_o = Structural_calculations.GetRealDistances(self.data, self.con,self.mouseID).map_pixel_sizes_to_belt('Side','Overhead')
+        vel = Velocity.Velocity(self.data, self.con, self.mouseID).getVelocityInfo(
+                            vel_zeroed=True,
+                            xaxis='time',
+                            f=[self.r],
+                            windowsize=windowsize,
+                            triang=triang,
+                            pixel_sizes=pixel_sizes)
+
         window = None
         cm_travelled = None
         p0 = None
@@ -212,9 +220,13 @@ class PrepByRunphase:
         return phase_info # dict
 
 
-class PrepByStepCycle:
-    def __init__(self, phase):
-        self.phase = phase
+class PrepByStride:
+    def __init__(self, data, con, mouseID):
+        self.data = data
+        self.con = con
+        self.mouseID = mouseID
+
+
 
 
 

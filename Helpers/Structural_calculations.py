@@ -308,7 +308,6 @@ class GetRealDistances:
         elif yref == 'Overhead':
             _, y = self.get_warped_grid_coordinates(view='Overhead')
 
-
         s, f, _ = self.assign_coordinates()
         fs = []
         if view == 'Front':

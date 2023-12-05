@@ -53,7 +53,7 @@ settings = {
 }
 paths = {
         'filtereddata_folder': r"M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round2_Jan23",
-        'plotting_destfolder': r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\July23'
+        'plotting_destfolder': r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Nov23'
 }
 micestuff = {
     'mice_ID': [
@@ -73,3 +73,17 @@ micestuff = {
         'MLR'
     ]
 }
+
+measure_list = {
+    'limb': ['walking_speed','stride_duration','cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
+    'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'
+    'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
+    #'behavioural': ['wait_time','no_rbs','transitioning_limb']
+}
+#
+# measure_list = {
+#      'limb': ['walking_speed','stride_duration'] #,'cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
+# #     'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'
+# #     'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
+# #     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
+# }

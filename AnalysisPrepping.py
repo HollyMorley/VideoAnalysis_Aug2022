@@ -18,28 +18,29 @@ class PrepByRunphase:
         self.view = view
         self.r = r
 
-    @staticmethod
-    def picking_left_or_right(limb, comparison):
-        """
-        Function to return limb side given the side of the limb of interest and whether interested in contra- or ipsi-
-        lateral limb
-        :param limb: name of limb, eg 'L' or 'ForepawToeL'. Important thing is the format ends with the limb side L or R
-        :param comparison: contr or ipsi
-        :return: 'l' or 'r'
-        """
-        options = {
-            'L': {
-                'contr': 'R',
-                'ipsi': 'L'
-            },
-            'R': {
-                'contr': 'L',
-                'ipsi': 'R'
-            }
-        }
-        limb_lr = limb[-1]
-
-        return options[limb_lr][comparison]
+    ### moved to utils
+    #@staticmethod
+    # def picking_left_or_right(limb, comparison):
+    #     """
+    #     Function to return limb side given the side of the limb of interest and whether interested in contra- or ipsi-
+    #     lateral limb
+    #     :param limb: name of limb, eg 'L' or 'ForepawToeL'. Important thing is the format ends with the limb side L or R
+    #     :param comparison: contr or ipsi
+    #     :return: 'l' or 'r'
+    #     """
+    #     options = {
+    #         'L': {
+    #             'contr': 'R',
+    #             'ipsi': 'L'
+    #         },
+    #         'R': {
+    #             'contr': 'L',
+    #             'ipsi': 'R'
+    #         }
+    #     }
+    #     limb_lr = limb[-1]
+    #
+    #     return options[limb_lr][comparison]
 
     @staticmethod
     def get_distance_travelled_during_frames(df_slice, window):

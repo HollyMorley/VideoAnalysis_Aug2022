@@ -4,6 +4,7 @@ from Helpers import utils
 import numpy as np
 import pandas as pd
 import warnings
+import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -298,7 +299,43 @@ class plotting(): # currently not compatible for extended experiments
         if plot_type == 'discreet_strideXrun' and len(measures) == 1:
             self.plot_discrete_measures_singlecon_strideXrun(measures) #
 
-    def plot_discrete_measures_singlecon_strideXrun(self, measures, chunk_size=10):
+    def plot_discrete_measures_singlecon_strideXrun(self, measures, stride_no, run_nos, chunk_size, measure_list_flat):
+        blues = utils.Utils().get_cmap((run_nos[0] // chunk_size) + 2, 'Blues')
+        reds = utils.Utils().get_cmap((run_nos[1] // chunk_size) + 2, 'Reds')
+        greens = utils.Utils().get_cmap((run_nos[2] // chunk_size) + 2, 'Greens')
+        colors = np.vstack((blues, reds, greens))
+
+        for m in measure_list_flat:
+            fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+
+            for i in range(0, len(run_nos)):
+                measure_mean = []
+                color_mean = []
+                for ridx, r in enumerate(np.arange(run_nos_filled[i], run_nos_filled[i + 1])):
+                    gradient = 1 / (run_nos_filled[i + 1] - run_nos_filled[i])
+                    measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
+                    measure_mean.append(measure)
+                    color_mean.append(colors[i][0]((ridx // chunk_size) + 1))
+                    ax.plot(stride_no, measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5, linewidth=1)
+                for c in range(run_nos[i] // chunk_size):
+                    mean = pd.concat(measure_mean[chunk_size * c:chunk_size * (c + 1)]).groupby('Stride').mean()
+                    label = '%s_%s' % (expstuff['exp_chunks']['ExpPhases'][i], c)
+                    ax.plot(stride_no, mean, color=colors[i][0](c + 1), linewidth=4, alpha=1, label=label)
+
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
+                        measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
+            ax.set_xticks(stride_no)
+            ax.set_xlabel('Stride number')
+            ax.axvline(0, alpha=0.5, color='black', linestyle='--')
+            fig.legend()
+            fig.suptitle('')  # Clear the default supertitle
+            fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
+            fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
+
+
+    def saveplots_discrete_measures_singlecon_strideXrun(self, measures, chunk_size=10, all_days_mean=False):
         """
         Plots measures from a single condition with stride on x-axis and a single line for each run.
         If measures for multiple conditions given it will save multiple plots.
@@ -307,35 +344,115 @@ class plotting(): # currently not compatible for extended experiments
         stride_no = [-3, -2, -1, 0, 1]
         measure_list_flat = [value for sublist in measure_list.values() for value in sublist]
 
-        for con in self.conditions:
-            conname = con.split('_')[0]
-            run_nos = expstuff['condition_exp_lengths']['%sRuns' %conname]
-            run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum() #+ prepruns
-            prepruns = 5 if 'HighLow' in con else 2
-            mice = list(measures[con].index.get_level_values(level='MouseID').unique())
+        if not all_days_mean:
+            for con in self.conditions:
+                segments = con.split('_')
+                if 'Day' not in con and 'Wash' not in con:
+                    conname, speed = segments[0:2]
+                    plot_filepath = r'%s\%s_%s' % (paths['plotting_destfolder'], conname, speed)
+                else:
+                    conname, speed, repeat, wash, day = segments
+                    plot_filepath = r'%s\%s_%s\%s\%s\%s' % (paths['plotting_destfolder'], conname, speed, repeat, wash, day)
 
-            # colors = [['blue'] * run_nos[0], ['red'] * run_nos[1], ['green'] * run_nos[2]]
-            # colors = [item for sublist in colors for item in sublist]
-            blues = utils.Utils().get_cmap((run_nos[0]//chunk_size) + 2, 'Blues')
-            reds = utils.Utils().get_cmap((run_nos[1]//chunk_size) + 2, 'Reds')
-            greens = utils.Utils().get_cmap((run_nos[2]//chunk_size) + 2, 'Greens')
+                prepruns = 5 if 'HighLow' in con else 2
+                run_nos = expstuff['condition_exp_lengths']['%sRuns' %conname]
+                run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum() #+ prepruns
+
+                self.plot_discrete_measures_singlecon_strideXrun(measures=measures[con],stride_no=stride_no,run_nos=run_nos,chunk_size=chunk_size,measure_list_flat=measure_list_flat)
+
+                # blues = utils.Utils().get_cmap((run_nos[0]//chunk_size) + 2, 'Blues')
+                # reds = utils.Utils().get_cmap((run_nos[1]//chunk_size) + 2, 'Reds')
+                # greens = utils.Utils().get_cmap((run_nos[2]//chunk_size) + 2, 'Greens')
+                # colors = np.vstack((blues, reds, greens))
+                #
+                # for m in measure_list_flat:
+                #     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+                #
+                #     for i in range(0, len(run_nos)):
+                #         measure_mean = []
+                #         color_mean = []
+                #         for ridx, r in enumerate(np.arange(run_nos_filled[i],run_nos_filled[i+1])):
+                #             gradient = 1/(run_nos_filled[i+1] - run_nos_filled[i])
+                #             measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
+                #             measure_mean.append(measure)
+                #             color_mean.append(colors[i][0]((ridx//chunk_size)+1))
+                #             ax.plot(stride_no, measure, color=colors[i][0]((ridx//chunk_size)+1), alpha=0.5, linewidth=1)
+                #         for c in range(run_nos[i]//chunk_size):
+                #             mean = pd.concat(measure_mean[chunk_size*c:chunk_size*(c+1)]).groupby('Stride').mean()
+                #             label = '%s_%s' %(expstuff['exp_chunks']['ExpPhases'][i], c)
+                #             ax.plot(stride_no, mean, color=colors[i][0](c+1), linewidth=4, alpha=1, label=label)
+                #
+                #     ax.spines['right'].set_visible(False)
+                #     ax.spines['top'].set_visible(False)
+                #     ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
+                #                 measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
+                #     ax.set_xticks(stride_no)
+                #     ax.set_xlabel('Stride number')
+                #     ax.axvline(0, alpha=0.5, color='black', linestyle='--')
+                #     fig.legend()
+                #     fig.suptitle('')  # Clear the default supertitle
+                #     fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
+                #     fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
+
+                    if not os.path.exists(plot_filepath):
+                        os.makedirs(plot_filepath)
+                    plt.savefig(r'%s\StrideNoXRun_%s.png' % (plot_filepath, m),
+                                bbox_inches='tight', transparent=False, format='png')
+        else:
+            measures_all = pd.concat(measures.values(), keys=measures.keys())
+            segments = con.split('_')
+            if 'Day' not in con and 'Wash' not in con:
+                conname, speed = segments[0:2]
+                plot_filepath = r'%s\%s_%s' % (paths['plotting_destfolder'], conname, speed)
+            else:
+                conname, speed, repeat, wash, day = segments
+                plot_filepath = r'%s\%s_%s\%s\%s\%s' % (paths['plotting_destfolder'], conname, speed, repeat, wash, day)
+
+            prepruns = 5 if 'HighLow' in con else 2
+            run_nos = expstuff['condition_exp_lengths']['%sRuns' % conname]
+            run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum()  # + prepruns
+
+            blues = utils.Utils().get_cmap((run_nos[0] // chunk_size) + 2, 'Blues')
+            reds = utils.Utils().get_cmap((run_nos[1] // chunk_size) + 2, 'Reds')
+            greens = utils.Utils().get_cmap((run_nos[2] // chunk_size) + 2, 'Greens')
             colors = np.vstack((blues, reds, greens))
 
             for m in measure_list_flat:
-                # for mouseID in mice:
                 fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
                 for i in range(0, len(run_nos)):
                     measure_mean = []
                     color_mean = []
-                    for ridx, r in enumerate(np.arange(run_nos_filled[i],run_nos_filled[i+1])):
-                        gradient = 1/(run_nos_filled[i+1] - run_nos_filled[i])
+                    for ridx, r in enumerate(np.arange(run_nos_filled[i], run_nos_filled[i + 1])):
+                        gradient = 1 / (run_nos_filled[i + 1] - run_nos_filled[i])
                         measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
                         measure_mean.append(measure)
-                        color_mean.append(colors[i][0]((ridx//chunk_size)+1))
-                        ax.plot(stride_no, measure, color=colors[i][0]((ridx//chunk_size)+1), alpha=0.5, linewidth=1)
-                    mean = pd.concat(measure_mean).groupby('Stride').mean()
-                    ax.plot(stride_no, mean, color='red', linewidth=2, alpha=1, label='apa')
+                        color_mean.append(colors[i][0]((ridx // chunk_size) + 1))
+                        ax.plot(stride_no, measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5,
+                                linewidth=1)
+                    for c in range(run_nos[i] // chunk_size):
+                        mean = pd.concat(measure_mean[chunk_size * c:chunk_size * (c + 1)]).groupby('Stride').mean()
+                        label = '%s_%s' % (expstuff['exp_chunks']['ExpPhases'][i], c)
+                        ax.plot(stride_no, mean, color=colors[i][0](c + 1), linewidth=4, alpha=1, label=label)
+
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
+                            measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
+                ax.set_xticks(stride_no)
+                ax.set_xlabel('Stride number')
+                ax.axvline(0, alpha=0.5, color='black', linestyle='--')
+                fig.legend()
+                fig.suptitle('')  # Clear the default supertitle
+                fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
+                fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
+
+                if not os.path.exists(plot_filepath):
+                    os.makedirs(plot_filepath)
+                plt.savefig(r'%s\StrideNoXRun_%s.png' % (plot_filepath, m),
+                            bbox_inches='tight', transparent=False, format='png')
+
+
 
     def plot_discrete_measures_runXstride(self,df, mean_only=True):
         mice = list(df.index.get_level_values(level='MouseID').unique())

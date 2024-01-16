@@ -1,6 +1,8 @@
 from Helpers.Config_23 import *
 from Helpers import Structural_calculations
 from Helpers import utils
+#from scipy.stats import skew, shapiro, levene
+import scipy.stats as stats
 import numpy as np
 import pandas as pd
 import warnings
@@ -22,8 +24,17 @@ class CalculateMeasuresByStride():
         # calculate sumarised dataframes
         df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']]
         df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']]
-        self.df_s = df_s.droplevel(['Run', 'RunStage'])
-        self.df_f = df_f.droplevel(['Run', 'RunStage'])
+        # self.df_s = df_s.droplevel(['Run', 'RunStage'])
+        # self.df_f = df_f.droplevel(['Run', 'RunStage'])
+
+    def get_data_summary(self, limb_type):
+        limb_data = self.data[self.con][self.mouseID][limb_type].loc(axis=0)[
+            self.r, ['RunStart', 'Transition', 'RunEnd']]
+        return limb_data.droplevel(['Run', 'RunStage'])
+
+    def get_data_chunk(self, limb_type):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        return data_chunk.loc(axis=1)[self.stepping_limb, limb_type]
 
     def stride_duration(self): # ms
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
@@ -151,6 +162,7 @@ class CalculateMeasuresByStride():
         return results_mean
 
     def body_length_swing(self): # px
+        # todo reduce size of these functions
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 1
         back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
@@ -163,6 +175,288 @@ class CalculateMeasuresByStride():
         results_mean = results.mean()
         return results_mean
 
+    def back_skew_stance(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 0
+        slope, intercept = self.get_belt_line()
+        back_mask = (data_chunk.loc(axis=1)[
+                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                         'Back11',
+                         'Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
+        belt_heights = (data_chunk.loc(axis=1)[
+                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        back_heights = data_chunk.loc(axis=1)[
+            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
+             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        mult = np.arange(1, 13)
+        true_back_height = belt_heights - back_heights
+        com = (true_back_height*mult).sum(axis=1)/true_back_height.sum(axis=1)
+        result = np.median(mult) - com
+        result_mean = np.mean(result)
+        return result_mean
+
+    def back_skew_swing(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 1
+        slope, intercept = self.get_belt_line()
+        back_mask = (data_chunk.loc(axis=1)[
+                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                         'Back11',
+                         'Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
+        belt_heights = (data_chunk.loc(axis=1)[
+                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        back_heights = data_chunk.loc(axis=1)[
+            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
+             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        mult = np.arange(1, 13)
+        true_back_height = belt_heights - back_heights
+        com = (true_back_height*mult).sum(axis=1)/true_back_height.sum(axis=1)
+        result = np.median(mult) - com
+        result_mean = np.mean(result)
+        return result_mean
+
+    def back_curvature_stance(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 0
+        slope, intercept = self.get_belt_line()
+        back_mask = (data_chunk.loc(axis=1)[
+                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                         'Back11','Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
+        belt_heights = (data_chunk.loc(axis=1)[
+                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        back_heights = data_chunk.loc(axis=1)[
+            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
+             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        true_back_height = belt_heights - back_heights
+        result = true_back_height.mean(axis=0)
+        return result
+
+    def body_tilt_stance(self): # positive means back12 is lower than back1
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
+        back_mask = back1_mask & back12_mask
+        mask = back_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        backx = data_chunk.loc(axis=1)[['Back1','Back12'], 'x'][mask].droplevel('coords',axis=1)
+        backy = data_chunk.loc(axis=1)[['Back1','Back12'], 'y'][mask]
+        belty = backx*slope_belt + intercept_belt
+        true_backy = belty - backy.droplevel('coords',axis=1)
+
+        slope = (true_backy.loc(axis=1)['Back1'] - true_backy.loc(axis=1)['Back12'])/(backx.loc(axis=1)['Back1'] - backx.loc(axis=1)['Back12'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def body_tilt_swing(self):  # positive means back12 is lower than back1
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
+        back_mask = back1_mask & back12_mask
+        mask = back_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        backx = data_chunk.loc(axis=1)[['Back1', 'Back12'], 'x'][mask].droplevel('coords', axis=1)
+        backy = data_chunk.loc(axis=1)[['Back1', 'Back12'], 'y'][mask]
+        belty = backx * slope_belt + intercept_belt
+        true_backy = belty - backy.droplevel('coords', axis=1)
+
+        slope = (true_backy.loc(axis=1)['Back1'] - true_backy.loc(axis=1)['Back12']) / (
+                    backx.loc(axis=1)['Back1'] - backx.loc(axis=1)['Back12'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def head_tilt_stance(self):  # positive means back12 is lower than back1
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        nose_mask = data_chunk.loc(axis=1)['Nose', 'likelihood'] > pcutoff
+        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        head_mask = back1_mask & nose_mask
+        mask = head_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        headx = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'x'][mask].droplevel('coords', axis=1)
+        heady = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'y'][mask]
+        belty = headx * slope_belt + intercept_belt
+        true_heady = belty - heady.droplevel('coords', axis=1)
+
+        slope = (true_heady.loc(axis=1)['Nose'] - true_heady.loc(axis=1)['Back1']) / (
+                    headx.loc(axis=1)['Nose'] - headx.loc(axis=1)['Back1'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def head_tilt_swing(self):  # positive means back12 is lower than back1
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        nose_mask = data_chunk.loc(axis=1)['Nose', 'likelihood'] > pcutoff
+        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        head_mask = back1_mask & nose_mask
+        mask = head_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        headx = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'x'][mask].droplevel('coords', axis=1)
+        heady = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'y'][mask]
+        belty = headx * slope_belt + intercept_belt
+        true_heady = belty - heady.droplevel('coords', axis=1)
+
+        slope = (true_heady.loc(axis=1)['Nose'] - true_heady.loc(axis=1)['Back1']) / (
+                    headx.loc(axis=1)['Nose'] - headx.loc(axis=1)['Back1'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def tail_tilt_stance(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
+        tail12_mask = data_chunk.loc(axis=1)['Tail12', 'likelihood'] > pcutoff
+        tail_mask = tail1_mask & tail12_mask
+        mask = tail_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        tailx = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'x'][mask].droplevel('coords', axis=1)
+        taily = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'y'][mask]
+        belty = tailx * slope_belt + intercept_belt
+        true_taily = belty - taily.droplevel('coords', axis=1)
+
+        slope = (true_taily.loc(axis=1)['Tail1'] - true_taily.loc(axis=1)['Tail12']) / (
+                    tailx.loc(axis=1)['Tail1'] - tailx.loc(axis=1)['Tail12'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def tail_tilt_swing(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
+        tail12_mask = data_chunk.loc(axis=1)['Tail12', 'likelihood'] > pcutoff
+        tail_mask = tail1_mask & tail12_mask
+        mask = tail_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+
+        tailx = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'x'][mask].droplevel('coords', axis=1)
+        taily = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'y'][mask]
+        belty = tailx * slope_belt + intercept_belt
+        true_taily = belty - taily.droplevel('coords', axis=1)
+
+        slope = (true_taily.loc(axis=1)['Tail1'] - true_taily.loc(axis=1)['Tail12']) / (
+                    tailx.loc(axis=1)['Tail1'] - tailx.loc(axis=1)['Tail12'])
+        angle = np.rad2deg(np.arctan(slope))
+        result_mean = angle.mean()
+
+        return result_mean
+
+    def neck_height_stance(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        neck_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        mask = neck_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        neckx = data_chunk.loc(axis=1)['Back1', 'x'][mask]
+        necky = data_chunk.loc(axis=1)['Back1', 'y'][mask]
+        belty = neckx * slope_belt + intercept_belt
+        true_necky = belty - necky
+        result_mean = true_necky.mean()
+        return result_mean
+
+    def neck_height_swing(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        neck_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
+        mask = neck_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        neckx = data_chunk.loc(axis=1)['Back1', 'x'][mask]
+        necky = data_chunk.loc(axis=1)['Back1', 'y'][mask]
+        belty = neckx * slope_belt + intercept_belt
+        true_necky = belty - necky
+        result_mean = true_necky.mean()
+        return result_mean
+
+    def tail1_height_stance(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
+        mask = tail1_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        tail1x = data_chunk.loc(axis=1)['Tail1', 'x'][mask]
+        tail1y = data_chunk.loc(axis=1)['Tail1', 'y'][mask]
+        belty = tail1x * slope_belt + intercept_belt
+        true_tail1y = belty - tail1y
+        result_mean = true_tail1y.mean()
+        return result_mean
+
+    def tail1_height_swing(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
+        mask = tail1_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        tail1x = data_chunk.loc(axis=1)['Tail1', 'x'][mask]
+        tail1y = data_chunk.loc(axis=1)['Tail1', 'y'][mask]
+        belty = tail1x * slope_belt + intercept_belt
+        true_tail1y = belty - tail1y
+        result_mean = true_tail1y.mean()
+        return result_mean
+
+    def midback_height_stance(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
+        back6_mask = data_chunk.loc(axis=1)['Back6', 'likelihood'] > pcutoff
+        back7_mask = data_chunk.loc(axis=1)['Back7', 'likelihood'] > pcutoff
+        back_mask = back6_mask & back7_mask
+        mask = back_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        midbackx = data_chunk.loc(axis=1)[['Back6','Back7'], 'x'][mask].droplevel('coords', axis=1)
+        midbacky = data_chunk.loc(axis=1)[['Back6','Back7'], 'y'][mask]
+        belty = midbackx * slope_belt + intercept_belt
+        true_midbacky = belty - midbacky.droplevel('coords', axis=1)
+        mean_midbacky = true_midbacky.mean(axis=1)
+        result_mean = mean_midbacky.mean()
+        return result_mean
+
+    def midback_height_swing(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
+        back6_mask = data_chunk.loc(axis=1)['Back6', 'likelihood'] > pcutoff
+        back7_mask = data_chunk.loc(axis=1)['Back7', 'likelihood'] > pcutoff
+        back_mask = back6_mask & back7_mask
+        mask = back_mask & stsw_mask
+        slope_belt, intercept_belt = self.get_belt_line()
+        midbackx = data_chunk.loc(axis=1)[['Back6','Back7'], 'x'][mask].droplevel('coords', axis=1)
+        midbacky = data_chunk.loc(axis=1)[['Back6','Back7'], 'y'][mask]
+        belty = midbackx * slope_belt + intercept_belt
+        true_midbacky = belty - midbacky.droplevel('coords', axis=1)
+        mean_midbacky = true_midbacky.mean(axis=1)
+        result_mean = mean_midbacky.mean()
+        return result_mean
+
+    def get_belt_line(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        start = data_chunk.loc(axis=1)['StartPlatR',['x','y']].mean().droplevel(level='bodyparts')
+        trans = data_chunk.loc(axis=1)['TransitionR',['x','y']].mean().droplevel(level='bodyparts')
+        slope, intercept, _, _, _ = stats.linregress([start['x'], trans['x']], [start['y'], trans['y']])
+        return slope, intercept
+
+    def limb_rel_to_body_stance(self):
+        data_chunk = self.df_s.loc(axis=0)[self.stride_start]
+        x_vals = data_chunk.loc(axis=0)[['Back1','Back12',self.stepping_limb], 'x']
+        x_vals_zeroed = x_vals - x_vals['Back12']
+        x_vals_norm_to_neck = x_vals_zeroed/x_vals_zeroed['Back1']
+        result = x_vals_norm_to_neck[self.stepping_limb].values[0]
+        return result
 
 
 class Save():
@@ -274,7 +568,8 @@ class Save():
 
         return mouse_measures_ALL
 
-class plotting(): # currently not compatible for extended experiments
+class plotting():
+    # todo class currently not compatible for extended experiments
     def __init__(self, conditions):
         self.conditions = conditions # all conditions must be individually listed
 
@@ -299,43 +594,56 @@ class plotting(): # currently not compatible for extended experiments
         if plot_type == 'discreet_strideXrun' and len(measures) == 1:
             self.plot_discrete_measures_singlecon_strideXrun(measures) #
 
-    def plot_discrete_measures_singlecon_strideXrun(self, measures, stride_no, run_nos, chunk_size, measure_list_flat):
+    def plot_discrete_measures_singlecon_strideXrun(self, m, con, conname, measures, chunk_size,plot_filepath,all_days):
+        stride_no = [-3, -2, -1, 0, 1]
+        prepruns = 5 if 'HighLow' in con else 2
+        run_nos = expstuff['condition_exp_lengths']['%sRuns' % conname]
+        run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum()  # + prepruns
+
         blues = utils.Utils().get_cmap((run_nos[0] // chunk_size) + 2, 'Blues')
         reds = utils.Utils().get_cmap((run_nos[1] // chunk_size) + 2, 'Reds')
         greens = utils.Utils().get_cmap((run_nos[2] // chunk_size) + 2, 'Greens')
         colors = np.vstack((blues, reds, greens))
 
-        for m in measure_list_flat:
-            fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        for i in range(0, len(run_nos)):
+            measure_mean = []
+            color_mean = []
+            for ridx, r in enumerate(np.arange(run_nos_filled[i], run_nos_filled[i + 1])):
+                if all_days == True:
+                    measure_day = measures.xs(r, axis=0, level='Run').loc(axis=1)[m].groupby(['Stride','Day']).mean()
+                    measure = measure_day.unstack(level='Day')
+                else:
+                    measure = measures.xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
+                measure_mean.append(measure)
+                color_mean.append(colors[i][0]((ridx // chunk_size) + 1))
+                # ax.plot(stride_no, measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5, linewidth=1)
+                ax.plot(measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5, linewidth=1)
 
-            for i in range(0, len(run_nos)):
-                measure_mean = []
-                color_mean = []
-                for ridx, r in enumerate(np.arange(run_nos_filled[i], run_nos_filled[i + 1])):
-                    gradient = 1 / (run_nos_filled[i + 1] - run_nos_filled[i])
-                    measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
-                    measure_mean.append(measure)
-                    color_mean.append(colors[i][0]((ridx // chunk_size) + 1))
-                    ax.plot(stride_no, measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5, linewidth=1)
-                for c in range(run_nos[i] // chunk_size):
-                    mean = pd.concat(measure_mean[chunk_size * c:chunk_size * (c + 1)]).groupby('Stride').mean()
-                    label = '%s_%s' % (expstuff['exp_chunks']['ExpPhases'][i], c)
-                    ax.plot(stride_no, mean, color=colors[i][0](c + 1), linewidth=4, alpha=1, label=label)
+            for c in range(run_nos[i] // chunk_size):
+                mean = pd.concat(measure_mean[chunk_size * c:chunk_size * (c + 1)]).groupby('Stride').mean()
+                label = '%s_%s' % (expstuff['exp_chunks']['ExpPhases'][i], c)
+                ax.plot(stride_no, mean, color=colors[i][0](c + 1), linewidth=4, alpha=1, label=label)
 
-            ax.spines['right'].set_visible(False)
-            ax.spines['top'].set_visible(False)
-            ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
-                        measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
-            ax.set_xticks(stride_no)
-            ax.set_xlabel('Stride number')
-            ax.axvline(0, alpha=0.5, color='black', linestyle='--')
-            fig.legend()
-            fig.suptitle('')  # Clear the default supertitle
-            fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
-            fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_ylim(measures.loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
+                    measures.loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
+        ax.set_xticks(stride_no)
+        ax.set_xlabel('Stride number')
+        ax.axvline(0, alpha=0.5, color='black', linestyle='--')
+        fig.legend()
+        fig.suptitle('')  # Clear the default supertitle
+        fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
+        fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
+
+        if not os.path.exists(plot_filepath):
+            os.makedirs(plot_filepath)
+        fig.savefig(r'%s\StrideNoXRun_chunksize=%s_%s.png' % (plot_filepath, chunk_size, m),
+                    bbox_inches='tight', transparent=False, format='png')
 
 
-    def saveplots_discrete_measures_singlecon_strideXrun(self, measures, chunk_size=10, all_days_mean=False):
+    def saveplots_discrete_measures_singlecon_strideXrun(self, measures, chunk_size=10, all_days_mean=False, all_days=False):
         """
         Plots measures from a single condition with stride on x-axis and a single line for each run.
         If measures for multiple conditions given it will save multiple plots.
@@ -354,103 +662,23 @@ class plotting(): # currently not compatible for extended experiments
                     conname, speed, repeat, wash, day = segments
                     plot_filepath = r'%s\%s_%s\%s\%s\%s' % (paths['plotting_destfolder'], conname, speed, repeat, wash, day)
 
-                prepruns = 5 if 'HighLow' in con else 2
-                run_nos = expstuff['condition_exp_lengths']['%sRuns' %conname]
-                run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum() #+ prepruns
-
-                self.plot_discrete_measures_singlecon_strideXrun(measures=measures[con],stride_no=stride_no,run_nos=run_nos,chunk_size=chunk_size,measure_list_flat=measure_list_flat)
-
-                # blues = utils.Utils().get_cmap((run_nos[0]//chunk_size) + 2, 'Blues')
-                # reds = utils.Utils().get_cmap((run_nos[1]//chunk_size) + 2, 'Reds')
-                # greens = utils.Utils().get_cmap((run_nos[2]//chunk_size) + 2, 'Greens')
-                # colors = np.vstack((blues, reds, greens))
-                #
-                # for m in measure_list_flat:
-                #     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-                #
-                #     for i in range(0, len(run_nos)):
-                #         measure_mean = []
-                #         color_mean = []
-                #         for ridx, r in enumerate(np.arange(run_nos_filled[i],run_nos_filled[i+1])):
-                #             gradient = 1/(run_nos_filled[i+1] - run_nos_filled[i])
-                #             measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
-                #             measure_mean.append(measure)
-                #             color_mean.append(colors[i][0]((ridx//chunk_size)+1))
-                #             ax.plot(stride_no, measure, color=colors[i][0]((ridx//chunk_size)+1), alpha=0.5, linewidth=1)
-                #         for c in range(run_nos[i]//chunk_size):
-                #             mean = pd.concat(measure_mean[chunk_size*c:chunk_size*(c+1)]).groupby('Stride').mean()
-                #             label = '%s_%s' %(expstuff['exp_chunks']['ExpPhases'][i], c)
-                #             ax.plot(stride_no, mean, color=colors[i][0](c+1), linewidth=4, alpha=1, label=label)
-                #
-                #     ax.spines['right'].set_visible(False)
-                #     ax.spines['top'].set_visible(False)
-                #     ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
-                #                 measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
-                #     ax.set_xticks(stride_no)
-                #     ax.set_xlabel('Stride number')
-                #     ax.axvline(0, alpha=0.5, color='black', linestyle='--')
-                #     fig.legend()
-                #     fig.suptitle('')  # Clear the default supertitle
-                #     fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
-                #     fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
-
-                    if not os.path.exists(plot_filepath):
-                        os.makedirs(plot_filepath)
-                    plt.savefig(r'%s\StrideNoXRun_%s.png' % (plot_filepath, m),
-                                bbox_inches='tight', transparent=False, format='png')
+                for m in measure_list_flat:
+                    self.plot_discrete_measures_singlecon_strideXrun(m=m,con=con,conname=conname,
+                                                                     measures=measures[con],
+                                                                     chunk_size=chunk_size, plot_filepath=plot_filepath,all_days=all_days)
         else:
             measures_all = pd.concat(measures.values(), keys=measures.keys())
-            segments = con.split('_')
-            if 'Day' not in con and 'Wash' not in con:
-                conname, speed = segments[0:2]
-                plot_filepath = r'%s\%s_%s' % (paths['plotting_destfolder'], conname, speed)
-            else:
-                conname, speed, repeat, wash, day = segments
-                plot_filepath = r'%s\%s_%s\%s\%s\%s' % (paths['plotting_destfolder'], conname, speed, repeat, wash, day)
-
-            prepruns = 5 if 'HighLow' in con else 2
-            run_nos = expstuff['condition_exp_lengths']['%sRuns' % conname]
-            run_nos_filled = np.concatenate([np.array([prepruns]), np.array(run_nos)]).cumsum()  # + prepruns
-
-            blues = utils.Utils().get_cmap((run_nos[0] // chunk_size) + 2, 'Blues')
-            reds = utils.Utils().get_cmap((run_nos[1] // chunk_size) + 2, 'Reds')
-            greens = utils.Utils().get_cmap((run_nos[2] // chunk_size) + 2, 'Greens')
-            colors = np.vstack((blues, reds, greens))
+            measures_all.index.set_names('Day', level=0, inplace=True)
+            segments = self.conditions[0].split('_')
+            con = '_'.join(segments[:-1])
+            conname, speed, repeat, wash, _ = segments
+            plot_filepath = r'%s\%s_%s\%s\%s' % (paths['plotting_destfolder'], conname, speed, repeat, wash)
 
             for m in measure_list_flat:
-                fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+                self.plot_discrete_measures_singlecon_strideXrun(m=m, con=con, conname=conname,
+                                                                       measures=measures_all,
+                                                                       chunk_size=chunk_size, plot_filepath=plot_filepath,all_days=all_days)
 
-                for i in range(0, len(run_nos)):
-                    measure_mean = []
-                    color_mean = []
-                    for ridx, r in enumerate(np.arange(run_nos_filled[i], run_nos_filled[i + 1])):
-                        gradient = 1 / (run_nos_filled[i + 1] - run_nos_filled[i])
-                        measure = measures[con].xs(r, axis=0, level='Run').loc(axis=1)[m].groupby('Stride').mean()
-                        measure_mean.append(measure)
-                        color_mean.append(colors[i][0]((ridx // chunk_size) + 1))
-                        ax.plot(stride_no, measure, color=colors[i][0]((ridx // chunk_size) + 1), alpha=0.5,
-                                linewidth=1)
-                    for c in range(run_nos[i] // chunk_size):
-                        mean = pd.concat(measure_mean[chunk_size * c:chunk_size * (c + 1)]).groupby('Stride').mean()
-                        label = '%s_%s' % (expstuff['exp_chunks']['ExpPhases'][i], c)
-                        ax.plot(stride_no, mean, color=colors[i][0](c + 1), linewidth=4, alpha=1, label=label)
-
-                ax.spines['right'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.set_ylim(measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.01),
-                            measures[con].loc(axis=1)[m].groupby(['Run', 'Stride']).mean().quantile(0.99))
-                ax.set_xticks(stride_no)
-                ax.set_xlabel('Stride number')
-                ax.axvline(0, alpha=0.5, color='black', linestyle='--')
-                fig.legend()
-                fig.suptitle('')  # Clear the default supertitle
-                fig.text(0.5, 0.95, m, ha='center', va='center', fontsize=16, fontweight='bold')
-                fig.text(0.5, 0.90, con, ha='center', va='center', fontsize=12)
-
-                if not os.path.exists(plot_filepath):
-                    os.makedirs(plot_filepath)
-                plt.savefig(r'%s\StrideNoXRun_%s.png' % (plot_filepath, m),
-                            bbox_inches='tight', transparent=False, format='png')
 
 
 

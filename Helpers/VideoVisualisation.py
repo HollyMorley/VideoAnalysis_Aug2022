@@ -1,9 +1,8 @@
 import cv2
 import matplotlib.pyplot as plt
-from Archive import Locomotion
+from Archive import Locomotion, Plot
 from Helpers import GetRuns
 from Helpers import utils
-import Plot
 import numpy as np
 
 #######################################################################################################################
@@ -17,7 +16,7 @@ already_loco_analysed = True
 
 ###################### UPDATE EVERY TRIAL ############################
 view = 'Side'
-frame_num = 80543
+frame_num = 80590
 target_limb = 'ForepawToeR'
 
 #######################################################################################################################

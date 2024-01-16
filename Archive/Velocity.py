@@ -1,4 +1,4 @@
-import Plot
+from Archive import Plot
 import Helpers.utils as utils
 # from Helpers.Config import *
 from Helpers.Config_23 import *
@@ -10,14 +10,10 @@ import math
 import pandas as pd
 from scipy.stats import sem
 import seaborn as sns
-import statsmodels.api as sm
 from statsmodels.stats.anova import AnovaRM
-from statsmodels.stats.multicomp import MultiComparison
-from scipy.stats import shapiro, levene
+from scipy.stats import shapiro
 import pingouin as pg
 # Assuming 'df' is your original DataFrame with missing values
-from pingouin import rm_anova, pairwise_ttests
-from statsmodels.nonparametric.smoothers_lowess import lowess
 
 class Velocity:
     def __init__(self): # MouseData is input ie list of h5 files

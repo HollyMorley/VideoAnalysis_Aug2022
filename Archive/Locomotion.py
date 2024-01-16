@@ -5,10 +5,9 @@ from matplotlib.cm import ScalarMappable
 import pandas as pd
 import Helpers.utils as utils
 import Helpers.GetRuns as GetRuns
-import Velocity_v2
 # from Helpers.Config import *
 from Helpers.Config_23 import *
-import Plot
+from Archive import Plot
 import scipy
 from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit
@@ -16,7 +15,6 @@ from scipy import stats
 from tqdm import tqdm
 import math
 import warnings
-from statsmodels.nonparametric.smoothers_lowess import lowess
 
 
 class Locomotion():

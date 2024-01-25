@@ -13,46 +13,25 @@ import matplotlib.pyplot as plt
 
 class CalculateMeasuresByStride():
     def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb):
-        self.data = data
-        self.con = con
-        self.mouseID = mouseID
-        self.r = r
-        self.stride_start = stride_start
-        self.stride_end = stride_end
-        self.stepping_limb = stepping_limb
+        self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb = data, con, mouseID, r, stride_start, stride_end, stepping_limb
 
         # calculate sumarised dataframes
-        df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']]
-        df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']]
-        # self.df_s = df_s.droplevel(['Run', 'RunStage'])
-        # self.df_f = df_f.droplevel(['Run', 'RunStage'])
+        self.df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
+        self.df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
 
-    def get_data_summary(self, limb_type):
-        limb_data = self.data[self.con][self.mouseID][limb_type].loc(axis=0)[
-            self.r, ['RunStart', 'Transition', 'RunEnd']]
-        return limb_data.droplevel(['Run', 'RunStage'])
-
-    def get_data_chunk(self, limb_type):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        return data_chunk.loc(axis=1)[self.stepping_limb, limb_type]
-
-    def stride_duration(self): # ms
+    def stride_duration(self):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         stride_frames = data_chunk.index[-1] - data_chunk.index[0]
-        result = (stride_frames/fps)*1000
-        return result
+        return (stride_frames/fps)*1000
 
     def walking_speed(self): # px/ms
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         x_displacement = data_chunk.loc(axis=1)[self.stepping_limb,'x'].iloc[-1] - data_chunk.loc(axis=1)[self.stepping_limb,'x'].iloc[0]
-        stride_duration = self.stride_duration()
-        result = x_displacement/stride_duration
-        return result
+        return x_displacement/self.stride_duration()
 
     def cadence(self):
         stride_duration = self.stride_duration()
-        result = 1/stride_duration
-        return result
+        return 1/stride_duration
 
     def swing_velocity(self): # px/ms
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
@@ -148,9 +127,9 @@ class CalculateMeasuresByStride():
         result = x_displacement / stride_duration
         return result
 
-    def body_length_stance(self): # px
+    def calculate_body_length(self, step_phase): # px
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 0
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
         back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
         back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
         back_mask = back1_mask & back12_mask
@@ -158,290 +137,145 @@ class CalculateMeasuresByStride():
         back1x = data_chunk.loc(axis=1)['Back1', 'x'][mask]
         back12x = data_chunk.loc(axis=1)['Back12', 'x'][mask]
         results = back1x - back12x
-        results_mean = results.mean()
-        return results_mean
+        return results.mean()
+
+    def body_length_stance(self): # px
+        return self.calculate_body_length(0)
 
     def body_length_swing(self): # px
-        # todo reduce size of these functions
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 1
-        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
-        back_mask = back1_mask & back12_mask
-        mask = back_mask & stsw_mask
-        back1x = data_chunk.loc(axis=1)['Back1', 'x'][mask]
-        back12x = data_chunk.loc(axis=1)['Back12', 'x'][mask]
-        results = back1x - back12x
-        results_mean = results.mean()
-        return results_mean
+        return self.calculate_body_length(1)
 
-    def back_skew_stance(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
+    def calculate_back(self, step_phase):  ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 0
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
         slope, intercept = self.get_belt_line()
-        back_mask = (data_chunk.loc(axis=1)[
-                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                         'Back11',
-                         'Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
-        belt_heights = (data_chunk.loc(axis=1)[
-                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
-        back_heights = data_chunk.loc(axis=1)[
-            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
-             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
+        back_labels = ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                       'Back11', 'Back12']
+        back_mask = (data_chunk.loc(axis=1)[back_labels, 'likelihood'] > pcutoff).droplevel(level='coords', axis=1)
+        belt_heights = \
+        (data_chunk.loc(axis=1)[back_labels, 'x'][stsw_mask] * slope + intercept).droplevel(level='coords', axis=1)[
+            back_mask].iloc[:, ::-1]
+        back_heights = data_chunk.loc(axis=1)[back_labels, 'y'][stsw_mask].droplevel(level='coords', axis=1)[
+                           back_mask].iloc[:, ::-1]
+        true_back_height = belt_heights - back_heights
+        return true_back_height.mean(axis=0)
+
+
+    def calculate_back_skew(self, step_phase): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
         mult = np.arange(1, 13)
-        true_back_height = belt_heights - back_heights
-        com = (true_back_height*mult).sum(axis=1)/true_back_height.sum(axis=1)
-        result = np.median(mult) - com
-        result_mean = np.mean(result)
-        return result_mean
+        true_back_height = self.calculate_back(step_phase)
+        com = (true_back_height * mult).sum(axis=1) / true_back_height.sum(axis=1)
+        return np.mean(np.median(mult) - com)
 
-    def back_skew_swing(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 1
-        slope, intercept = self.get_belt_line()
-        back_mask = (data_chunk.loc(axis=1)[
-                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                         'Back11',
-                         'Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
-        belt_heights = (data_chunk.loc(axis=1)[
-                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
-        back_heights = data_chunk.loc(axis=1)[
-            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
-             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
-        mult = np.arange(1, 13)
-        true_back_height = belt_heights - back_heights
-        com = (true_back_height*mult).sum(axis=1)/true_back_height.sum(axis=1)
-        result = np.median(mult) - com
-        result_mean = np.mean(result)
-        return result_mean
+    def back_skew_stance(self):
+        return self.calculate_back_skew(0)
 
-    def back_curvature_stance(self): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 0
-        slope, intercept = self.get_belt_line()
-        back_mask = (data_chunk.loc(axis=1)[
-                        ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                         'Back11','Back12'], 'likelihood'] > pcutoff).droplevel(level='coords',axis=1)
-        belt_heights = (data_chunk.loc(axis=1)[
-                           ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                            'Back11', 'Back12'], 'x'][stsw_mask] * slope + intercept).droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
-        back_heights = data_chunk.loc(axis=1)[
-            ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
-             'Back12'], 'y'][stsw_mask].droplevel(level='coords',axis=1)[back_mask].iloc[:, ::-1]
-        true_back_height = belt_heights - back_heights
-        result = true_back_height.mean(axis=0)
-        return result
+    def back_skew_swing(self):
+        return self.calculate_back_skew(1)
 
-    def body_tilt_stance(self): # positive means back12 is lower than back1
+   # def calculate_back_curvature(self):
+
+    # def back_curvature_stance(self):
+    #     return self.calculate_back_curvature(0)
+    #
+    # def back_curvature_swing(self):
+    #     return self.calculate_back_curvature(1)
+
+    def calculate_body_tilt(self, body_part, step_phase):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
-        back_mask = back1_mask & back12_mask
-        mask = back_mask & stsw_mask
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        part_mask = data_chunk.loc(axis=1)[body_part, 'likelihood'] > self.pcutoff
+        mask = part_mask & stsw_mask
         slope_belt, intercept_belt = self.get_belt_line()
 
-        backx = data_chunk.loc(axis=1)[['Back1','Back12'], 'x'][mask].droplevel('coords',axis=1)
-        backy = data_chunk.loc(axis=1)[['Back1','Back12'], 'y'][mask]
-        belty = backx*slope_belt + intercept_belt
-        true_backy = belty - backy.droplevel('coords',axis=1)
+        part_x = data_chunk.loc(axis=1)[[body_part, 'Back1'], 'x'][mask].droplevel('coords', axis=1)
+        part_y = data_chunk.loc(axis=1)[[body_part, 'Back1'], 'y'][mask]
+        belty = part_x * slope_belt + intercept_belt
+        true_part_y = belty - part_y.droplevel('coords', axis=1)
 
-        slope = (true_backy.loc(axis=1)['Back1'] - true_backy.loc(axis=1)['Back12'])/(backx.loc(axis=1)['Back1'] - backx.loc(axis=1)['Back12'])
+        slope = (true_part_y.loc(axis=1)[body_part] - true_part_y.loc(axis=1)['Back1']) / (
+                part_x.loc(axis=1)[body_part] - part_x.loc(axis=1)['Back1'])
         angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
+        return angle.mean()
 
-        return result_mean
+    def body_tilt_stance(self):
+        return self.calculate_body_tilt('Back12', 0)
 
-    def body_tilt_swing(self):  # positive means back12 is lower than back1
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        back12_mask = data_chunk.loc(axis=1)['Back12', 'likelihood'] > pcutoff
-        back_mask = back1_mask & back12_mask
-        mask = back_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
+    def body_tilt_swing(self):
+        return self.calculate_body_tilt('Back12', 1)
 
-        backx = data_chunk.loc(axis=1)[['Back1', 'Back12'], 'x'][mask].droplevel('coords', axis=1)
-        backy = data_chunk.loc(axis=1)[['Back1', 'Back12'], 'y'][mask]
-        belty = backx * slope_belt + intercept_belt
-        true_backy = belty - backy.droplevel('coords', axis=1)
+    def head_tilt_stance(self):
+        return self.calculate_body_tilt('Nose', 0)
 
-        slope = (true_backy.loc(axis=1)['Back1'] - true_backy.loc(axis=1)['Back12']) / (
-                    backx.loc(axis=1)['Back1'] - backx.loc(axis=1)['Back12'])
-        angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
-
-        return result_mean
-
-    def head_tilt_stance(self):  # positive means back12 is lower than back1
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        nose_mask = data_chunk.loc(axis=1)['Nose', 'likelihood'] > pcutoff
-        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        head_mask = back1_mask & nose_mask
-        mask = head_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-
-        headx = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'x'][mask].droplevel('coords', axis=1)
-        heady = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'y'][mask]
-        belty = headx * slope_belt + intercept_belt
-        true_heady = belty - heady.droplevel('coords', axis=1)
-
-        slope = (true_heady.loc(axis=1)['Nose'] - true_heady.loc(axis=1)['Back1']) / (
-                    headx.loc(axis=1)['Nose'] - headx.loc(axis=1)['Back1'])
-        angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
-
-        return result_mean
-
-    def head_tilt_swing(self):  # positive means back12 is lower than back1
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        nose_mask = data_chunk.loc(axis=1)['Nose', 'likelihood'] > pcutoff
-        back1_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        head_mask = back1_mask & nose_mask
-        mask = head_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-
-        headx = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'x'][mask].droplevel('coords', axis=1)
-        heady = data_chunk.loc(axis=1)[['Nose', 'Back1'], 'y'][mask]
-        belty = headx * slope_belt + intercept_belt
-        true_heady = belty - heady.droplevel('coords', axis=1)
-
-        slope = (true_heady.loc(axis=1)['Nose'] - true_heady.loc(axis=1)['Back1']) / (
-                    headx.loc(axis=1)['Nose'] - headx.loc(axis=1)['Back1'])
-        angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
-
-        return result_mean
+    def head_tilt_swing(self):
+        return self.calculate_body_tilt('Nose', 1)
 
     def tail_tilt_stance(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
-        tail12_mask = data_chunk.loc(axis=1)['Tail12', 'likelihood'] > pcutoff
-        tail_mask = tail1_mask & tail12_mask
-        mask = tail_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-
-        tailx = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'x'][mask].droplevel('coords', axis=1)
-        taily = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'y'][mask]
-        belty = tailx * slope_belt + intercept_belt
-        true_taily = belty - taily.droplevel('coords', axis=1)
-
-        slope = (true_taily.loc(axis=1)['Tail1'] - true_taily.loc(axis=1)['Tail12']) / (
-                    tailx.loc(axis=1)['Tail1'] - tailx.loc(axis=1)['Tail12'])
-        angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
-
-        return result_mean
+        return self.calculate_body_tilt('Tail12', 0)
 
     def tail_tilt_swing(self):
+        return self.calculate_body_tilt('Tail12', 1)
+
+    def calculate_body_z(self, body_part, step_phase):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
-        tail12_mask = data_chunk.loc(axis=1)['Tail12', 'likelihood'] > pcutoff
-        tail_mask = tail1_mask & tail12_mask
-        mask = tail_mask & stsw_mask
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        try:
+            part__mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1)
+        except:
+            part__mask = data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        mask = part__mask & stsw_mask
         slope_belt, intercept_belt = self.get_belt_line()
+        try:
+            part_x = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1)
+        except:
+            part_x = data_chunk.loc(axis=1)[body_part, 'x'][mask]
+        part_y = data_chunk.loc(axis=1)[body_part, 'y'][mask]
+        belty = part_x * slope_belt + intercept_belt
+        try:
+            true_part_y = belty - part_y
+        except:
+            true_part_y = belty - part_y.droplevel('coords', axis=1)
+        return true_part_y.mean(axis=0)
 
-        tailx = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'x'][mask].droplevel('coords', axis=1)
-        taily = data_chunk.loc(axis=1)[['Tail1', 'Tail12'], 'y'][mask]
-        belty = tailx * slope_belt + intercept_belt
-        true_taily = belty - taily.droplevel('coords', axis=1)
+    def neck_z_stance(self):
+        return self.calculate_body_z('Back1', 0)
 
-        slope = (true_taily.loc(axis=1)['Tail1'] - true_taily.loc(axis=1)['Tail12']) / (
-                    tailx.loc(axis=1)['Tail1'] - tailx.loc(axis=1)['Tail12'])
-        angle = np.rad2deg(np.arctan(slope))
-        result_mean = angle.mean()
+    def neck_z_swing(self):
+        return self.calculate_body_z('Back1', 1)
 
-        return result_mean
+    def tail_z_stance(self):
+        return self.calculate_body_z('Tail1', 0)
 
-    def neck_height_stance(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        neck_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        mask = neck_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        neckx = data_chunk.loc(axis=1)['Back1', 'x'][mask]
-        necky = data_chunk.loc(axis=1)['Back1', 'y'][mask]
-        belty = neckx * slope_belt + intercept_belt
-        true_necky = belty - necky
-        result_mean = true_necky.mean()
-        return result_mean
+    def tail_z_swing(self):
+        return self.calculate_body_z('Tail1', 1)
 
-    def neck_height_swing(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        neck_mask = data_chunk.loc(axis=1)['Back1', 'likelihood'] > pcutoff
-        mask = neck_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        neckx = data_chunk.loc(axis=1)['Back1', 'x'][mask]
-        necky = data_chunk.loc(axis=1)['Back1', 'y'][mask]
-        belty = neckx * slope_belt + intercept_belt
-        true_necky = belty - necky
-        result_mean = true_necky.mean()
-        return result_mean
-
-    def tail1_height_stance(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
-        mask = tail1_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        tail1x = data_chunk.loc(axis=1)['Tail1', 'x'][mask]
-        tail1y = data_chunk.loc(axis=1)['Tail1', 'y'][mask]
-        belty = tail1x * slope_belt + intercept_belt
-        true_tail1y = belty - tail1y
-        result_mean = true_tail1y.mean()
-        return result_mean
-
-    def tail1_height_swing(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        tail1_mask = data_chunk.loc(axis=1)['Tail1', 'likelihood'] > pcutoff
-        mask = tail1_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        tail1x = data_chunk.loc(axis=1)['Tail1', 'x'][mask]
-        tail1y = data_chunk.loc(axis=1)['Tail1', 'y'][mask]
-        belty = tail1x * slope_belt + intercept_belt
-        true_tail1y = belty - tail1y
-        result_mean = true_tail1y.mean()
-        return result_mean
-
-    def midback_height_stance(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 0
-        back6_mask = data_chunk.loc(axis=1)['Back6', 'likelihood'] > pcutoff
-        back7_mask = data_chunk.loc(axis=1)['Back7', 'likelihood'] > pcutoff
-        back_mask = back6_mask & back7_mask
-        mask = back_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        midbackx = data_chunk.loc(axis=1)[['Back6','Back7'], 'x'][mask].droplevel('coords', axis=1)
-        midbacky = data_chunk.loc(axis=1)[['Back6','Back7'], 'y'][mask]
-        belty = midbackx * slope_belt + intercept_belt
-        true_midbacky = belty - midbacky.droplevel('coords', axis=1)
-        mean_midbacky = true_midbacky.mean(axis=1)
-        result_mean = mean_midbacky.mean()
-        return result_mean
+    def midback_z_stance(self):
+        height = self.calculate_body_z(['Back6','Back7'], 0)
+        return height.mean()
 
     def midback_height_swing(self):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
-        back6_mask = data_chunk.loc(axis=1)['Back6', 'likelihood'] > pcutoff
-        back7_mask = data_chunk.loc(axis=1)['Back7', 'likelihood'] > pcutoff
-        back_mask = back6_mask & back7_mask
-        mask = back_mask & stsw_mask
-        slope_belt, intercept_belt = self.get_belt_line()
-        midbackx = data_chunk.loc(axis=1)[['Back6','Back7'], 'x'][mask].droplevel('coords', axis=1)
-        midbacky = data_chunk.loc(axis=1)[['Back6','Back7'], 'y'][mask]
-        belty = midbackx * slope_belt + intercept_belt
-        true_midbacky = belty - midbacky.droplevel('coords', axis=1)
-        mean_midbacky = true_midbacky.mean(axis=1)
-        result_mean = mean_midbacky.mean()
-        return result_mean
+        height = self.calculate_body_z(['Back6','Back7'], 1)
+        return height.mean()
+
+    def stepping_limb_z_stance(self):
+        height = self.calculate_body_z(self.stepping_limb, 0)
+        return height.mean()
+
+    def stepping_limb_z_swing(self):
+        height = self.calculate_body_z(self.stepping_limb, 1)
+        return height.mean()
+
+    def contra_limb_z_stance(self):
+        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        body_part = 'ForepawToe%s' % lr
+        height = self.calculate_body_z(body_part, 0)
+        return height.mean()
+
+    def contra_limb_z_swing(self):
+        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        body_part = 'ForepawToe%s' % lr
+        height = self.calculate_body_z(body_part, 1)
+        return height.mean()
 
     def get_belt_line(self):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
@@ -532,7 +366,7 @@ class Save():
             try:
                 for sidx, s in enumerate(stride_borders.loc(axis=0)[r].loc(axis=1)['Stride_no'][:-1]):
                     stride_start = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx]
-                    stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1]
+                    stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1] - 1 # todo check i am right to consider the previous frame the end frame
 
                     class_instance = self.CalculateMeasuresByStride(self.data, con, mouseID, r, stride_start, stride_end,stepping_limb)
 

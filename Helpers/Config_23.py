@@ -77,7 +77,21 @@ micestuff = {
 measure_list = {
     'limb': ['walking_speed','stride_duration','cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
     'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'
-    'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing', 'back_skew_stance', 'back_skew_swing','neck_z_stance', 'neck_z_swing', 'midback_z_stance', 'midback_z_swing', 'tail1_z_stance', 'tail1_z_swing', 'stepping_limb_z_stance', 'stepping_limb_z_swing', 'contra_limb_z_stance', 'contra_limb_z_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_tilt_stance', 'tail_tilt_swing', 'limb_rel_to_body_stance'], #, 'back_curvature_stance', 'back_curvature_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
+    'whole_body': ['tail1_ptp_amplitude_stride',
+                   'tail1_speed',
+                   'body_length_stance', 'body_length_swing',
+                   'back_skew_stance', 'back_skew_swing',
+                   'neck_z_stance', 'neck_z_swing',
+                   'midback_z_stance', 'midback_z_swing',
+                   'tail1_z_stance', 'tail1_z_swing',
+                   'stepping_limb_z_stance', 'stepping_limb_z_swing',
+                   'contra_limb_z_stance', 'contra_limb_z_swing',
+                   'stepping_limb_x_displacement_stance', 'stepping_limb_x_displacement_swing',
+                   'contra_limb_x_displacement_stance', 'contra_limb_x_displacement_swing'
+                   'head_tilt_stance', 'head_tilt_swing',
+                   'body_tilt_stance', 'body_tilt_swing',
+                   'tail_tilt_stance', 'tail_tilt_swing',
+                   'limb_rel_to_body_stance'], #, 'back_curvature_stance', 'back_curvature_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
 }
 #

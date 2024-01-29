@@ -300,8 +300,13 @@ class GetRealDistances:
     def map_pixel_sizes_to_belt(self, view, yref='Front'):
         """
         Use triangulation to construct map of how pixel size changes across the flat camera field
-        :return:
+        :param view: view of primary analysis where depth is relevant and potentially confounding, e.g. if you are measuring tail trajectory in x plane, view is side.
+        If you are measuring nose trajectory in y plane, view is front.
+        :param yref: Reference for depth of primary view. Which view (front or overhead) depends on which labelled points are of interest.
+        Front has highest resolution but not all labels are visible, e.g. back and tail
+        :return: triangulated map and array of possible pixel sizes
         """
+
         x, _ = self.get_warped_grid_coordinates(view='Side')
         if yref == 'Front':
             _, y = self.get_warped_grid_coordinates(view='Front')

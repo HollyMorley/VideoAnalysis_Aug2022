@@ -86,6 +86,11 @@ measure_list = {
                    'tail1_z_stance', 'tail1_z_swing',
                    'stepping_limb_z_stance', 'stepping_limb_z_swing',
                    'contra_limb_z_stance', 'contra_limb_z_swing',
+                   'neck_x_displacement_stance', 'neck_x_displacement_swing',
+                   'midback_x_displacement_stance', 'midback_x_displacement_swing',
+                   'tail1_x_displacement_stance', 'tail1_x_displacement_swing',
+                   'stepping_limb_x_displacement_stance', 'stepping_limb_x_displacement_swing',
+                   'contra_limb_x_displacement_stance', 'contra_limb_x_displacement_swing',
                    'stepping_limb_x_displacement_stance', 'stepping_limb_x_displacement_swing',
                    'contra_limb_x_displacement_stance', 'contra_limb_x_displacement_swing'
                    'head_tilt_stance', 'head_tilt_swing',

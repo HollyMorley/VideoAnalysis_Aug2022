@@ -157,9 +157,8 @@ class CalculateMeasuresByStride():
             back_mask].iloc[:, ::-1]
         back_heights = data_chunk.loc(axis=1)[back_labels, 'y'][stsw_mask].droplevel(level='coords', axis=1)[
                            back_mask].iloc[:, ::-1]
-        true_back_height = belt_heights - back_heights
-        return true_back_height.mean(axis=0)
-
+        return belt_heights - back_heights
+        #return true_back_height.mean(axis=0)
 
     def calculate_back_skew(self, step_phase): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
         mult = np.arange(1, 13)
@@ -181,53 +180,54 @@ class CalculateMeasuresByStride():
     # def back_curvature_swing(self):
     #     return self.calculate_back_curvature(1)
 
-    def calculate_body_tilt(self, body_part, step_phase):
+    def calculate_body_tilt(self, body_parts, step_phase):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        part_mask = data_chunk.loc(axis=1)[body_part, 'likelihood'] > self.pcutoff
+        part_mask = np.all(data_chunk.loc(axis=1)[body_parts, 'likelihood'] > pcutoff, axis=1)
         mask = part_mask & stsw_mask
         slope_belt, intercept_belt = self.get_belt_line()
 
-        part_x = data_chunk.loc(axis=1)[[body_part, 'Back1'], 'x'][mask].droplevel('coords', axis=1)
-        part_y = data_chunk.loc(axis=1)[[body_part, 'Back1'], 'y'][mask]
+        part_x = data_chunk.loc(axis=1)[body_parts, 'x'][mask].droplevel('coords', axis=1)
+        part_y = data_chunk.loc(axis=1)[body_parts, 'y'][mask]
         belty = part_x * slope_belt + intercept_belt
         true_part_y = belty - part_y.droplevel('coords', axis=1)
 
-        slope = (true_part_y.loc(axis=1)[body_part] - true_part_y.loc(axis=1)['Back1']) / (
-                part_x.loc(axis=1)[body_part] - part_x.loc(axis=1)['Back1'])
+        slope = (true_part_y.loc(axis=1)[body_parts[0]] - true_part_y.loc(axis=1)[body_parts[1]]) / (
+                part_x.loc(axis=1)[body_parts[0]] - part_x.loc(axis=1)[body_parts[1]])
         angle = np.rad2deg(np.arctan(slope))
         return angle.mean()
 
-    def body_tilt_stance(self):
-        return self.calculate_body_tilt('Back12', 0)
+    def body_tilt_stance(self): # positive means back12 is lower than back1
+        return self.calculate_body_tilt(['Back1','Back12'], 0)
 
-    def body_tilt_swing(self):
-        return self.calculate_body_tilt('Back12', 1)
+    def body_tilt_swing(self): # positive means back12 is lower than back1
+        return self.calculate_body_tilt(['Back1','Back12'], 1)
 
     def head_tilt_stance(self):
-        return self.calculate_body_tilt('Nose', 0)
+        return self.calculate_body_tilt(['Nose','Back1'], 0)
 
     def head_tilt_swing(self):
-        return self.calculate_body_tilt('Nose', 1)
+        return self.calculate_body_tilt(['Nose','Back1'], 1)
 
     def tail_tilt_stance(self):
-        return self.calculate_body_tilt('Tail12', 0)
+        return self.calculate_body_tilt(['Tail1','Tail12'], 0)
 
     def tail_tilt_swing(self):
-        return self.calculate_body_tilt('Tail12', 1)
+        return self.calculate_body_tilt(['Tail1','Tail12'], 1)
 
-    def calculate_body_z(self, body_part, step_phase):
+    def calculate_body_z(self, body_part, step_phase, yref):
         '''
         Returns true (subtracted from belt line) height (in z-plane) of one or more body part/s
         :param body_part:
         :param step_phase:
         :return:
         '''
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        mask = part_mask & stsw_mask
+        # data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        # stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        # part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+        #     if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        # mask = part_mask & stsw_mask
+        data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
         slope_belt, intercept_belt = self.get_belt_line()
         part_x = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
@@ -252,36 +252,32 @@ class CalculateMeasuresByStride():
         height = self.calculate_body_z(['Back6','Back7'], 0)
         return height.mean()
 
-    def midback_height_swing(self):
+    def midback_z_swing(self):
         height = self.calculate_body_z(['Back6','Back7'], 1)
         return height.mean()
 
     def stepping_limb_z_stance(self):
-        height = self.calculate_body_z(self.stepping_limb, 0)
-        return height.mean()
+        return self.calculate_body_z(self.stepping_limb, 0)
 
     def stepping_limb_z_swing(self):
-        height = self.calculate_body_z(self.stepping_limb, 1)
-        return height.mean()
+        return self.calculate_body_z(self.stepping_limb, 1)
 
     def contra_limb_z_stance(self):
         lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
         body_part = 'ForepawToe%s' % lr
-        height = self.calculate_body_z(body_part, 0)
-        return height.mean()
+        return self.calculate_body_z(body_part, 0)
 
     def contra_limb_z_swing(self):
         lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
         body_part = 'ForepawToe%s' % lr
-        height = self.calculate_body_z(body_part, 1)
-        return height.mean()
+        return self.calculate_body_z(body_part, 1)
 
-    def calculate_body_x(self, body_part, step_phase, yref): # mm
+    def get_body_part_coordinates(self, body_part, step_phase, yref):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         if yref == 'front':
-            data_chunk_yref =  self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_yref = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         elif yref == 'overhead':
-            data_chunk_yref =  self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_yref = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
 
         stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
         part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
@@ -290,64 +286,131 @@ class CalculateMeasuresByStride():
             if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff
         mask = np.logical_and(part_mask, part_yref_mask, stsw_mask)
 
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+        return data_chunk, data_chunk_yref, mask
+
+    def calculate_body_x(self, body_part, step_phase, yref): # mm
+        # data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        # if yref == 'front':
+        #     data_chunk_yref =  self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        # elif yref == 'overhead':
+        #     data_chunk_yref =  self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        #
+        # stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        # part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+        #     if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        # part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+        #     if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        # mask = np.logical_and(part_mask, part_yref_mask, stsw_mask)
+
+        data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
+
+        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+        real_px_size= []
         if yref == 'front':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
                 if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
             real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
                                                                          self.maps['pixel_sizes']['side_f'],
                                                                          self.maps['triang']['side_f'])
         elif yref == 'overhead':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
                 if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
             real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
                                                                          self.maps['pixel_sizes']['side_o'],
                                                                          self.maps['triang']['side_o'])
-        real_x_pos = xpos * real_px_size
-        return real_x_pos
+        return xpos * real_px_size
+
+    def neck_x_displacement_stance(self):
+        x = self.calculate_body_x('Back1', 0, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
+
+    def neck_x_displacement_swing(self):
+        x = self.calculate_body_x('Back1', 1, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
+
+    def tail_x_displacement_stance(self):
+        x = self.calculate_body_x('Tail1', 0, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
+
+    def tail_x_displacement_swing(self):
+        x = self.calculate_body_x('Tail1', 1, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
+
+    def midback_x_displacement_stance(self):
+        x = self.calculate_body_x(['Back6','Back7'], 0, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
+
+    def midback_x_displacement_swing(self):
+        x = self.calculate_body_x(['Back6','Back7'], 1, 'overhead')
+        return x.iloc[-1] - x.iloc[0]
 
     def stepping_limb_x_displacement_stance(self):
         x = self.calculate_body_x(self.stepping_limb, 0, 'front')
         return x.iloc[-1] - x.iloc[0]
 
     def stepping_limb_x_displacement_swing(self):
-        height = self.calculate_body_x(self.stepping_limb, 1, 'front')
+        x = self.calculate_body_x(self.stepping_limb, 1, 'front')
         return x.iloc[-1] - x.iloc[0]
 
     def contra_limb_x_displacement_stance(self):
         lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
         body_part = 'ForepawToe%s' % lr
-        height = self.calculate_body_x(body_part, 0, 'front')
+        x = self.calculate_body_x(body_part, 0, 'front')
         return x.iloc[-1] - x.iloc[0]
 
     def contra_limb_x_displacement_swing(self):
         lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
         body_part = 'ForepawToe%s' % lr
-        height = self.calculate_body_x(body_part, 1, 'front')
+        x = self.calculate_body_x(body_part, 1, 'front')
         return x.iloc[-1] - x.iloc[0]
 
+
+    # def calculate_body_y() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    # def neck_x_traj_stance(self):
+    #     x = self.calculate_body_x('Back1', 0, 'overhead')
+    #     return x.values
+    #
+    # def neck_x_traj_swing(self):
+    #     x = self.calculate_body_x('Back1', 1, 'overhead')
+    #     return x.values
+    #
+    # def tail_x_traj_stance(self):
+    #     x = self.calculate_body_x('Tail1', 0, 'overhead')
+    #     return x.values
+    #
+    # def tail_x_traj_swing(self):
+    #     x = self.calculate_body_x('Tail1', 1, 'overhead')
+    #     return x.values
+    #
+    # def midback_x_traj_stance(self):
+    #     x = self.calculate_body_x(['Back6','Back7'], 0, 'overhead')
+    #     return x.values
+    #
+    # def midback_x_traj_swing(self):
+    #     x = self.calculate_body_x(['Back6','Back7'], 1, 'overhead')
+    #     return x.values
+    #
     # def stepping_limb_x_traj_stance(self):
     #     x = self.calculate_body_x(self.stepping_limb, 0, 'front')
     #     return x.values
     #
     # def stepping_limb_x_traj_swing(self):
-    #     height = self.calculate_body_x(self.stepping_limb, 1, 'front')
+    #     x = self.calculate_body_x(self.stepping_limb, 1, 'front')
     #     return x.values
     #
     # def contra_limb_x_traj_stance(self):
     #     lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
     #     body_part = 'ForepawToe%s' % lr
-    #     height = self.calculate_body_x(body_part, 0, 'front')
+    #     x = self.calculate_body_x(body_part, 0, 'front')
     #     return x.values
     #
     # def contra_limb_x_traj_swing(self):
     #     lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
     #     body_part = 'ForepawToe%s' % lr
-    #     height = self.calculate_body_x(body_part, 1, 'front')
+    #     x = self.calculate_body_x(body_part, 1, 'front')
     #     return x.values
-
-
 
 
     def get_belt_line(self):
@@ -357,7 +420,7 @@ class CalculateMeasuresByStride():
         slope, intercept, _, _, _ = stats.linregress([start['x'], trans['x']], [start['y'], trans['y']])
         return slope, intercept
 
-    def limb_rel_to_body_stance(self):
+    def limb_rel_to_body_stance(self): # back1 is 1, back 12 is 0, further forward than back 1 is 1+
         data_chunk = self.df_s.loc(axis=0)[self.stride_start]
         x_vals = data_chunk.loc(axis=0)[['Back1','Back12',self.stepping_limb], 'x']
         x_vals_zeroed = x_vals - x_vals['Back12']

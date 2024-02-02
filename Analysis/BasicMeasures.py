@@ -229,11 +229,24 @@ class CalculateMeasuresByStride():
         # mask = part_mask & stsw_mask
         data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
         slope_belt, intercept_belt = self.get_belt_line()
-        part_x = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        part_y = data_chunk.loc(axis=1)[body_part, 'y'][mask]
+        zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+        if yref == 'front':
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
+            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
+                                                                         self.maps['pixel_sizes']['side_f'],
+                                                                         self.maps['triang']['side_f'])
+        elif yref == 'overhead':
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
+            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
+                                                                         self.maps['pixel_sizes']['side_o'],
+                                                                         self.maps['triang']['side_o'])
         belty = part_x * slope_belt + intercept_belt
-        true_part_y = belty - part_y.droplevel('coords', axis=1) if isinstance(body_part, list) else true_part_y = belty - part_y
+        true_part_y = belty - part_y
         return true_part_y.mean(axis=0)
 
     def neck_z_stance(self):
@@ -285,25 +298,48 @@ class CalculateMeasuresByStride():
         part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
             if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff
         mask = np.logical_and(part_mask, part_yref_mask, stsw_mask)
+        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+        zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+        if yref == 'front':
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
+
+        elif yref == 'overhead':
+            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
+
 
         return data_chunk, data_chunk_yref, mask
 
+    def convert_coords_to_mm(self, x, y, z, coord, view, yref):
+        if view == 'Side':
+            if yref == 'front':
+                real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
+                                                                             self.maps['pixel_sizes']['side_f'],
+                                                                             self.maps['triang']['side_f'])
+            elif yref == 'overhead':
+                real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
+                                                                             self.maps['pixel_sizes']['side_o'],
+                                                                             self.maps['triang']['side_o'])
+
+            if coord == 'x' or 'z' and coord != 'y':
+                result = coord * real_px_size
+
+        if view == 'Front':
+            real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
+                                                                         self.maps['pixel_sizes']['front_f'],
+                                                                         self.maps['triang']['front_f'])
+            result = coord * real_px_size
+
+        return result
+
+
+
+
     def calculate_body_x(self, body_part, step_phase, yref): # mm
-        # data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        # if yref == 'front':
-        #     data_chunk_yref =  self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        # elif yref == 'overhead':
-        #     data_chunk_yref =  self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        #
-        # stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        # part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-        #     if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        # part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-        #     if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        # mask = np.logical_and(part_mask, part_yref_mask, stsw_mask)
-
         data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
-
         xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
         real_px_size= []

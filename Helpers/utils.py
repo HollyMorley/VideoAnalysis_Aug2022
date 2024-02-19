@@ -3,6 +3,7 @@ from glob import glob
 import matplotlib.pyplot as plt
 from pathlib import Path
 from Helpers.Config_23 import *
+from matplotlib.patches import Polygon
 import sys
 import numpy as np
 import re
@@ -520,6 +521,19 @@ class Utils:
         limb_lr = limb[-1]
 
         return options[limb_lr][comparison]
+
+    def plot_polygon_with_numberered_pts(self, shape):
+        x_side_coor, y_side_coor = zip(*shape)
+        fig, ax = plt.subplots()
+        polygon = Polygon(shape, closed=True, fill=None, edgecolor='b')
+        ax.add_patch(polygon)
+        for i, (x, y) in enumerate(shape):
+            ax.text(x, y, str(i), color='red')
+
+        ax.set_xlim(min(x_side_coor) - 1, max(x_side_coor) + 1)
+        ax.set_ylim(min(y_side_coor) - 1, max(y_side_coor) + 1)
+        fig.show()
+
 
 
 

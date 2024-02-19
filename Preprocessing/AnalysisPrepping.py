@@ -1,8 +1,7 @@
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Helpers import GetRuns
-import Velocity_v2 as Velocity
-from Helpers import Structural_calculations
+from Preprocessing import Velocity_v2 as Velocity
 import numpy as np
 import pandas as pd
 import scipy

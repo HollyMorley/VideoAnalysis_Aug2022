@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import warnings
 import os
+import re
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -215,39 +216,39 @@ class CalculateMeasuresByStride():
     def tail_tilt_swing(self):
         return self.calculate_body_tilt(['Tail1','Tail12'], 1)
 
-    def calculate_body_z(self, body_part, step_phase, yref):
-        '''
-        Returns true (subtracted from belt line) height (in z-plane) of one or more body part/s
-        :param body_part:
-        :param step_phase:
-        :return:
-        '''
-        # data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        # stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        # part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-        #     if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        # mask = part_mask & stsw_mask
-        data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
-        slope_belt, intercept_belt = self.get_belt_line()
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
-        if yref == 'front':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
-            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
-                                                                         self.maps['pixel_sizes']['side_f'],
-                                                                         self.maps['triang']['side_f'])
-        elif yref == 'overhead':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
-            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
-                                                                         self.maps['pixel_sizes']['side_o'],
-                                                                         self.maps['triang']['side_o'])
-        belty = part_x * slope_belt + intercept_belt
-        true_part_y = belty - part_y
-        return true_part_y.mean(axis=0)
+    # def calculate_body_z(self, body_part, step_phase, yref):
+    #     '''
+    #     Returns true (subtracted from belt line) height (in z-plane) of one or more body part/s
+    #     :param body_part:
+    #     :param step_phase:
+    #     :return:
+    #     '''
+    #     # data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     # stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+    #     # part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+    #     #     if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+    #     # mask = part_mask & stsw_mask
+    #     data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
+    #     slope_belt, intercept_belt = self.get_belt_line()
+    #     xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+    #     zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+    #     if yref == 'front':
+    #         ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
+    #             if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
+    #         real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
+    #                                                                      self.maps['pixel_sizes']['side_f'],
+    #                                                                      self.maps['triang']['side_f'])
+    #     elif yref == 'overhead':
+    #         ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+    #             if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
+    #         real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
+    #                                                                      self.maps['pixel_sizes']['side_o'],
+    #                                                                      self.maps['triang']['side_o'])
+    #     belty = part_x * slope_belt + intercept_belt
+    #     true_part_y = belty - part_y
+    #     return true_part_y.mean(axis=0)
 
     def neck_z_stance(self):
         return self.calculate_body_z('Back1', 0)
@@ -285,35 +286,69 @@ class CalculateMeasuresByStride():
         body_part = 'ForepawToe%s' % lr
         return self.calculate_body_z(body_part, 1)
 
-    def get_body_part_coordinates(self, body_part, step_phase, yref):
+    def get_body_part_coordinates(self, body_part, step_phase, yref, zref='side', sub_y_bodypart=None):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         if yref == 'front':
             data_chunk_yref = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         elif yref == 'overhead':
             data_chunk_yref = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        else:
+            raise ValueError("Invalid value for yref. It should be either 'front' or 'overhead'.")
 
         stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
         part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        mask = np.logical_and(part_mask, part_yref_mask, stsw_mask)
+        if sub_y_bodypart is not None:
+            part_yref = sub_y_bodypart
+        else:
+            part_yref = body_part
+        part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff, axis=1) \
+                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff
+        mask = np.logical_and.reduce((part_mask, part_yref_mask, stsw_mask))
+
         xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
-        if yref == 'front':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
-
-        elif yref == 'overhead':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+        if zref == 'side':
+            zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+                if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+        elif zref == 'front':
+            zpos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
                 if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
+        if yref == 'front':
+            ypos = data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask]
+        elif yref == 'overhead':
+            ypos = data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask]
+
+        return {'x': xpos, 'y': ypos, 'z': zpos}
+
+    def temp_get_body_part_coordinates_SINGLEVIEW(self, body_part, view, step_phase):
+        if view == 'side':
+            data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        elif view == 'front':
+            data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
 
 
-        return data_chunk, data_chunk_yref, mask
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+            if isinstance(body_part, list) else data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        mask = np.logical_and.reduce((part_mask, other_mask, stsw_mask))
+
+        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+        ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+
+        return {'x': xpos, 'y': ypos}
 
     def convert_coords_to_mm(self, x, y, z, coord, view, yref):
+        real_px_size = []
+        real_coord = []
         if view == 'Side':
             if yref == 'front':
                 real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
@@ -325,37 +360,60 @@ class CalculateMeasuresByStride():
                                                                              self.maps['triang']['side_o'])
 
             if coord == 'x' or 'z' and coord != 'y':
-                result = coord * real_px_size
-
+                real_coord = eval(coord) * real_px_size
+            else:
+                raise ValueError('Incompatible view and target coordinate combination')
         if view == 'Front':
             real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
                                                                          self.maps['pixel_sizes']['front_f'],
                                                                          self.maps['triang']['front_f'])
-            result = coord * real_px_size
+            if coord == 'y' or 'z' and coord != 'x':
+                real_coord = eval(coord) * real_px_size
+            else:
+                raise ValueError('Incompatible view and target coordinate combination')
 
-        return result
+        return real_coord
 
-
-
+    def calculate_body_z(self, body_part, step_phase, yref): # todo confirm this is only from side view (relevant for belt calculations)
+        '''
+        Returns true (subtracted from belt line) height (in z-plane) of one or more body part/s
+        :param body_part:
+        :param step_phase:
+        :return:
+        '''
+        slope_belt, intercept_belt = self.get_belt_line()
+        coords = self.get_body_part_coordinates(body_part, step_phase, yref)
+        z_real = self.convert_coords_to_mm(x=coords['x'], y=coords['y'], z=coords['z'], coord='z', view='Side',
+                                               yref=yref)
+        beltz = coords['x'] * slope_belt + intercept_belt
+        beltz_real = self.maps['pixel_sizes']['side_f'].min() * beltz
+        return beltz_real - z_real
 
     def calculate_body_x(self, body_part, step_phase, yref): # mm
-        data_chunk, data_chunk_yref, mask = self.get_body_part_coordinates(body_part, step_phase, yref)
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        real_px_size= []
-        if yref == 'front':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'x'][mask]
-            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
-                                                                         self.maps['pixel_sizes']['side_f'],
-                                                                         self.maps['triang']['side_f'])
-        elif yref == 'overhead':
-            ypos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
-            real_px_size = self.maps['map'].find_interpolated_pixel_size(xpos.values, ypos.values,
-                                                                         self.maps['pixel_sizes']['side_o'],
-                                                                         self.maps['triang']['side_o'])
-        return xpos * real_px_size
+        coords = self.get_body_part_coordinates(body_part, step_phase, yref)
+        x_real = self.convert_coords_to_mm(x=coords['x'],y=coords['y'],z=coords['z'],coord='x',view='Side',yref=yref)
+
+        ### figure out start line bit
+        mask = np.logical_and.reduce((self.df_s.loc(axis=1)['StartPlatL','likelihood'] > pcutoff,
+                                      self.df_s.loc(axis=1)['StartPlatR','likelihood'] > pcutoff,
+                                      self.df_f.loc(axis=1)['StartPlatL','likelihood'] > pcutoff,
+                                      self.df_f.loc(axis=1)['StartPlatR','likelihood'] > pcutoff))
+        lx = self.df_s.loc(axis=1)['StartPlatL','x'][mask]
+        rx = self.df_s.loc(axis=1)['StartPlatR','x'][mask]
+        ly = self.df_f.loc(axis=1)['StartPlatL','x'][mask]
+        ry = self.df_f.loc(axis=1)['StartPlatR','x'][mask]
+        real_px_size_l = self.maps['map'].find_interpolated_pixel_size(lx.values, ly.values,
+                                                                     self.maps['pixel_sizes']['side_f'],
+                                                                     self.maps['triang']['side_f'])
+        real_px_size_r = self.maps['map'].find_interpolated_pixel_size(rx.values, ry.values,
+                                                                       self.maps['pixel_sizes']['side_f'],
+                                                                       self.maps['triang']['side_f'])
+        real_startL = np.mean(real_px_size_l * lx)
+        real_startR = np.mean(real_px_size_r * rx)
+        slope, intercept, _, _, _ = stats.linregress([r['x'], l['x']], [r['y'], l['y']])
+
+
+        return x_real
 
     def neck_x_displacement_stance(self):
         x = self.calculate_body_x('Back1', 0, 'overhead')
@@ -402,7 +460,22 @@ class CalculateMeasuresByStride():
         return x.iloc[-1] - x.iloc[0]
 
 
-    # def calculate_body_y() !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # def calculate_body_y(toe_x, toe_y, ankle_x, ankle_y):
+    #     # Calculate differences in x and y coordinates
+    #     dx = ankle_x - toe_x
+    #     dy = ankle_y - toe_y
+    #
+    #     # Calculate the angle in radians
+    #     angle_radians = math.atan2(dy, dx)
+    #
+    #     # Convert angle from radians to degrees
+    #     angle_degrees = math.degrees(angle_radians)
+    #
+    #     # Ensure the angle is between -180 and 180 degrees
+    #     angle_degrees = (angle_degrees + 180) % 360 - 180
+    #
+    #     return angle_degrees
+
 
     # def neck_x_traj_stance(self):
     #     x = self.calculate_body_x('Back1', 0, 'overhead')
@@ -449,11 +522,21 @@ class CalculateMeasuresByStride():
     #     return x.values
 
 
+    # to do add function looking at recah angle of stepping paw
+
+
     def get_belt_line(self):
         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
         start = data_chunk.loc(axis=1)['StartPlatR',['x','y']].mean().droplevel(level='bodyparts')
         trans = data_chunk.loc(axis=1)['TransitionR',['x','y']].mean().droplevel(level='bodyparts')
         slope, intercept, _, _, _ = stats.linregress([start['x'], trans['x']], [start['y'], trans['y']])
+        return slope, intercept
+
+    def get_start_line(self):
+        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        l = data_chunk.loc(axis=1)['StartPlatL',['x','y']].mean().droplevel(level='bodyparts')
+        r = data_chunk.loc(axis=1)['StartPlatR',['x','y']].mean().droplevel(level='bodyparts')
+        slope, intercept, _, _, _ = stats.linregress([r['x'], l['x']], [r['y'], l['y']])
         return slope, intercept
 
     def limb_rel_to_body_stance(self): # back1 is 1, back 12 is 0, further forward than back 1 is 1+
@@ -463,6 +546,160 @@ class CalculateMeasuresByStride():
         x_vals_norm_to_neck = x_vals_zeroed/x_vals_zeroed['Back1']
         result = x_vals_norm_to_neck[self.stepping_limb].values[0]
         return result
+
+    def temp_transformation_of_coordinates(self):
+        real_coords = self.maps['map'].get_real_space_coordinates()
+        cam_coords_sf = self.maps['map'].get_comb_camera_coords('front')
+        h = self.maps['map'].get_homography_matrix(cam_coords_sf, real_coords)
+
+        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
+        labels = ['Nose', 'ForepawToeR', 'ForepawToeL', 'TransitionL', 'TransitionR', 'StartPlatR']
+
+        for l in labels:
+            target_coords = self.get_body_part_coordinates(l, 1, 'front','side')
+            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in target_coords['x'].keys()]
+
+            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
+            colour_vals = np.arange(0,len(x))
+
+            ax = plt.gca()
+            ax.scatter(x,y, c=colour_vals, cmap='cool')
+            ax.annotate(l, xy=(x[-1],y[-1]), xytext=(10,10),textcoords='offset points', arrowprops=dict(facecolor='black', arrowstyle='->'))
+
+    def temp_find_perspective_convergence(self, view):
+        s, f, o = self.maps['map'].assign_coordinates()
+        # Define the endpoints of the two vertical lines
+        if view == 'side':
+            side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
+            side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
+            vertical_line1_endpoints = side_cam_coords[[0, 3]]
+            vertical_line2_endpoints = side_cam_coords[[1, 2]]
+        elif view == 'front':
+            front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
+            front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
+            vertical_line1_endpoints = front_cam_coords[[0, 1]]
+            vertical_line2_endpoints = front_cam_coords[[3, 2]]
+
+        # Calculate the slope and intercept of each vertical line (mx + b form)
+        slope1 = (vertical_line1_endpoints[1, 1] - vertical_line1_endpoints[0, 1]) / (
+                    vertical_line1_endpoints[1, 0] - vertical_line1_endpoints[0, 0])
+        intercept1 = vertical_line1_endpoints[0, 1] - slope1 * vertical_line1_endpoints[0, 0]
+        slope2 = (vertical_line2_endpoints[1, 1] - vertical_line2_endpoints[0, 1]) / (
+                    vertical_line2_endpoints[1, 0] - vertical_line2_endpoints[0, 0])
+        intercept2 = vertical_line2_endpoints[0, 1] - slope2 * vertical_line2_endpoints[0, 0]
+        # Calculate the x-coordinate of the intersection point
+        intersection_x = (intercept2 - intercept1) / (slope1 - slope2)
+        # Calculate the y-coordinate of the intersection point
+        intersection_y = slope1 * intersection_x + intercept1
+
+        return intersection_x, intersection_y
+
+
+    def temp_find_z(self, label1, label2, h, yref, zref, offset):
+        Z = []
+        for l in [label1, label2]:
+            target_coords = self.get_body_part_coordinates(l, 1, yref, zref)
+            if zref == 'side':
+                target_coords_3d = [[[target_coords['z'][i] + offset], [target_coords['y'][i]], [1]] for i in
+                                target_coords['x'].keys()]
+                x, _ = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
+                Z.append(x)
+            elif zref == 'front':
+                target_coords_3d = [[[target_coords['x'][i]], [target_coords['z'][i] + offset], [1]] for i in
+                                target_coords['x'].keys()]
+                _, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
+                Z.append(y)
+        print(Z[0] - Z[1])
+
+    def temp_plot_tracked_xy_points_on_real_space(self, labels, yref):
+        real_coords, cam_coords, h = self.get_coords_and_h(yref)
+
+        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
+        for l in labels:
+            target_coords = self.get_body_part_coordinates(l, 1, yref=yref, zref='side')
+            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in
+                                target_coords['x'].keys()]
+
+            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
+
+            colour_vals = np.arange(0, len(x))
+
+            ax = plt.gca()
+            ax.scatter(x, y, c=colour_vals, cmap='cool')
+            ax.annotate(l, xy=(x[-1], y[-1]), xytext=(10, 10), textcoords='offset points',
+                        arrowprops=dict(facecolor='black', arrowstyle='->'))
+        plt.show()
+
+    def temp_plot_x_diff_in_real_space(self, label1, label2, yref):
+        real_coords, cam_coords, h = self.get_coords_and_h(yref)
+
+        X = []
+        Y = []
+        for lidx, l in enumerate([label1, label2]):
+            target_coords = self.get_body_part_coordinates(l, 1, yref=yref, zref='side')
+            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in
+                                target_coords['x'].keys()]
+            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
+            X.append(x)
+            Y.append(y)
+
+        plt.figure()
+        plt.plot(X[0], X[0] - X[1])
+        plt.title('%s - %s' %(label1, label2))
+        #plt.ylim(-1, 5)
+        ax = plt.gca()
+        ax.set_ylabel('distance (mm)')
+        ax.set_xlabel('X position (mm)')
+        plt.show()
+
+    def get_coords_and_h(self, yref):
+        real_coords = self.maps['map'].get_real_space_coordinates()
+        cam_coords = self.maps['map'].get_comb_camera_coords(yref)
+        h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
+        return real_coords, cam_coords, h
+
+    # def temp_plot_tracked_xy_points_on_real_space_SEPERATE(self, labels, yref):
+    #     s, f, o = self.maps['map'].assign_coordinates()
+    #     side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
+    #     side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
+    #     front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
+    #     front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
+    #
+    #
+    #     real_coords = self.maps['map'].get_real_space_coordinates()
+    #     real_coords_flat_side = real_coords.copy()
+    #     real_coords_flat_side[:, 1] = 0
+    #     real_coords_flat_yref = real_coords.copy()
+    #     real_coords_flat_yref[:, 0] = 0
+    #
+    #     hs = self.maps['map'].get_perspective_transform(side_cam_coords, real_coords_flat_side)
+    #     hf = self.maps['map'].get_perspective_transform(front_cam_coords, real_coords_flat_yref)
+    #
+    #     utils.Utils().plot_polygon_with_numberered_pts(real_coords)
+    #
+    #     for l in labels:
+    #         try:
+    #             side_coords = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'side', 1)
+    #             side_coords_3d = [[[side_coords['x'][i]], [side_coords['y'][i]], [1]] for i in side_coords['x'].keys()]
+    #             front_coords = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'front', 1)
+    #             front_coords_3d = [[[front_coords['x'][i]], [front_coords['y'][i]], [1]] for i in front_coords['x'].keys()]
+    #
+    #             x, _ = self.maps['map'].get_transformed_coordinates(hs, side_coords_3d)
+    #             y, _ = self.maps['map'].get_transformed_coordinates(hf, front_coords_3d)
+    #
+    #             colour_vals = np.arange(0, len(x))
+    #
+    #             ax = plt.gca()
+    #             ax.scatter(x, y, c=colour_vals, cmap='cool')
+    #             ax.annotate(l, xy=(x[-1], y[-1]), xytext=(10, 10), textcoords='offset points',
+    #                         arrowprops=dict(facecolor='black', arrowstyle='->'))
+    #         except:
+    #             print(l)
+
+
+    #def temp_plot_tracked_xz_points_on_real_space(self, labels, yref, zref):
+
+
 
 
 class Save():

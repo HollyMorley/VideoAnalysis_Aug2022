@@ -222,7 +222,7 @@ class GetRealDistances:
     def get_transformed_xy_of_point(self, src_coords, dst_coords, point_coords):
         """
         Warps source 4-sided polygon into destination polygon.
-        :param src_coords: source polygon coordinates (4-sided)
+        :param src_coords: sourcea polygon coordintes (4-sided)
         :param dst_coords: destination polygon coordinates (4-sided)
         :param point_coords: x,y coordinates of point to be transformed. MUST be in shape (3,1)
         :return: Coordinates of specified point according the the warping of the whole polygon
@@ -351,9 +351,54 @@ class GetRealDistances:
         return interpolated_pixel_size
 
 
-class create_real_space_dataframes:
-    def convert_px_to_mm_WHOLE_DF(self, conditions):
-        data = utils.Utils().GetDFs(conditions, reindexed_loco=False)
+    ################ new #################
 
+    def get_real_space_coordinates(self):
+        real_coords = np.array([[0, 0],
+                                [structural_stuff['belt_length_sideviewrange'] - structural_stuff[
+                                    'belt_length_sideviewend'], 0],
+                                # [structural_stuff['belt_length_sideviewrange'], 0],
+                                # [structural_stuff['belt_length_sideviewrange'], structural_stuff['belt_width']],
+                                [structural_stuff['belt_length_sideviewrange'] - structural_stuff[
+                                    'belt_length_sideviewend'], structural_stuff['belt_width']],
+                                [0, structural_stuff['belt_width']]])
+        return real_coords
+
+    def get_comb_camera_coords(self, yref):
+        s, f, o = self.assign_coordinates()
+        if yref == 'front':
+            combined_cam_coords = np.array([(s[key]['x'], f[key]['x']) for key in s.keys()])
+            combined_cam_coords = np.delete(combined_cam_coords, [2, 3], axis=0)
+            return combined_cam_coords
+        elif yref == 'overhead':
+            combined_cam_coords = np.array([(s[key]['x'], o[key]['y']) for key in s.keys()])
+            combined_cam_coords = np.delete(combined_cam_coords, [2, 3], axis=0)
+            return combined_cam_coords
+        else:
+            raise ValueError("yref must be 'front' or 'overhead'")
+
+    def get_homography_matrix(self, src_coords, dst_coords):
+        h, status = cv2.findHomography(src_coords, dst_coords)
+        return h
+
+    def get_perspective_transform(self, src_coords, dst_coords):
+        h = cv2.getPerspectiveTransform(src_coords.astype(np.float32), dst_coords.astype(np.float32))
+        return h
+
+    def get_transformed_coordinates(self, h, coords):
+        transformed_coords = np.dot(h, coords)
+        transformed_coords = transformed_coords / transformed_coords[2]
+        x = transformed_coords[0]
+        y = transformed_coords[1]
+        return x, y
+
+
+
+
+
+# class create_real_space_dataframes:
+#     def convert_px_to_mm_WHOLE_DF(self, conditions):
+#         data = utils.Utils().GetDFs(conditions, reindexed_loco=False)
+#
 
 

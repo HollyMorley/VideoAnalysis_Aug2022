@@ -330,7 +330,9 @@ class CalculateMeasuresByStride():
         elif view == 'front':
             data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
             data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-
+        elif view == 'overhead':
+            data_chunk = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
 
         stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
         other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
@@ -344,7 +346,7 @@ class CalculateMeasuresByStride():
         ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
 
-        return {'x': xpos, 'y': ypos}
+        return xpos, ypos
 
     def convert_coords_to_mm(self, x, y, z, coord, view, yref):
         real_px_size = []
@@ -652,11 +654,20 @@ class CalculateMeasuresByStride():
         ax.set_xlabel('X position (mm)')
         plt.show()
 
+    # def get_coords_and_h(self, yref):
+    #     real_coords = self.maps['map'].get_real_space_coordinates()
+    #     cam_coords = self.maps['map'].get_comb_camera_coords(yref)
+    #     h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
+    #     return real_coords, cam_coords, h
+
     def get_coords_and_h(self, yref):
         real_coords = self.maps['map'].get_real_space_coordinates()
-        cam_coords = self.maps['map'].get_comb_camera_coords(yref)
-        h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
-        return real_coords, cam_coords, h
+        xref_cam_coords = self.maps['map'].get_cam_coords('side')
+        yref_cam_coords = self.maps['map'].get_cam_coords(yref)
+        hx = self.maps['map'].get_homography_matrix(real_coords, xref_cam_coords)
+        hy = self.maps['map'].get_homography_matrix(real_coords, yref_cam_coords)
+        return real_coords, xref_cam_coords, yref_cam_coords, hx, hy
+
 
     # def temp_plot_tracked_xy_points_on_real_space_SEPERATE(self, labels, yref):
     #     s, f, o = self.maps['map'].assign_coordinates()
@@ -698,6 +709,58 @@ class CalculateMeasuresByStride():
 
 
     #def temp_plot_tracked_xz_points_on_real_space(self, labels, yref, zref):
+
+    def temp_transform_from_real_to_cam_to_real(self, yref, length=20, depth=5):
+        real_coords, xref_cam_coords, yref_cam_coords, hx, hy = self.get_coords_and_h(yref)
+
+        grid = np.array([[[x], [y], [z]] for x in range(0, structural_stuff['belt_length_sideviewrange'] -
+                                                        structural_stuff['belt_length_sideviewend'], length) for y in
+                         range(0, structural_stuff['belt_width'], depth) for z in [1]])
+
+        x_side, y_side = self.maps['map'].get_transformed_coordinates(hx, grid)
+        x_front, y_front = self.maps['map'].get_transformed_coordinates(hy, grid)
+
+        plt.figure()
+        plt.scatter(x_side, x_front)
+        plt.title('2 - transformed sideXfront grid')
+        grid_side_3d = np.array([[[x_side[i][0]], [y_side[i][0]], [1]] for i in range(len(x_side))])
+        grid_front_3d = np.array([[[x_front[i][0]], [y_front[i][0]], [1]] for i in range(len(x_front))])
+
+        x_side_real, y_side_real = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hx), grid_side_3d)
+        x_front_real, y_front_real = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hy), grid_front_3d)
+        plt.figure()
+        plt.scatter(x_side_real, y_front_real)
+        plt.title('3 - transformed real grid')
+        grid_comb_real_3d = np.array([[[x_side_real[i][0]], [y_front_real[i][0]], [1]] for i in range(len(x_side_real))])
+
+
+    def temp_plot_tracked_xy_points_on_real_space_TWO(self, labels, yref):
+        real_coords, xref_cam_coords, yref_cam_coords, hx, hy = self.get_coords_and_h(yref)
+
+        num_limbs = len(labels)
+        cmap = plt.cm.get_cmap('cool', num_limbs)
+        colors = [cmap(i) for i in range(num_limbs)]
+
+        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
+        for idx, l in enumerate(labels):
+            xref_body_x, xref_body_y  = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'side', 1)
+            yref_body_x, yref_body_y = self.temp_get_body_part_coordinates_SINGLEVIEW(l, yref, 1)
+
+            xref_3d = np.array([[[xref_body_x.iloc[i]], [xref_body_y.iloc[i]], [1]] for i in range(len(xref_body_x))])
+            yref_3d = np.array([[[yref_body_x.iloc[i]], [yref_body_y.iloc[i]], [1]] for i in range(len(yref_body_x))])
+
+            xref_real_x, xref_real_y = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hx), xref_3d)
+            yref_real_x, yref_real_y = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hy), yref_3d)
+
+            colour_vals = np.arange(0, len(xref_real_x))
+
+            ax = plt.gca()
+            # ax.scatter(xref_real_x, yref_real_y, c=colour_vals, cmap='cool')
+            ax.scatter(xref_real_x, yref_real_y, color=colors[idx])
+            ax.annotate(l, xy=(xref_real_x[-1], yref_real_y[-1]), xytext=(10, 10), textcoords='offset points',
+                        arrowprops=dict(facecolor='black', arrowstyle='->'))
+        plt.show()
+
 
 
 

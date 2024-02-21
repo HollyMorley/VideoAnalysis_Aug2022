@@ -267,7 +267,7 @@ class GetRealDistances:
 
         return pixel_sizes
 
-    def get_warped_grid_coordinates(self, view):
+    def get_warped_grid_coordinates(self, view, four_pts=True, real_size_grid=True, length=20, depth=5):
         """
         Get warped grid coordinates for either front or side view of belt
         :param view: 'front', 'side' or 'overhead'
@@ -279,20 +279,33 @@ class GetRealDistances:
                                          [structural_stuff['belt_length_sideviewrange'], structural_stuff['belt_width']],
                                          [structural_stuff['belt_length_sideviewrange'] - structural_stuff['belt_length_sideviewend'], structural_stuff['belt_width']],
                                          [0, structural_stuff['belt_width']]])
-        grid = np.array([[[x], [y], [z]] for x in range(structural_stuff['belt_length_sideviewrange']) for y in
-                range(structural_stuff['belt_width']) for z in [1]])
+        if four_pts == True:
+            standard_rect_coords = np.delete(standard_rect_coords, [2, 3], axis=0)
+
+        if real_size_grid == True:
+            grid = np.array([[[x], [y], [z]] for x in range(structural_stuff['belt_length_sideviewrange']) for y in
+                    range(structural_stuff['belt_width']) for z in [1]])
+        else:
+            grid = np.array([[[x], [y], [z]] for x in range(0, structural_stuff['belt_length_sideviewrange'] - structural_stuff['belt_length_sideviewend'], length) for y in
+                             range(0, structural_stuff['belt_width'], depth) for z in [1]])
 
         s, f, o = self.assign_coordinates()
 
         x, y = [], []
         if view == 'Side':
             side_rect_coords = np.array([(point['x'], point['y']) for point in s.values()])
+            if four_pts == True:
+                side_rect_coords = np.delete(side_rect_coords, [2, 3], axis=0)
             x, y = self.get_transformed_xy_of_point(standard_rect_coords, side_rect_coords, grid)
         elif view == 'Front':
             front_rect_coords = np.array([(point['y'], point['x']) for point in f.values()])  # switched to rotate the view to same orientation
+            if four_pts == True:
+                front_rect_coords = np.delete(front_rect_coords, [2, 3], axis=0)
             x, y = self.get_transformed_xy_of_point(standard_rect_coords,front_rect_coords,grid)
         elif view == 'Overhead':
             overhead_rect_coords = np.array([(point['x'], point['y']) for point in o.values()])
+            if four_pts == True:
+                overhead_rect_coords = np.delete(overhead_rect_coords, [2, 3], axis=0)
             x, y = self.get_transformed_xy_of_point(standard_rect_coords, overhead_rect_coords, grid)
 
         return x, y
@@ -363,6 +376,16 @@ class GetRealDistances:
                                     'belt_length_sideviewend'], structural_stuff['belt_width']],
                                 [0, structural_stuff['belt_width']]])
         return real_coords
+
+    def get_cam_coords(self, view):
+        s, f, o = self.assign_coordinates()
+        cam_map = {'side': s, 'front': f, 'overhead': o}
+        cam = cam_map.get(view)
+        if cam is None:
+            raise ValueError(f"View '{view}' is not recognized.")
+        cam_coords = np.array([(cam[key]['x'], cam[key]['y']) for key in cam.keys()])
+        cam_coords = np.delete(cam_coords, [2, 3], axis=0)
+        return cam_coords
 
     def get_comb_camera_coords(self, yref):
         s, f, o = self.assign_coordinates()

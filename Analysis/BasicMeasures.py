@@ -286,67 +286,67 @@ class CalculateMeasuresByStride():
         body_part = 'ForepawToe%s' % lr
         return self.calculate_body_z(body_part, 1)
 
-    def get_body_part_coordinates(self, body_part, step_phase, yref, zref='side', sub_y_bodypart=None):
-        data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        if yref == 'front':
-            data_chunk_yref = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        elif yref == 'overhead':
-            data_chunk_yref = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        else:
-            raise ValueError("Invalid value for yref. It should be either 'front' or 'overhead'.")
-
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        if sub_y_bodypart is not None:
-            part_yref = sub_y_bodypart
-        else:
-            part_yref = body_part
-        part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff, axis=1) \
-                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff
-        mask = np.logical_and.reduce((part_mask, part_yref_mask, stsw_mask))
-
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        if zref == 'side':
-            zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-                if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
-        elif zref == 'front':
-            zpos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-                if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
-        if yref == 'front':
-            ypos = data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask]
-        elif yref == 'overhead':
-            ypos = data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
-                if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask]
-
-        return {'x': xpos, 'y': ypos, 'z': zpos}
-
-    def temp_get_body_part_coordinates_SINGLEVIEW(self, body_part, view, step_phase):
-        if view == 'side':
-            data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        elif view == 'front':
-            data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        elif view == 'overhead':
-            data_chunk = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        mask = np.logical_and.reduce((part_mask, other_mask, stsw_mask))
-
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
-
-        return xpos, ypos
+    # def get_body_part_coordinates(self, body_part, step_phase, yref, zref='side', sub_y_bodypart=None):
+    #     data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     if yref == 'front':
+    #         data_chunk_yref = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     elif yref == 'overhead':
+    #         data_chunk_yref = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     else:
+    #         raise ValueError("Invalid value for yref. It should be either 'front' or 'overhead'.")
+    #
+    #     stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+    #     part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+    #     if sub_y_bodypart is not None:
+    #         part_yref = sub_y_bodypart
+    #     else:
+    #         part_yref = body_part
+    #     part_yref_mask = np.all(data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff, axis=1) \
+    #             if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'likelihood'] > pcutoff
+    #     mask = np.logical_and.reduce((part_mask, part_yref_mask, stsw_mask))
+    #
+    #     xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+    #     if zref == 'side':
+    #         zpos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+    #             if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+    #     elif zref == 'front':
+    #         zpos = data_chunk_yref.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+    #             if isinstance(body_part, list) else data_chunk_yref.loc(axis=1)[body_part, 'y'][mask]
+    #     if yref == 'front':
+    #         ypos = data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask].droplevel('coords', axis=1).mean(axis=1) \
+    #             if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'x'][mask]
+    #     elif yref == 'overhead':
+    #         ypos = data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask].droplevel('coords', axis=1).mean(axis=1) \
+    #             if isinstance(part_yref, list) else data_chunk_yref.loc(axis=1)[part_yref, 'y'][mask]
+    #
+    #     return {'x': xpos, 'y': ypos, 'z': zpos}
+    #
+    # def temp_get_body_part_coordinates_SINGLEVIEW(self, body_part, view, step_phase):
+    #     if view == 'side':
+    #         data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #         data_chunk_other = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     elif view == 'front':
+    #         data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #         data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #     elif view == 'overhead':
+    #         data_chunk = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #         data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+    #
+    #     stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+    #     other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+    #         if isinstance(body_part, list) else data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+    #     part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+    #     mask = np.logical_and.reduce((part_mask, other_mask, stsw_mask))
+    #
+    #     xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+    #     ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+    #         if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+    #
+    #     return xpos, ypos
 
     def convert_coords_to_mm(self, x, y, z, coord, view, yref):
         real_px_size = []
@@ -654,61 +654,20 @@ class CalculateMeasuresByStride():
         ax.set_xlabel('X position (mm)')
         plt.show()
 
+    # # def get_coords_and_h(self, yref):
+    # #     real_coords = self.maps['map'].get_real_space_coordinates()
+    # #     cam_coords = self.maps['map'].get_comb_camera_coords(yref)
+    # #     h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
+    # #     return real_coords, cam_coords, h
+    #
     # def get_coords_and_h(self, yref):
     #     real_coords = self.maps['map'].get_real_space_coordinates()
-    #     cam_coords = self.maps['map'].get_comb_camera_coords(yref)
-    #     h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
-    #     return real_coords, cam_coords, h
+    #     xref_cam_coords = self.maps['map'].get_cam_coords('side')
+    #     yref_cam_coords = self.maps['map'].get_cam_coords(yref)
+    #     hx = self.maps['map'].get_homography_matrix(real_coords, xref_cam_coords)
+    #     hy = self.maps['map'].get_homography_matrix(real_coords, yref_cam_coords)
+    #     return real_coords, xref_cam_coords, yref_cam_coords, hx, hy
 
-    def get_coords_and_h(self, yref):
-        real_coords = self.maps['map'].get_real_space_coordinates()
-        xref_cam_coords = self.maps['map'].get_cam_coords('side')
-        yref_cam_coords = self.maps['map'].get_cam_coords(yref)
-        hx = self.maps['map'].get_homography_matrix(real_coords, xref_cam_coords)
-        hy = self.maps['map'].get_homography_matrix(real_coords, yref_cam_coords)
-        return real_coords, xref_cam_coords, yref_cam_coords, hx, hy
-
-
-    # def temp_plot_tracked_xy_points_on_real_space_SEPERATE(self, labels, yref):
-    #     s, f, o = self.maps['map'].assign_coordinates()
-    #     side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
-    #     side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
-    #     front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
-    #     front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
-    #
-    #
-    #     real_coords = self.maps['map'].get_real_space_coordinates()
-    #     real_coords_flat_side = real_coords.copy()
-    #     real_coords_flat_side[:, 1] = 0
-    #     real_coords_flat_yref = real_coords.copy()
-    #     real_coords_flat_yref[:, 0] = 0
-    #
-    #     hs = self.maps['map'].get_perspective_transform(side_cam_coords, real_coords_flat_side)
-    #     hf = self.maps['map'].get_perspective_transform(front_cam_coords, real_coords_flat_yref)
-    #
-    #     utils.Utils().plot_polygon_with_numberered_pts(real_coords)
-    #
-    #     for l in labels:
-    #         try:
-    #             side_coords = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'side', 1)
-    #             side_coords_3d = [[[side_coords['x'][i]], [side_coords['y'][i]], [1]] for i in side_coords['x'].keys()]
-    #             front_coords = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'front', 1)
-    #             front_coords_3d = [[[front_coords['x'][i]], [front_coords['y'][i]], [1]] for i in front_coords['x'].keys()]
-    #
-    #             x, _ = self.maps['map'].get_transformed_coordinates(hs, side_coords_3d)
-    #             y, _ = self.maps['map'].get_transformed_coordinates(hf, front_coords_3d)
-    #
-    #             colour_vals = np.arange(0, len(x))
-    #
-    #             ax = plt.gca()
-    #             ax.scatter(x, y, c=colour_vals, cmap='cool')
-    #             ax.annotate(l, xy=(x[-1], y[-1]), xytext=(10, 10), textcoords='offset points',
-    #                         arrowprops=dict(facecolor='black', arrowstyle='->'))
-    #         except:
-    #             print(l)
-
-
-    #def temp_plot_tracked_xz_points_on_real_space(self, labels, yref, zref):
 
     def temp_transform_from_real_to_cam_to_real(self, yref, length=20, depth=5):
         real_coords, xref_cam_coords, yref_cam_coords, hx, hy = self.get_coords_and_h(yref)
@@ -762,7 +721,124 @@ class CalculateMeasuresByStride():
         plt.show()
 
 
+class Map():
+    def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps):
+        self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb, self.maps = data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps
 
+        # calculate sumarised dataframes
+        self.df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
+        self.df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
+        self.df_o = self.data[con][mouseID]['Overhead'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
+
+
+    def get_body_part_coordinates(self, body_part, view, step_phase):
+        if view == 'side':
+            data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        elif view == 'front':
+            data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        elif view == 'overhead':
+            data_chunk = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
+        else:
+            raise ValueError('Incorrect view given')
+
+        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+        other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+            if isinstance(body_part, list) else data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
+        mask = np.logical_and.reduce((part_mask, other_mask, stsw_mask))
+
+        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
+        ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
+            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
+
+        return xpos, ypos
+
+    def get_h(self, yref):
+        real_coords = self.maps['map'].get_real_space_coordinates()
+        cam_coords = self.maps['map'].get_comb_camera_coords(yref)
+        h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
+        return h
+
+    def get_xy_coordinates(self, labels, dfx, dfy, yref):
+        ydim = 'y' if yref == 'overhead' else 'x'
+        mask = np.logical_and(dfx.loc(axis=1)[labels, 'likelihood'] > pcutoff,
+                              dfy.loc(axis=1)[labels, 'likelihood'] > pcutoff).droplevel(axis=1, level='coords')
+        x = dfx.loc(axis=1)[labels, 'x'][mask]
+        y = dfy.loc(axis=1)[labels, ydim][mask]
+        y.rename(columns={'x': 'y'}, level='coords', inplace=True)
+        XYc = pd.concat([x, y], axis=1)
+        return XYc
+
+    def calculate_real_xy(self, XYc, h):
+        columns = pd.MultiIndex.from_product([XYc.columns.get_level_values(level='bodyparts').unique(), ['x', 'y', 'z']], names=['bodyparts', 'coords'])
+        XYZw = pd.DataFrame(index=XYc.index, columns=columns)
+        for l in XYc.columns.get_level_values(level='bodyparts').unique():
+            xy_3d = np.array([[[XYc.loc(axis=1)[l,'x'].iloc[i]], [XYc.loc(axis=1)[l,'y'].iloc[i]], [1]] for i in range(len(XYc))])
+            xw, yw = self.maps['map'].get_transformed_coordinates(h, xy_3d)
+            XYZw[l, 'x'] = xw
+            XYZw[l, 'y'] = yw #condense the above
+        return XYZw
+
+    def calculate_real_z(self, h, XYc, XYZw, offset):
+        for l in XYZw.columns.get_level_values(level='bodyparts').unique():
+            sidecam_y = self.df_s.loc(axis=1)[l,'y']
+            zy_3d = np.array(
+                [[[sidecam_y.iloc[i] + offset], [XYc.loc(axis=1)[l, 'y'].iloc[i]], [1]] for i in range(len(XYc))])
+            zw, _ = self.maps['map'].get_transformed_coordinates(h, zy_3d)
+            XYZw[l, 'z'] = zw
+        return XYZw
+
+
+    def find_perspective_convergence(self, view):
+        s, f, o = self.maps['map'].assign_coordinates()
+        # Define the endpoints of the two vertical lines
+        if view == 'side':
+            side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
+            side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
+            vertical_line1_endpoints = side_cam_coords[[0, 3]]
+            vertical_line2_endpoints = side_cam_coords[[1, 2]]
+        elif view == 'front':
+            front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
+            front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
+            vertical_line1_endpoints = front_cam_coords[[0, 1]]
+            vertical_line2_endpoints = front_cam_coords[[3, 2]]
+
+        # Calculate the slope and intercept of each vertical line (mx + b form)
+        slope1 = (vertical_line1_endpoints[1, 1] - vertical_line1_endpoints[0, 1]) / (
+                    vertical_line1_endpoints[1, 0] - vertical_line1_endpoints[0, 0])
+        intercept1 = vertical_line1_endpoints[0, 1] - slope1 * vertical_line1_endpoints[0, 0]
+        slope2 = (vertical_line2_endpoints[1, 1] - vertical_line2_endpoints[0, 1]) / (
+                    vertical_line2_endpoints[1, 0] - vertical_line2_endpoints[0, 0])
+        intercept2 = vertical_line2_endpoints[0, 1] - slope2 * vertical_line2_endpoints[0, 0]
+        # Calculate the x-coordinate of the intersection point
+        intersection_x = (intercept2 - intercept1) / (slope1 - slope2)
+        # Calculate the y-coordinate of the intersection point
+        intersection_y = slope1 * intersection_x + intercept1
+
+        return intersection_x, intersection_y
+
+    def get_real_xyz(self):
+        hf = self.get_h('front')
+        ho = self.get_h('overhead')
+
+        sideXfront_XYc = self.get_xy_coordinates(labels=label_list['sideXfront'], dfx=self.df_s, dfy=self.df_f, yref='front')
+        sideXoverhead_XYc = self.get_xy_coordinates(labels=label_list['sideXoverhead'], dfx=self.df_s, dfy=self.df_o, yref='overhead')
+
+        sideXfront_XYw = self.calculate_real_xy(XYc=sideXfront_XYc, h=hf)
+        sideXoverhead_XYw = self.calculate_real_xy(XYc=sideXoverhead_XYc, h=ho)
+
+        offset, _ = self.find_perspective_convergence('side')
+
+        sideXfront_XYZw = self.calculate_real_z(h=hf, XYc=sideXfront_XYc, XYZw=sideXfront_XYw, offset=offset)
+        sideXoverhead_XYZw = self.calculate_real_z(h=ho, XYc=sideXoverhead_XYc, XYZw=sideXoverhead_XYw, offset=offset)
+
+        XYZw = pd.concat([sideXoverhead_XYZw, sideXfront_XYZw], axis=1)
+        return XYZw
 
 
 class Save():

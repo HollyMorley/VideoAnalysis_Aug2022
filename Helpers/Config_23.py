@@ -74,6 +74,13 @@ micestuff = {
     ]
 }
 
+label_list = {
+    'sideXfront': ['ForepawToeR', 'HindpawToeR', 'ForepawToeL', 'HindpawToeL'],
+    'sideXoverhead': ['Nose', 'EarL', 'EarR', 'Back1', 'Back2', 'Back3','Back4', 'Back5', 'Back6', 'Back7', 'Back8',
+                      'Back9', 'Back10','Back11', 'Back12', 'Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5','Tail6',
+                      'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12']
+}
+
 measure_list = {
     'limb': ['walking_speed','stride_duration','cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
     'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'

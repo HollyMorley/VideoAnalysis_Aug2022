@@ -549,214 +549,19 @@ class CalculateMeasuresByStride():
         result = x_vals_norm_to_neck[self.stepping_limb].values[0]
         return result
 
-    def temp_transformation_of_coordinates(self):
-        real_coords = self.maps['map'].get_real_space_coordinates()
-        cam_coords_sf = self.maps['map'].get_comb_camera_coords('front')
-        h = self.maps['map'].get_homography_matrix(cam_coords_sf, real_coords)
-
-        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
-        labels = ['Nose', 'ForepawToeR', 'ForepawToeL', 'TransitionL', 'TransitionR', 'StartPlatR']
-
-        for l in labels:
-            target_coords = self.get_body_part_coordinates(l, 1, 'front','side')
-            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in target_coords['x'].keys()]
-
-            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
-            colour_vals = np.arange(0,len(x))
-
-            ax = plt.gca()
-            ax.scatter(x,y, c=colour_vals, cmap='cool')
-            ax.annotate(l, xy=(x[-1],y[-1]), xytext=(10,10),textcoords='offset points', arrowprops=dict(facecolor='black', arrowstyle='->'))
-
-    def temp_find_perspective_convergence(self, view):
-        s, f, o = self.maps['map'].assign_coordinates()
-        # Define the endpoints of the two vertical lines
-        if view == 'side':
-            side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
-            side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
-            vertical_line1_endpoints = side_cam_coords[[0, 3]]
-            vertical_line2_endpoints = side_cam_coords[[1, 2]]
-        elif view == 'front':
-            front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
-            front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
-            vertical_line1_endpoints = front_cam_coords[[0, 1]]
-            vertical_line2_endpoints = front_cam_coords[[3, 2]]
-
-        # Calculate the slope and intercept of each vertical line (mx + b form)
-        slope1 = (vertical_line1_endpoints[1, 1] - vertical_line1_endpoints[0, 1]) / (
-                    vertical_line1_endpoints[1, 0] - vertical_line1_endpoints[0, 0])
-        intercept1 = vertical_line1_endpoints[0, 1] - slope1 * vertical_line1_endpoints[0, 0]
-        slope2 = (vertical_line2_endpoints[1, 1] - vertical_line2_endpoints[0, 1]) / (
-                    vertical_line2_endpoints[1, 0] - vertical_line2_endpoints[0, 0])
-        intercept2 = vertical_line2_endpoints[0, 1] - slope2 * vertical_line2_endpoints[0, 0]
-        # Calculate the x-coordinate of the intersection point
-        intersection_x = (intercept2 - intercept1) / (slope1 - slope2)
-        # Calculate the y-coordinate of the intersection point
-        intersection_y = slope1 * intersection_x + intercept1
-
-        return intersection_x, intersection_y
-
-
-    def temp_find_z(self, label1, label2, h, yref, zref, offset):
-        Z = []
-        for l in [label1, label2]:
-            target_coords = self.get_body_part_coordinates(l, 1, yref, zref)
-            if zref == 'side':
-                target_coords_3d = [[[target_coords['z'][i] + offset], [target_coords['y'][i]], [1]] for i in
-                                target_coords['x'].keys()]
-                x, _ = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
-                Z.append(x)
-            elif zref == 'front':
-                target_coords_3d = [[[target_coords['x'][i]], [target_coords['z'][i] + offset], [1]] for i in
-                                target_coords['x'].keys()]
-                _, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
-                Z.append(y)
-        print(Z[0] - Z[1])
-
-    def temp_plot_tracked_xy_points_on_real_space(self, labels, yref):
-        real_coords, cam_coords, h = self.get_coords_and_h(yref)
-
-        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
-        for l in labels:
-            target_coords = self.get_body_part_coordinates(l, 1, yref=yref, zref='side')
-            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in
-                                target_coords['x'].keys()]
-
-            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
-
-            colour_vals = np.arange(0, len(x))
-
-            ax = plt.gca()
-            ax.scatter(x, y, c=colour_vals, cmap='cool')
-            ax.annotate(l, xy=(x[-1], y[-1]), xytext=(10, 10), textcoords='offset points',
-                        arrowprops=dict(facecolor='black', arrowstyle='->'))
-        plt.show()
-
-    def temp_plot_x_diff_in_real_space(self, label1, label2, yref):
-        real_coords, cam_coords, h = self.get_coords_and_h(yref)
-
-        X = []
-        Y = []
-        for lidx, l in enumerate([label1, label2]):
-            target_coords = self.get_body_part_coordinates(l, 1, yref=yref, zref='side')
-            target_coords_3d = [[[target_coords['x'][i]], [target_coords['y'][i]], [1]] for i in
-                                target_coords['x'].keys()]
-            x, y = self.maps['map'].get_transformed_coordinates(h, target_coords_3d)
-            X.append(x)
-            Y.append(y)
-
-        plt.figure()
-        plt.plot(X[0], X[0] - X[1])
-        plt.title('%s - %s' %(label1, label2))
-        #plt.ylim(-1, 5)
-        ax = plt.gca()
-        ax.set_ylabel('distance (mm)')
-        ax.set_xlabel('X position (mm)')
-        plt.show()
-
-    # # def get_coords_and_h(self, yref):
-    # #     real_coords = self.maps['map'].get_real_space_coordinates()
-    # #     cam_coords = self.maps['map'].get_comb_camera_coords(yref)
-    # #     h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
-    # #     return real_coords, cam_coords, h
-    #
-    # def get_coords_and_h(self, yref):
-    #     real_coords = self.maps['map'].get_real_space_coordinates()
-    #     xref_cam_coords = self.maps['map'].get_cam_coords('side')
-    #     yref_cam_coords = self.maps['map'].get_cam_coords(yref)
-    #     hx = self.maps['map'].get_homography_matrix(real_coords, xref_cam_coords)
-    #     hy = self.maps['map'].get_homography_matrix(real_coords, yref_cam_coords)
-    #     return real_coords, xref_cam_coords, yref_cam_coords, hx, hy
-
-
-    def temp_transform_from_real_to_cam_to_real(self, yref, length=20, depth=5):
-        real_coords, xref_cam_coords, yref_cam_coords, hx, hy = self.get_coords_and_h(yref)
-
-        grid = np.array([[[x], [y], [z]] for x in range(0, structural_stuff['belt_length_sideviewrange'] -
-                                                        structural_stuff['belt_length_sideviewend'], length) for y in
-                         range(0, structural_stuff['belt_width'], depth) for z in [1]])
-
-        x_side, y_side = self.maps['map'].get_transformed_coordinates(hx, grid)
-        x_front, y_front = self.maps['map'].get_transformed_coordinates(hy, grid)
-
-        plt.figure()
-        plt.scatter(x_side, x_front)
-        plt.title('2 - transformed sideXfront grid')
-        grid_side_3d = np.array([[[x_side[i][0]], [y_side[i][0]], [1]] for i in range(len(x_side))])
-        grid_front_3d = np.array([[[x_front[i][0]], [y_front[i][0]], [1]] for i in range(len(x_front))])
-
-        x_side_real, y_side_real = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hx), grid_side_3d)
-        x_front_real, y_front_real = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hy), grid_front_3d)
-        plt.figure()
-        plt.scatter(x_side_real, y_front_real)
-        plt.title('3 - transformed real grid')
-        grid_comb_real_3d = np.array([[[x_side_real[i][0]], [y_front_real[i][0]], [1]] for i in range(len(x_side_real))])
-
-
-    def temp_plot_tracked_xy_points_on_real_space_TWO(self, labels, yref):
-        real_coords, xref_cam_coords, yref_cam_coords, hx, hy = self.get_coords_and_h(yref)
-
-        num_limbs = len(labels)
-        cmap = plt.cm.get_cmap('cool', num_limbs)
-        colors = [cmap(i) for i in range(num_limbs)]
-
-        utils.Utils().plot_polygon_with_numberered_pts(real_coords)
-        for idx, l in enumerate(labels):
-            xref_body_x, xref_body_y  = self.temp_get_body_part_coordinates_SINGLEVIEW(l, 'side', 1)
-            yref_body_x, yref_body_y = self.temp_get_body_part_coordinates_SINGLEVIEW(l, yref, 1)
-
-            xref_3d = np.array([[[xref_body_x.iloc[i]], [xref_body_y.iloc[i]], [1]] for i in range(len(xref_body_x))])
-            yref_3d = np.array([[[yref_body_x.iloc[i]], [yref_body_y.iloc[i]], [1]] for i in range(len(yref_body_x))])
-
-            xref_real_x, xref_real_y = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hx), xref_3d)
-            yref_real_x, yref_real_y = self.maps['map'].get_transformed_coordinates(np.linalg.inv(hy), yref_3d)
-
-            colour_vals = np.arange(0, len(xref_real_x))
-
-            ax = plt.gca()
-            # ax.scatter(xref_real_x, yref_real_y, c=colour_vals, cmap='cool')
-            ax.scatter(xref_real_x, yref_real_y, color=colors[idx])
-            ax.annotate(l, xy=(xref_real_x[-1], yref_real_y[-1]), xytext=(10, 10), textcoords='offset points',
-                        arrowprops=dict(facecolor='black', arrowstyle='->'))
-        plt.show()
-
 
 class Map():
+    '''
+    Maps coordinates (Xc, Yc) from side, front and overhead cameras into real world x, y and z coordinates, returning a
+    single dataframe with Xw, Yw and Zw coordinates for every labeled bodypart.
+    NB this is a temporary version as a placeholder until 3D mapping is solved
+    '''
     def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps):
         self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb, self.maps = data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps
-
-        # calculate sumarised dataframes
+        # retrieve shortened dataframes for each camera for the current run
         self.df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
         self.df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
         self.df_o = self.data[con][mouseID]['Overhead'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
-
-
-    def get_body_part_coordinates(self, body_part, view, step_phase):
-        if view == 'side':
-            data_chunk = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        elif view == 'front':
-            data_chunk = self.df_f.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        elif view == 'overhead':
-            data_chunk = self.df_o.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-            data_chunk_other = self.df_s.loc(axis=0)[np.arange(self.stride_start, self.stride_end)]
-        else:
-            raise ValueError('Incorrect view given')
-
-        stsw_mask = data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-        other_mask = np.all(data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk_other.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        part_mask = np.all(data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff, axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'likelihood'] > pcutoff
-        mask = np.logical_and.reduce((part_mask, other_mask, stsw_mask))
-
-        xpos = data_chunk.loc(axis=1)[body_part, 'x'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'x'][mask]
-        ypos = data_chunk.loc(axis=1)[body_part, 'y'][mask].droplevel('coords', axis=1) \
-            if isinstance(body_part, list) else data_chunk.loc(axis=1)[body_part, 'y'][mask]
-
-        return xpos, ypos
 
     def get_h(self, yref):
         real_coords = self.maps['map'].get_real_space_coordinates()
@@ -764,8 +569,21 @@ class Map():
         h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
         return h
 
+    def substitute_toe_y_for_ankle_y(self, dfy, labels):
+        ankles = [col for col in labels if 'Ankle' in col]
+        toes = [col for col in labels if 'Toe' in col]
+        dfy = dfy.drop(ankles, axis=1, level='bodyparts')
+        for tidx, t in enumerate(toes):
+            ankle = dfy[t].copy(deep=True)
+            multi_col = pd.MultiIndex.from_product([[ankles[tidx]], ankle.columns], names=['bodyparts', 'coords'])
+            ankle.columns = multi_col
+            dfy = pd.concat([dfy, ankle], axis=1)
+        return dfy
+
     def get_xy_coordinates(self, labels, dfx, dfy, yref):
         ydim = 'y' if yref == 'overhead' else 'x'
+        if yref == 'front':
+            dfy = self.substitute_toe_y_for_ankle_y(dfy, labels) ######## WARNING: THIS SUBSTITUTES X AND Y FOR FRONT CAM, THEREFORE IF I USE FRONT FOR Z MUST NOT BE DOWNSTREAM OF THIS
         mask = np.logical_and(dfx.loc(axis=1)[labels, 'likelihood'] > pcutoff,
                               dfy.loc(axis=1)[labels, 'likelihood'] > pcutoff).droplevel(axis=1, level='coords')
         x = dfx.loc(axis=1)[labels, 'x'][mask]
@@ -793,7 +611,6 @@ class Map():
             XYZw[l, 'z'] = zw
         return XYZw
 
-
     def find_perspective_convergence(self, view):
         s, f, o = self.maps['map'].assign_coordinates()
         # Define the endpoints of the two vertical lines
@@ -807,6 +624,8 @@ class Map():
             front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
             vertical_line1_endpoints = front_cam_coords[[0, 1]]
             vertical_line2_endpoints = front_cam_coords[[3, 2]]
+        else:
+            raise ValueError('Incompatible view given')
 
         # Calculate the slope and intercept of each vertical line (mx + b form)
         slope1 = (vertical_line1_endpoints[1, 1] - vertical_line1_endpoints[0, 1]) / (
@@ -961,6 +780,8 @@ class Save():
         mouse_measures_ALL = pd.concat(mouse_measures_ALL)
 
         return mouse_measures_ALL
+
+
 
 class plotting():
     # todo class currently not compatible for extended experiments

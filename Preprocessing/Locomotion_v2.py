@@ -522,9 +522,15 @@ class LocomotionSaveDfs():
             # get all subdirectories
             data_subdirs = []
             for root, subdirs, files in os.walk(dir_selection):
+                # if not root.endswith(('temp_bin', 'consistent_speed_up')):
                 if not subdirs:
                     if not root.endswith(('temp_bin', 'consistent_speed_up')):
                         data_subdirs.append(root)
+                    else:
+                        snip = root.split('\\')
+                        new = '\\'.join(snip[:-1])
+                        data_subdirs.append(new)
+            data_subdirs = np.unique(data_subdirs)
         else:
             dir_selection = os.path.join(paths['filtereddata_folder'], condition, exptype, wash, day)
             # get all subdirectories

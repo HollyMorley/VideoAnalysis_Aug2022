@@ -10,6 +10,7 @@ import re
 import math
 import pandas as pd
 import os
+import pickle
 
 class Utils:
     def __init__(self):
@@ -73,6 +74,30 @@ class Utils:
                 }
         return data
 
+    def Get_XYZw_DFs(self, conditions):
+        print('Conditions to be loaded:\n%s' % conditions)
+        data = dict.fromkeys(conditions)
+        for conidx, con in enumerate(conditions):
+            if 'Day' not in con:
+                files = directory=r"%s\%s" % (paths['filtereddata_folder'], con)
+            else:
+                splitcon = con.split('_')
+                conname = "_".join(splitcon[0:2])
+                dayname = splitcon[-1]
+                w = splitcon[-2]
+                if 'Repeats' in con:
+                    directory = r"%s\%s\Repeats\%s\%s" % (paths['filtereddata_folder'], conname, w, dayname)
+                elif 'Extended' in con:
+                    directory = r"%s\%s\Extended\%s" % (paths['filtereddata_folder'], conname, dayname)
+                else:
+                    directory=r"%s\%s\%s" % (paths['filtereddata_folder'], conname, dayname)
+                file = "%s\\allmice_%s_XYZw.pickle" % (directory,con)
+
+            with open(file, 'rb') as handle:
+                XYZw = pickle.load(handle)
+            data['%s' % con] = XYZw
+        return data
+
     def Getlistofvideofiles(self, view, directory, filetype=".avi"):
         # function to get a list of video files in a directory. Current use is for bulk DLC analysis of videos with different models in each directory
         # view can be either 'side', 'overhead' or 'front'
@@ -81,7 +106,6 @@ class Utils:
         vidfiles = [f for f in glob("%s/*%s*%s" % (directory, view, filetype)) if not any(j in f for j in ignore)]
         print(vidfiles)
         return vidfiles
-
 
     def GetlistofH5files(self, files=None, directory=None, filtered=None, suffix=None): #### update and change name to Getlistofanalysedfiles
         if directory is not None and files is None:

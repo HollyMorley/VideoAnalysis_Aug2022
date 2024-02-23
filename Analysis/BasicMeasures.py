@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 
 class CalculateMeasuresByStride():
-    def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps):
-        self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb, self.maps = data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps
+    def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb):
+        self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb = data, con, mouseID, r, stride_start, stride_end, stepping_limb
 
         # calculate sumarised dataframes
         self.df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
@@ -348,74 +348,7 @@ class CalculateMeasuresByStride():
     #
     #     return xpos, ypos
 
-    def convert_coords_to_mm(self, x, y, z, coord, view, yref):
-        real_px_size = []
-        real_coord = []
-        if view == 'Side':
-            if yref == 'front':
-                real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
-                                                                             self.maps['pixel_sizes']['side_f'],
-                                                                             self.maps['triang']['side_f'])
-            elif yref == 'overhead':
-                real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
-                                                                             self.maps['pixel_sizes']['side_o'],
-                                                                             self.maps['triang']['side_o'])
 
-            if coord == 'x' or 'z' and coord != 'y':
-                real_coord = eval(coord) * real_px_size
-            else:
-                raise ValueError('Incompatible view and target coordinate combination')
-        if view == 'Front':
-            real_px_size = self.maps['map'].find_interpolated_pixel_size(x.values, y.values,
-                                                                         self.maps['pixel_sizes']['front_f'],
-                                                                         self.maps['triang']['front_f'])
-            if coord == 'y' or 'z' and coord != 'x':
-                real_coord = eval(coord) * real_px_size
-            else:
-                raise ValueError('Incompatible view and target coordinate combination')
-
-        return real_coord
-
-    def calculate_body_z(self, body_part, step_phase, yref): # todo confirm this is only from side view (relevant for belt calculations)
-        '''
-        Returns true (subtracted from belt line) height (in z-plane) of one or more body part/s
-        :param body_part:
-        :param step_phase:
-        :return:
-        '''
-        slope_belt, intercept_belt = self.get_belt_line()
-        coords = self.get_body_part_coordinates(body_part, step_phase, yref)
-        z_real = self.convert_coords_to_mm(x=coords['x'], y=coords['y'], z=coords['z'], coord='z', view='Side',
-                                               yref=yref)
-        beltz = coords['x'] * slope_belt + intercept_belt
-        beltz_real = self.maps['pixel_sizes']['side_f'].min() * beltz
-        return beltz_real - z_real
-
-    def calculate_body_x(self, body_part, step_phase, yref): # mm
-        coords = self.get_body_part_coordinates(body_part, step_phase, yref)
-        x_real = self.convert_coords_to_mm(x=coords['x'],y=coords['y'],z=coords['z'],coord='x',view='Side',yref=yref)
-
-        ### figure out start line bit
-        mask = np.logical_and.reduce((self.df_s.loc(axis=1)['StartPlatL','likelihood'] > pcutoff,
-                                      self.df_s.loc(axis=1)['StartPlatR','likelihood'] > pcutoff,
-                                      self.df_f.loc(axis=1)['StartPlatL','likelihood'] > pcutoff,
-                                      self.df_f.loc(axis=1)['StartPlatR','likelihood'] > pcutoff))
-        lx = self.df_s.loc(axis=1)['StartPlatL','x'][mask]
-        rx = self.df_s.loc(axis=1)['StartPlatR','x'][mask]
-        ly = self.df_f.loc(axis=1)['StartPlatL','x'][mask]
-        ry = self.df_f.loc(axis=1)['StartPlatR','x'][mask]
-        real_px_size_l = self.maps['map'].find_interpolated_pixel_size(lx.values, ly.values,
-                                                                     self.maps['pixel_sizes']['side_f'],
-                                                                     self.maps['triang']['side_f'])
-        real_px_size_r = self.maps['map'].find_interpolated_pixel_size(rx.values, ry.values,
-                                                                       self.maps['pixel_sizes']['side_f'],
-                                                                       self.maps['triang']['side_f'])
-        real_startL = np.mean(real_px_size_l * lx)
-        real_startR = np.mean(real_px_size_r * rx)
-        slope, intercept, _, _, _ = stats.linregress([r['x'], l['x']], [r['y'], l['y']])
-
-
-        return x_real
 
     def neck_x_displacement_stance(self):
         x = self.calculate_body_x('Back1', 0, 'overhead')
@@ -461,22 +394,6 @@ class CalculateMeasuresByStride():
         x = self.calculate_body_x(body_part, 1, 'front')
         return x.iloc[-1] - x.iloc[0]
 
-
-    # def calculate_body_y(toe_x, toe_y, ankle_x, ankle_y):
-    #     # Calculate differences in x and y coordinates
-    #     dx = ankle_x - toe_x
-    #     dy = ankle_y - toe_y
-    #
-    #     # Calculate the angle in radians
-    #     angle_radians = math.atan2(dy, dx)
-    #
-    #     # Convert angle from radians to degrees
-    #     angle_degrees = math.degrees(angle_radians)
-    #
-    #     # Ensure the angle is between -180 and 180 degrees
-    #     angle_degrees = (angle_degrees + 180) % 360 - 180
-    #
-    #     return angle_degrees
 
 
     # def neck_x_traj_stance(self):
@@ -550,129 +467,20 @@ class CalculateMeasuresByStride():
         return result
 
 
-class Map():
-    '''
-    Maps coordinates (Xc, Yc) from side, front and overhead cameras into real world x, y and z coordinates, returning a
-    single dataframe with Xw, Yw and Zw coordinates for every labeled bodypart.
-    NB this is a temporary version as a placeholder until 3D mapping is solved
-    '''
-    def __init__(self, data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps):
-        self.data, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb, self.maps = data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps
-        # retrieve shortened dataframes for each camera for the current run
-        self.df_s = self.data[con][mouseID]['Side'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
-        self.df_f = self.data[con][mouseID]['Front'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
-        self.df_o = self.data[con][mouseID]['Overhead'].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage'])
-
-    def get_h(self, yref):
-        real_coords = self.maps['map'].get_real_space_coordinates()
-        cam_coords = self.maps['map'].get_comb_camera_coords(yref)
-        h = self.maps['map'].get_homography_matrix(cam_coords, real_coords)
-        return h
-
-    def substitute_toe_y_for_ankle_y(self, dfy, labels):
-        ankles = [col for col in labels if 'Ankle' in col]
-        toes = [col for col in labels if 'Toe' in col]
-        dfy = dfy.drop(ankles, axis=1, level='bodyparts')
-        for tidx, t in enumerate(toes):
-            ankle = dfy[t].copy(deep=True)
-            multi_col = pd.MultiIndex.from_product([[ankles[tidx]], ankle.columns], names=['bodyparts', 'coords'])
-            ankle.columns = multi_col
-            dfy = pd.concat([dfy, ankle], axis=1)
-        return dfy
-
-    def get_xy_coordinates(self, labels, dfx, dfy, yref):
-        ydim = 'y' if yref == 'overhead' else 'x'
-        if yref == 'front':
-            dfy = self.substitute_toe_y_for_ankle_y(dfy, labels) ######## WARNING: THIS SUBSTITUTES X AND Y FOR FRONT CAM, THEREFORE IF I USE FRONT FOR Z MUST NOT BE DOWNSTREAM OF THIS
-        mask = np.logical_and(dfx.loc(axis=1)[labels, 'likelihood'] > pcutoff,
-                              dfy.loc(axis=1)[labels, 'likelihood'] > pcutoff).droplevel(axis=1, level='coords')
-        x = dfx.loc(axis=1)[labels, 'x'][mask]
-        y = dfy.loc(axis=1)[labels, ydim][mask]
-        y.rename(columns={'x': 'y'}, level='coords', inplace=True)
-        XYc = pd.concat([x, y], axis=1)
-        return XYc
-
-    def calculate_real_xy(self, XYc, h):
-        columns = pd.MultiIndex.from_product([XYc.columns.get_level_values(level='bodyparts').unique(), ['x', 'y', 'z']], names=['bodyparts', 'coords'])
-        XYZw = pd.DataFrame(index=XYc.index, columns=columns)
-        for l in XYc.columns.get_level_values(level='bodyparts').unique():
-            xy_3d = np.array([[[XYc.loc(axis=1)[l,'x'].iloc[i]], [XYc.loc(axis=1)[l,'y'].iloc[i]], [1]] for i in range(len(XYc))])
-            xw, yw = self.maps['map'].get_transformed_coordinates(h, xy_3d)
-            XYZw[l, 'x'] = xw
-            XYZw[l, 'y'] = yw #condense the above
-        return XYZw
-
-    def calculate_real_z(self, h, XYc, XYZw, offset):
-        for l in XYZw.columns.get_level_values(level='bodyparts').unique():
-            sidecam_y = self.df_s.loc(axis=1)[l,'y']
-            zy_3d = np.array(
-                [[[sidecam_y.iloc[i] + offset], [XYc.loc(axis=1)[l, 'y'].iloc[i]], [1]] for i in range(len(XYc))])
-            zw, _ = self.maps['map'].get_transformed_coordinates(h, zy_3d)
-            XYZw[l, 'z'] = zw
-        return XYZw
-
-    def find_perspective_convergence(self, view):
-        s, f, o = self.maps['map'].assign_coordinates()
-        # Define the endpoints of the two vertical lines
-        if view == 'side':
-            side_cam_coords = np.array([(s[key]['x'], s[key]['y']) for key in s.keys()])
-            side_cam_coords = np.delete(side_cam_coords, [2, 3], axis=0)
-            vertical_line1_endpoints = side_cam_coords[[0, 3]]
-            vertical_line2_endpoints = side_cam_coords[[1, 2]]
-        elif view == 'front':
-            front_cam_coords = np.array([(f[key]['x'], f[key]['y']) for key in f.keys()])
-            front_cam_coords = np.delete(front_cam_coords, [2, 3], axis=0)
-            vertical_line1_endpoints = front_cam_coords[[0, 1]]
-            vertical_line2_endpoints = front_cam_coords[[3, 2]]
-        else:
-            raise ValueError('Incompatible view given')
-
-        # Calculate the slope and intercept of each vertical line (mx + b form)
-        slope1 = (vertical_line1_endpoints[1, 1] - vertical_line1_endpoints[0, 1]) / (
-                    vertical_line1_endpoints[1, 0] - vertical_line1_endpoints[0, 0])
-        intercept1 = vertical_line1_endpoints[0, 1] - slope1 * vertical_line1_endpoints[0, 0]
-        slope2 = (vertical_line2_endpoints[1, 1] - vertical_line2_endpoints[0, 1]) / (
-                    vertical_line2_endpoints[1, 0] - vertical_line2_endpoints[0, 0])
-        intercept2 = vertical_line2_endpoints[0, 1] - slope2 * vertical_line2_endpoints[0, 0]
-        # Calculate the x-coordinate of the intersection point
-        intersection_x = (intercept2 - intercept1) / (slope1 - slope2)
-        # Calculate the y-coordinate of the intersection point
-        intersection_y = slope1 * intersection_x + intercept1
-
-        return intersection_x, intersection_y
-
-    def get_real_xyz(self):
-        hf = self.get_h('front')
-        ho = self.get_h('overhead')
-
-        sideXfront_XYc = self.get_xy_coordinates(labels=label_list['sideXfront'], dfx=self.df_s, dfy=self.df_f, yref='front')
-        sideXoverhead_XYc = self.get_xy_coordinates(labels=label_list['sideXoverhead'], dfx=self.df_s, dfy=self.df_o, yref='overhead')
-
-        sideXfront_XYw = self.calculate_real_xy(XYc=sideXfront_XYc, h=hf)
-        sideXoverhead_XYw = self.calculate_real_xy(XYc=sideXoverhead_XYc, h=ho)
-
-        offset, _ = self.find_perspective_convergence('side')
-
-        sideXfront_XYZw = self.calculate_real_z(h=hf, XYc=sideXfront_XYc, XYZw=sideXfront_XYw, offset=offset)
-        sideXoverhead_XYZw = self.calculate_real_z(h=ho, XYc=sideXoverhead_XYc, XYZw=sideXoverhead_XYw, offset=offset)
-
-        XYZw = pd.concat([sideXoverhead_XYZw, sideXfront_XYZw], axis=1)
-        return XYZw
-
 
 class Save():
     def __init__(self, conditions):
         self.conditions = conditions
-        self.data = utils.Utils().GetDFs(conditions,reindexed_loco=True)
+        #self.data = utils.Utils().GetDFs(conditions,reindexed_loco=True)
+        self.XYZw = utils.Utils().Get_XYZw_DFs(conditions)
         self.CalculateMeasuresByStride = CalculateMeasuresByStride
 
     def find_pre_post_transition_strides(self, con, mouseID, r):
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
-        view = 'Side'
 
-        pre_frame = self.data[con][mouseID][view].loc(axis=0)[r, 'RunStart'].loc(axis=1)[
+        pre_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'RunStart'].loc(axis=1)[
             ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[-1]
-        post_frame = self.data[con][mouseID][view].loc(axis=0)[r, 'Transition'].loc(axis=1)[
+        post_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'Transition'].loc(axis=1)[
             ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[0]
         trans_limb_mask = post_frame - pre_frame == -1
         stepping_limb = np.array(['ForepawToeL', 'ForepawToeR'])[trans_limb_mask]
@@ -681,17 +489,55 @@ class Save():
         else:
             raise ValueError('wrong number of stepping limbs identified')
 
-        limbs_mask_post = (self.data[con][mouseID][view].loc(axis=0)[r, ['Transition', 'RunEnd']].loc(axis=1)[['ForepawToeR','ForepawToeL'], 'likelihood'] > pcutoff).any(axis=1)
+        limbs_mask_post = (self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition', 'RunEnd']].loc(axis=1)[['ForepawToeR','ForepawToeL'], 'likelihood'] > pcutoff).any(axis=1)
 
-        stance_mask_pre = self.data[con][mouseID][view].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
-        swing_mask_pre = self.data[con][mouseID][view].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
-        stance_mask_post = self.data[con][mouseID][view].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
-        swing_mask_post = self.data[con][mouseID][view].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
+        stance_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
+        swing_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
+        stance_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
+        swing_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
 
-        stance_idx_pre = pd.DataFrame(self.data[con][mouseID][view].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][stance_mask_pre].tail(3))
-        swing_idx_pre = pd.DataFrame(self.data[con][mouseID][view].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][swing_mask_pre].tail(3))
-        stance_idx_post = pd.DataFrame(self.data[con][mouseID][view].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][stance_mask_post & limbs_mask_post].head(2))
-        swing_idx_post = pd.DataFrame(self.data[con][mouseID][view].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][swing_mask_post & limbs_mask_post].head(2))
+        stance_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][stance_mask_pre].tail(3))
+        swing_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][swing_mask_pre].tail(3))
+        stance_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][stance_mask_post & limbs_mask_post].head(2))
+        swing_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][swing_mask_post & limbs_mask_post].head(2))
+
+        stance_idx_pre['Stride_no'] = np.sort(np.arange(1,len(stance_idx_pre)+1)*-1)
+        swing_idx_pre['Stride_no'] = np.sort(np.arange(1,len(swing_idx_pre)+1)*-1)
+        stance_idx_post['Stride_no'] = np.arange(0,len(stance_idx_post))
+        swing_idx_post['Stride_no'] = np.arange(0,len(swing_idx_post))
+
+
+        # Combine pre and post DataFrames
+        combined_df = pd.concat([stance_idx_pre,swing_idx_pre, stance_idx_post, swing_idx_post]).sort_index(level='FrameIdx')
+
+        return combined_df
+
+    def find_pre_post_transition_strides(self, con, mouseID, r):
+        warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+        #view = 'Side'
+
+        pre_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'RunStart'].loc(axis=1)[
+            ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[-1]
+        post_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'Transition'].loc(axis=1)[
+            ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[0]
+        trans_limb_mask = post_frame - pre_frame == -1
+        stepping_limb = np.array(['ForepawToeL', 'ForepawToeR'])[trans_limb_mask]
+        if len(stepping_limb) == 1:
+            stepping_limb = stepping_limb[0]
+        else:
+            raise ValueError('wrong number of stepping limbs identified')
+
+        limbs_mask_post = (self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition', 'RunEnd']].loc(axis=1)[['ForepawToeR','ForepawToeL'], 'likelihood'] > pcutoff).any(axis=1)
+
+        stance_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
+        swing_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
+        stance_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
+        swing_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
+
+        stance_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][stance_mask_pre].tail(3))
+        swing_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][swing_mask_pre].tail(3))
+        stance_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][stance_mask_post & limbs_mask_post].head(2))
+        swing_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][swing_mask_post & limbs_mask_post].head(2))
 
         stance_idx_pre['Stride_no'] = np.sort(np.arange(1,len(stance_idx_pre)+1)*-1)
         swing_idx_pre['Stride_no'] = np.sort(np.arange(1,len(swing_idx_pre)+1)*-1)
@@ -705,9 +551,9 @@ class Save():
         return combined_df
 
     def find_pre_post_transition_strides_ALL_RUNS(self, con, mouseID):
-        view = 'Side'
+        #view = 'Side'
         SwSt = []
-        for r in self.data[con][mouseID][view].index.get_level_values(level='Run').unique().astype(int):
+        for r in self.XYZw[con][mouseID].index.get_level_values(level='Run').unique().astype(int):
             try:
                 stsw = self.find_pre_post_transition_strides(con=con,mouseID=mouseID,r=r)
                 SwSt.append(stsw)
@@ -728,18 +574,6 @@ class Save():
         measure_list_flat = [value for sublist in measure_list.values() for value in sublist]
         measures = pd.DataFrame(index=multi_index,columns=measure_list_flat)
 
-        # calculate space maps
-        map = Structural_calculations.GetRealDistances(self.data, con, mouseID)
-        triang_side_f, pixel_sizes_side_f = map.map_pixel_sizes_to_belt('Side', 'Front') # pixel sizes in y-plane - using front view as reference for depth
-        triang_side_o, pixel_sizes_side_o = map.map_pixel_sizes_to_belt('Side', 'Overhead') # pixel sizes in y-plane - using overhead view as reference for depth (pixel sizes are same as above)
-        triang_front_f, pixel_sizes_front_f = map.map_pixel_sizes_to_belt('Front', 'Front') # pixel sizes in x-plane - using side view as reference for depth (same map with side as reference for y plane depth)
-
-        maps = {
-            'map': map,
-            'triang':{'side_f': triang_side_f, 'front_f': triang_front_f, 'side_o': triang_side_o},
-            'pixel_sizes': {'side_f': pixel_sizes_side_f, 'front_f': pixel_sizes_front_f, 'side_o': pixel_sizes_side_o}
-        }
-
         for r in tqdm(stride_borders.index.get_level_values(level='Run').unique()):
             stepping_limb = np.array(['ForepawToeR','ForepawToeL'])[(stride_borders.loc(axis=0)[r].loc(axis=1)[['ForepawToeR','ForepawToeL']].count() > 1).values][0]
             try:
@@ -747,7 +581,7 @@ class Save():
                     stride_start = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx]
                     stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1] - 1 # todo check i am right to consider the previous frame the end frame
 
-                    class_instance = self.CalculateMeasuresByStride(self.data, con, mouseID, r, stride_start, stride_end, stepping_limb, maps)
+                    class_instance = self.CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
 
                     for m in measure_list_flat:
                         try:
@@ -766,7 +600,7 @@ class Save():
         return measures
 
     def get_discrete_measures_byrun_bystride_ALLMICE(self, con):
-        mice = list(self.data[con].keys())
+        mice = list(self.XYZw[con].keys())
 
         mouse_measures_ALL = []
         for midx, mouseID in enumerate(mice):

@@ -48,7 +48,7 @@ class SaveMappedFiles():
     def batch_save_mapped_files(self):
         dirs = self.get_paths()
         for d in tqdm(dirs):
-            condition = '_'.join(list(filter(lambda x: len(x) > 0, d.split('\\')))[7:])
+            condition = '_'.join(list(filter(lambda x: len(x) > 0, d.split('\\')))[-4:])
             MapCon = MapSingleConditionFiles(condition)
             print('\n-----------------------------------------------------------------------------------\n'
                   'Calculating and saving real world coordinates for:\n'

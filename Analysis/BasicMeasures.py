@@ -23,15 +23,21 @@ class CalculateMeasuresByStride():
     ### General utility functions
     ####################################################################################################################
 
-    def correct_z(self, z_coord, idx): # TEMP!!!!!!!!
+    def correct_z(self, z_coord): # TEMP!!!!!!!!
         """
         Subtract real z coordinate from belt z to find change in z from belt level. This is only necessary beacuse the 3D mapping is not finished yet and z is an estimate
         :param z_coord: pd series with z coordinates of body part
         :return: difference in z
         """
-        beltline = self.XYZw[self.con][self.mouseID].loc(axis=0)[idx].loc(axis=1)[['StartPlatR', 'StartPlatL','TransitionR',
+        idx = z_coord.index
+        try:
+            beltline = self.XYZw[self.con][self.mouseID].loc(axis=0)[idx].loc(axis=1)[['StartPlatR', 'StartPlatL','TransitionR',
                                                                             'TransitionL'],'z'].mean(axis=1)
-        z = z_coord.sub(beltline, axis=0)*-1
+            z = z_coord.sub(beltline, axis=0) * -1
+        except:
+            beltline = self.XYZw[self.con][self.mouseID].loc(axis=0)[self.r,['RunStart','Transition','RunEnd'],idx].loc(axis=1)[
+                ['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'z'].mean(axis=1)
+            z = z_coord.sub(beltline, axis=0).droplevel([0,1],axis=0) * -1
         return z
 
     def calculate_belt_speed(self):
@@ -147,6 +153,43 @@ class CalculateMeasuresByStride():
         else:
             return length - self.calculate_belt_x_displacement()
 
+    def x(self, bodypart, speed_correct, step_phase, all_vals, full_stride, buffer_size=0.25):
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            x = buffer_chunk.loc(axis=1)[bodypart, 'x']
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+            x = self.data_chunk.loc(axis=1)[bodypart, 'x'][stsw_mask]
+        x = x - self.calculate_belt_speed() if speed_correct else x
+        if all_vals:
+            return x
+        else:
+            return x.mean()
+
+    def y(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            y = buffer_chunk.loc(axis=1)[bodypart, 'y']
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+            y = self.data_chunk.loc(axis=1)[bodypart, 'y'][stsw_mask]
+        if all_vals:
+            return y
+        else:
+            return y.mean()
+
+    def z(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            z = self.correct_z(buffer_chunk.loc(axis=1)[bodypart, 'z'])
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+            z = self.correct_z(self.data_chunk.loc(axis=1)[bodypart, 'z'][stsw_mask])
+        if all_vals:
+            return z
+        else:
+            return z.mean()
+
     ########### BODY-RELATVE DISTANCES ###########:
 
     def coo(self,xyz):
@@ -155,6 +198,9 @@ class CalculateMeasuresByStride():
         mid_t = np.median(swing.index).astype(int)
         mid_back = swing.loc(axis=0)[mid_t].loc(axis=0)['Back6', xyz]
         limb = swing.loc(axis=0)[mid_t].loc(axis=0)[self.stepping_limb, xyz]
+        if xyz == 'z':
+            mid_back = self.correct_z(mid_back)
+            limb = self.correct_z(limb)
         return limb - mid_back
 
     def bos_ref_stance(self,all_vals):
@@ -172,8 +218,8 @@ class CalculateMeasuresByStride():
             return bos.values[0]
 
     def tail1_ptp_amplitude_stride(self):
-        peak = self.correct_z(self.data_chunk.loc(axis=1)['Tail1','z'].max(), idx=self.data_chunk.index)
-        trough = self.correct_z(self.data_chunk.loc(axis=1)['Tail1','z'].min(), idx=self.data_chunk.index)
+        peak = self.correct_z(self.data_chunk.loc(axis=1)['Tail1','z'].max())
+        trough = self.correct_z(self.data_chunk.loc(axis=1)['Tail1','z'].min())
         return peak - trough
 
     def body_length(self, step_phase, all_vals, full_stride, buffer_size=0.25): ### make this adjustable for full stride too
@@ -196,10 +242,10 @@ class CalculateMeasuresByStride():
                        'Back11', 'Back12']
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            back_heights = self.correct_z(buffer_chunk.loc(axis=1)[back_labels, 'z'].droplevel(level='coords', axis=1).iloc[:, ::-1], idx=buffer_chunk.index)
+            back_heights = self.correct_z(buffer_chunk.loc(axis=1)[back_labels, 'z'].droplevel(level='coords', axis=1).iloc[:, ::-1])
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-            back_heights = self.correct_z(self.data_chunk.loc(axis=1)[back_labels, 'z'][stsw_mask].droplevel(level='coords', axis=1).iloc[:, ::-1], idx=self.data_chunk.index)
+            back_heights = self.correct_z(self.data_chunk.loc(axis=1)[back_labels, 'z'][stsw_mask].droplevel(level='coords', axis=1).iloc[:, ::-1])
         if all_vals:
             return back_heights
         else:
@@ -217,24 +263,6 @@ class CalculateMeasuresByStride():
         else:
             return skew.mean()
 
-    def body_tilt(self, body_parts, step_phase, all_vals, full_stride, buffer_size=0.25):
-        if full_stride:
-            buffer_chunk = self.get_buffer_chunk(buffer_size)
-            z = buffer_chunk.loc(axis=1)[body_parts, 'z'].droplevel('coords', axis=1)
-            x = buffer_chunk.loc(axis=1)[body_parts, 'x'].droplevel('coords', axis=1)
-        else:
-            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-            z = self.data_chunk.loc(axis=1)[body_parts, 'z'][stsw_mask].droplevel('coords', axis=1)
-            x = self.data_chunk.loc(axis=1)[body_parts, 'z'][stsw_mask].droplevel('coords', axis=1)
-
-        slope = (z.loc(axis=1)[body_parts[0]] - z.loc(axis=1)[body_parts[1]]) / (
-                x.loc(axis=1)[body_parts[0]] - x.loc(axis=1)[body_parts[1]])
-        angle = np.rad2deg(np.arctan(slope))
-        if all_vals:
-            return angle
-        else:
-            return angle.mean()
-
     def limb_rel_to_body(self, step_phase, all_vals, full_stride, buffer_size=0.25): # back1 is 1, back 12 is 0, further forward than back 1 is 1+
         ### WARNING: while mapping is not fixed, this will be nonsense as back and legs mapped separately
         if full_stride:
@@ -251,16 +279,65 @@ class CalculateMeasuresByStride():
         else:
             return position.mean()
 
-    def reach_angle(self, step_phase, all_vals, full_stride, buffer_size=0.25):
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+    def angle_3d(self, bodypart1, bodypart2, reference_axis, step_phase, all_vals, full_stride, buffer_size=0.25):
+        """
+        Calculate the angle between two body parts relative to a reference axis.
+        :param bodypart1 (str): First body part
+        :param bodypart2 (str): Second body part
+        :param reference_axis (array): Reference axis in the form of a 3D vector.
+        :param step_phase: 0 or 1 for stance or swing, respectively
+        :param all_vals: True or False for returning all values in stride or averaging, respectively
+        :param full_stride: True or False for analysing all frames from the stride and not splitting into st or sw
+        :param buffer_size: Proportion of stride in franes to add before and end as a buffer, 0 to 1
+        :return (angle): Angle between the two body parts and the reference axis (in degrees).
+        """
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            toe_coords = buffer_chunk.loc(axis=1)[self.stepping_limb]
-            ankle_coords = buffer_chunk.loc(axis=1)['ForepawAnkle%s' %lr]
+            coord_1 = buffer_chunk.loc(axis=1)[bodypart1, ['x','y','z']].droplevel('bodyparts', axis=1)
+            coord_2 = buffer_chunk.loc(axis=1)[bodypart2, ['x','y','z']].droplevel('bodyparts', axis=1)
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-            toe_coords = self.data_chunk.loc(axis=1)[self.stepping_limb]
-            ankle_coords = self.data_chunk.loc(axis=1)['ForepawAnkle%s' %lr]
+            coord_1 = self.data_chunk.loc(axis=1)[bodypart1, ['x','y','z']][stsw_mask].droplevel('bodyparts', axis=1)
+            coord_2 = self.data_chunk.loc(axis=1)[bodypart2, ['x','y','z']][stsw_mask].droplevel('bodyparts', axis=1)
+        # Correct z
+        coord_1['z'] = self.correct_z(coord_1['z'])
+        coord_2['z'] = self.correct_z(coord_2['z'])
+        # Calculate the vectors from body1 to body2
+        vectors_body1_to_body2 = coord_2 - coord_1
+        # Calculate the dot product between the vectors and the reference axis
+        dot_products = np.dot(vectors_body1_to_body2, reference_axis)
+        # Calculate the magnitudes of the vectors
+        magnitudes_body1_to_body2 = np.linalg.norm(vectors_body1_to_body2, axis=1)
+        magnitude_reference_axis = np.linalg.norm(reference_axis)
+        # Calculate the cosine of the reach angle
+        cosine_reach_angle = dot_products / (magnitudes_body1_to_body2 * magnitude_reference_axis)
+        # Calculate the reach angle in radians
+        angle_radians = np.arccos(cosine_reach_angle)
+        # Convert the reach angle to degrees
+        angle_degrees = np.degrees(angle_radians)
+        if all_vals:
+            return angle_degrees
+        else:
+            return angle_degrees.mean()
+
+    # def body_tilt(self, body_parts, step_phase, all_vals, full_stride, buffer_size=0.25):
+    #     if full_stride:
+    #         buffer_chunk = self.get_buffer_chunk(buffer_size)
+    #         z = buffer_chunk.loc(axis=1)[body_parts, 'z'].droplevel('coords', axis=1)
+    #         x = buffer_chunk.loc(axis=1)[body_parts, 'x'].droplevel('coords', axis=1)
+    #     else:
+    #         stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+    #         z = self.data_chunk.loc(axis=1)[body_parts, 'z'][stsw_mask].droplevel('coords', axis=1)
+    #         x = self.data_chunk.loc(axis=1)[body_parts, 'z'][stsw_mask].droplevel('coords', axis=1)
+    #
+    #     slope = (z.loc(axis=1)[body_parts[0]] - z.loc(axis=1)[body_parts[1]]) / (
+    #             x.loc(axis=1)[body_parts[0]] - x.loc(axis=1)[body_parts[1]])
+    #     angle = np.rad2deg(np.arctan(slope))
+    #     if all_vals:
+    #         return angle
+    #     else:
+    #         return angle.mean()
+
 
 
 

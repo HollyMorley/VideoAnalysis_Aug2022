@@ -2,7 +2,6 @@
 import pandas as pd
 import numpy as np
 
-
 def fitEllipse(x, y):
     x = x[:, np.newaxis]
     y = y[:, np.newaxis]
@@ -17,7 +16,6 @@ def fitEllipse(x, y):
 
     return ellipse_center(a)
 
-
 def ellipse_center(a):
     b, c, d, f, g, a = a[1] / 2, a[2], a[3] / 2, a[4] / 2, a[5], a[0]
     num = b * b - a * c
@@ -26,6 +24,22 @@ def ellipse_center(a):
 
     return np.array([x0, y0])
 
+def mirror_back(backy, backx):
+    y2 = backy.loc(axis=1)['Back1'].values
+    y1 = backy.loc(axis=1)['Back12'].values
+    x2 = backx.loc(axis=1)['Back1'].values
+    x1 = backx.loc(axis=1)['Back12'].values
+
+    m = (y2 - y1) / (x2 - x1)
+    b = y1 - m * x1
+
+    intercept = backx * m + b
+    diffmirror = intercept.values - backy.values
+
+    mirror = intercept + diffmirror
+    mirror.rename(columns={'x': 'yrev'}, inplace=True)
+
+    return mirror
 
 def estimate_body_center(backy, backx):
     # body_labels = labels.extract(tracking_data, 'BodyR', 'BodyL', tuple=True, coords=True)
@@ -56,25 +70,6 @@ def estimate_body_center(backy, backx):
     #body_center = pd.DataFrame(centroids, columns=['x_centroid', 'y_centroid'], index=pd.MultiIndex.from_tuples(idxs, names=('RunStage', 'FrameIdx')))
     body_center = pd.DataFrame(centroids, columns=['x_centroid', 'y_centroid'], index=combinedy.index)
     return body_center
-
-def mirror_back(backy, backx):
-    y2 = backy.loc(axis=1)['Back1'].values
-    y1 = backy.loc(axis=1)['Back12'].values
-    x2 = backx.loc(axis=1)['Back1'].values
-    x1 = backx.loc(axis=1)['Back12'].values
-
-    m = (y2 - y1) / (x2 - x1)
-    b = y1 - m * x1
-
-    intercept = backx * m + b
-    diffmirror = intercept.values - backy.values
-
-    mirror = intercept + diffmirror
-    mirror.rename(columns={'x': 'yrev'}, inplace=True)
-
-    return mirror
-
-
 
 
 

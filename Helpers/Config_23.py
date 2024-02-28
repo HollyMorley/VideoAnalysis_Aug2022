@@ -119,3 +119,41 @@ measure_list = {
 # #     'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
 # #     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
 # }
+measures_new = {
+    'multi_val_measure_list' : {
+        'instantaneous_swing_velocity': [],
+        'x': [],
+        'y': [],
+        'z' : [],
+        'traj': [],
+        'body_distance': [],
+        'back_height': [],
+        'back_skew': [],
+        'limb_rel_to_body': [],
+        'angle_3d': []
+    },
+    'single_val_measure_list': {
+        'stride_duration': [],
+        'stance_duration': [],
+        'swing_duration': [],
+        'cadence': [],
+        'duty_factor': [],
+        'walking_speed': [['Back6','False'],['Back6',True]],
+        'swing_velocity': [],
+        'stride_length': [],
+        'x': [],
+        'y': [],
+        'z': [],
+        'coo_xyz': [],
+        'coo_euclidean': [],
+        'bos_stancestart': [],
+        'ptp_amplitude_stride': [],
+        'body_distance': [],
+        'back_height': [],
+        'double_support': [],
+        'back_skew': [],
+        'limb_rel_to_body': [],
+        'angle_3d': []
+    }
+}
+

@@ -11,12 +11,15 @@ import re
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
+import itertools
+
 
 
 
 class CalculateMeasuresByStride():
-    def __init__(self, XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb, speed_correct):
-        self.XYZw, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb, self.speed_correct = XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb, speed_correct
+    def __init__(self, XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb):
+        self.XYZw, self.con, self.mouseID, self.r, self.stride_start, self.stride_end, self.stepping_limb = \
+            XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb
 
         # calculate sumarised dataframe
         self.data_chunk = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart', 'Transition', 'RunEnd']].droplevel(['Run', 'RunStage']).loc(axis=0)[np.arange(self.stride_start,self.stride_end+1)]
@@ -131,12 +134,12 @@ class CalculateMeasuresByStride():
         else:
             return swing_vel - self.calculate_belt_speed()
 
-    def instantaneous_swing_velocity(self, speed_correct, smooth=False):
+    def instantaneous_swing_velocity(self, speed_correct, xyz, smooth=False):
         """
         Derivative of swing trajectory
         :return: dataframe of velocities for x, y and z
         """
-        swing_trajectory = self.traj(self.stepping_limb, step_phase=1,full_stride=False,buffer_size=0)
+        swing_trajectory = self.traj(self.stepping_limb, step_phase=1,full_stride=False,speed_correct=speed_correct, buffer_size=0)
         time_interval = self.swing_duration()
         d_xyz = swing_trajectory.diff(axis=0)
         v_xyz = d_xyz/time_interval
@@ -144,9 +147,12 @@ class CalculateMeasuresByStride():
             # Optionally, smooth the velocities using Savitzky-Golay filter
             v_xyz = savgol_filter(v_xyz, window_length=3, polyorder=1)
         if not speed_correct:
-            return v_xyz
+            return v_xyz[xyz]
         else:
-            return v_xyz - self.calculate_belt_speed()
+            if xyz == 'x':
+                return v_xyz[xyz] - self.calculate_belt_speed()
+            else:
+                pass
 
 
     ########### DISTANCES ###########:
@@ -165,11 +171,11 @@ class CalculateMeasuresByStride():
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             x = self.data_chunk.loc(axis=1)[bodypart, 'x'][stsw_mask]
-        x = x - self.calculate_belt_speed() if speed_correct else x
+        x = x - self.calculate_belt_x_displacement() if speed_correct else x
         if all_vals:
             return x
         else:
-            return x.mean()
+            return x.iloc[-1] - x.iloc[0]
 
     def y(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
         if full_stride:
@@ -181,7 +187,7 @@ class CalculateMeasuresByStride():
         if all_vals:
             return y
         else:
-            return y.mean()
+            return y.iloc[-1] - y.iloc[0]
 
     def z(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
         if full_stride:
@@ -193,9 +199,9 @@ class CalculateMeasuresByStride():
         if all_vals:
             return z
         else:
-            return z.mean()
+            return z.iloc[-1] - z.iloc[0]
 
-    def traj(self, bodypart, step_phase, full_stride, buffer_size=0.25):
+    def traj(self, bodypart, step_phase, full_stride, speed_correct, buffer_size=0.25):
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
             xyz = buffer_chunk.loc(axis=1)[bodypart, ['x','y','z']].droplevel('bodyparts',axis=1)
@@ -203,6 +209,8 @@ class CalculateMeasuresByStride():
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             xyz = self.data_chunk.loc(axis=1)[bodypart, ['x','y','z']][stsw_mask].droplevel('bodyparts',axis=1)
         xyz['z'] = self.correct_z(xyz['z'])
+        if speed_correct:
+            xyz['x'] = xyz['x'] - self.calculate_belt_x_displacement()
         xyz_aligned = xyz - xyz.iloc[0]
         return xyz_aligned
 
@@ -261,7 +269,8 @@ class CalculateMeasuresByStride():
         trough = self.correct_z(self.data_chunk.loc(axis=1)[bodypart,'z'].min())
         return peak - trough
 
-    def body_distance(self, bodypart1, bodypart2, step_phase, all_vals, full_stride, buffer_size=0.25): ### eg body length, midback to forepaw
+    def body_distance(self, bodyparts, step_phase, all_vals, full_stride, buffer_size=0.25): ### eg body length, midback to forepaw
+        bodypart1, bodypart2 = bodyparts
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
             x1 = buffer_chunk.loc(axis=1)[bodypart1, 'x']
@@ -270,7 +279,7 @@ class CalculateMeasuresByStride():
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             x1 = self.data_chunk.loc(axis=1)[bodypart1, 'x'][stsw_mask]
             x2 = self.data_chunk.loc(axis=1)[bodypart2, 'x'][stsw_mask]
-        length = x1 - x2
+        length = abs(x1 - x2)
         if all_vals:
             return length
         else:
@@ -345,6 +354,97 @@ class CalculateMeasuresByStride():
         else:
             return position.mean()
 
+    def signed_angle(self, reference_vector, plane_normal, bodyparts, buffer_size=0.25):
+        """
+        Calculates the signed angle between the vector AB and a reference vector when viewed from a given plane.
+        Positive angles are clockwise, and negative angles are anticlockwise from the reference vector.
+
+        I'm assuming your use cases will mostly care about angles when viewed form a specific plane (i.e. side view, top
+        view, front view, or any other plane you defined through plane_normal). Use the right hand rule for figuring out the
+        appropriate normal vector for any plane.
+
+        E.g. for looking at from side plane (x and z coords) the plane_normal would be [0, 1, 0], and if you want angles
+        relative to vertical, reference_vector = [0, 0, 1]; relative to horizontal belt line would be [1,0,0].
+
+        Parameters:
+            A (np.array): An (n x 3) array of points.
+            B (np.array): An (n x 3) array of points.
+            reference_vector (np.array): The reference vector within the plane, defining the "vertical" direction.
+            plane_normal (np.array): The normal vector of the plane.
+
+        Returns:
+            np.array: An array of signed angles in degrees.
+
+        Example use (you'll have to add the z corrections etc):
+            path_ankle = '~/Downloads/Ankle.csv'
+            path_toe   = '~/Downloads/Toe.csv'
+
+            A = load_coords(path_ankle)
+            B = load_coords(path_toe)
+            A = A[['x','y','z']].to_numpy()
+            B = B[['x', 'y', 'z']].to_numpy()
+
+            # Define the reference vector (z axis)
+            reference_vector = np.array([0, 0, -1])
+
+            # Define the plane normal (Y-axis, for the XZ plane - i.e. side view)
+            plane_normal = np.array([0, 1, 0])
+
+            angles_deg = calculate_signed_angle(A, B, reference_vector, plane_normal)
+            plot_angles(np.arange(30), angles_deg)
+        """
+        bodypart1, bodypart2 = bodyparts
+        buffer_chunk = self.get_buffer_chunk(buffer_size)
+        coord_1 = buffer_chunk.loc(axis=1)[bodypart1, ['x','y','z']].droplevel('bodyparts', axis=1)
+        coord_2 = buffer_chunk.loc(axis=1)[bodypart2, ['x','y','z']].droplevel('bodyparts', axis=1)
+        # Correct z
+        coord_1['z'] = self.correct_z(coord_1['z'])
+        coord_2['z'] = self.correct_z(coord_2['z'])
+
+        # Calculate vectors from points A to B
+        A = coord_1.to_numpy()
+        B = coord_2.to_numpy()
+        vectors_AB = B - A
+
+        # Project vectors_AB and reference_vector onto the plane
+        # Subtracting the outer product basically removes the component in vectors_AB that is aligned to plane_normal,
+        # leaving only the projection onto the reference plane
+        vectors_AB_projected = vectors_AB - np.outer(
+            np.dot(vectors_AB, plane_normal) / np.linalg.norm(plane_normal) ** 2,
+            plane_normal)
+        # For clarity, the above line is equivalent to calculating projections onto x, y, and z dims, then just looking at
+        # the two relevant dimensions defining your reference plane.
+        # vectors_AB_projectedX = np.dot(vectors_AB, [1,0,0])
+        # vectors_AB_projectedY = np.dot(vectors_AB, [0,1,0])
+        # vectors_AB_projectedZ = np.dot(vectors_AB, [0,0,1])
+        # then if your reference plane is in x and z (side view), vectors_AB_projected is just:
+        # [vectors_AB_projectedX, zeros column, vectors_AB_projectedZ]
+
+        reference_vector_projected = reference_vector - np.dot(reference_vector, plane_normal) / np.linalg.norm(
+            plane_normal) ** 2 * plane_normal
+
+        # Normalize the projected vectors
+        vectors_AB_projected_normalized = vectors_AB_projected / np.linalg.norm(vectors_AB_projected, axis=1)[:,
+                                                                 np.newaxis]
+        reference_vector_projected_normalized = reference_vector_projected / np.linalg.norm(reference_vector_projected)
+
+        # Calculate the angle magnitudes
+        dot_products = np.dot(vectors_AB_projected_normalized, reference_vector_projected_normalized)
+        angles_rad = np.arccos(np.clip(dot_products, -1.0, 1.0))  # Clip for numerical stability
+
+        # Determine the sign of the angles using the cross product and the plane normal
+        cross_products = np.cross(vectors_AB_projected_normalized, reference_vector_projected_normalized)
+        angle_signs = np.sign(np.dot(cross_products,
+                                     plane_normal))  # this is a simple way to calculate if angles should be + or -; see right hand rule
+
+        # Apply signs to the angles
+        signed_angles_rad = angles_rad * angle_signs
+
+        # Convert to degrees
+        signed_angles_deg = np.degrees(signed_angles_rad)
+
+        return pd.DataFrame(signed_angles_deg,index=coord_1)
+
     def angle_3d(self, bodypart1, bodypart2, reference_axis, step_phase, all_vals, full_stride, buffer_size=0.25):
         """
         Calculate the angle between two body parts relative to a reference axis.
@@ -410,257 +510,58 @@ class CalculateMeasuresByStride():
         else:
             return angle_degrees.mean()
 
-    # def calculate_time_series_angles_360_vectorized(self, bodypart1, bodypart2, reference_normal, step_phase, all_vals, full_stride, buffer_size=0.25):
-    #     """
-    #     Calculate angles between two time series of 3D points A and B, relative to a specified reference plane,
-    #     with angles expressed in the 0-360 degrees domain, using vectorized operations.
-    #
-    #     Parameters:
-    #     - A, B: Arrays of coordinates for the points as numpy arrays with shape (n, 3) where n is the number of points in the time series.
-    #     - reference_normal: The normal vector of the reference plane as a list or numpy array (default is [0, 0, 1] for the z-axis).
-    #
-    #     Returns:
-    #     - A numpy array of angles between points in A and B in degrees, relative to the reference plane, in the 0-360 degrees domain.
-    #     """
-    #
-    #     if full_stride:
-    #         buffer_chunk = self.get_buffer_chunk(buffer_size)
-    #         coord_1 = buffer_chunk.loc(axis=1)[bodypart1, ['x','y','z']].droplevel('bodyparts', axis=1)
-    #         coord_2 = buffer_chunk.loc(axis=1)[bodypart2, ['x','y','z']].droplevel('bodyparts', axis=1)
-    #     else:
-    #         stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-    #         coord_1 = self.data_chunk.loc(axis=1)[bodypart1, ['x','y','z']][stsw_mask].droplevel('bodyparts', axis=1)
-    #         coord_2 = self.data_chunk.loc(axis=1)[bodypart2, ['x','y','z']][stsw_mask].droplevel('bodyparts', axis=1)
-    #     # Correct z
-    #     coord_1['z'] = self.correct_z(coord_1['z'])
-    #     coord_2['z'] = self.correct_z(coord_2['z'])
-    #
-    #     A = np.array(coord_1.to_numpy())
-    #     B = np.array(coord_2.to_numpy())
-    #     reference_normal = np.array(reference_normal)
-    #
-    #     # Calculate direction vectors from A to B
-    #     direction_vectors = B - A
-    #
-    #     # Project direction vectors onto the plane defined by the reference normal
-    #     projection_on_plane = direction_vectors - np.dot(direction_vectors, reference_normal)[:,
-    #                                               None] * reference_normal
-    #
-    #     # Calculate normalized direction vectors on the plane
-    #     norms = np.linalg.norm(projection_on_plane, axis=1, keepdims=True)
-    #     normalized_vectors = np.divide(projection_on_plane, norms, out=np.zeros_like(projection_on_plane),
-    #                                    where=norms != 0)
-    #
-    #     # Calculate angles using atan2, considering an arbitrary fixed reference direction on the plane
-    #     ref_direction = reference_normal
-    #
-    #     cross_prod = np.cross(ref_direction, normalized_vectors)
-    #     dot_prod = np.dot(normalized_vectors, ref_direction)
-    #
-    #     angles_radians = np.arctan2(np.linalg.norm(cross_prod, axis=1), dot_prod)
-    #
-    #     # Convert angles to degrees and ensure they are in the 0-360 range
-    #     angles_degrees = np.degrees(angles_radians) % 360
-    #
-    #     return angles_degrees
+
+# class RunMeasures(CalculateMeasuresByStride):
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
 
 
+class RunMeasures(CalculateMeasuresByStride):
+    """
+    calc_obj = CalculateMeasuresByStride(XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
+    run_measures = RunMeasures(measures_dict, calc_obj)
+    results = run_measures.run()
+    """
+    def __init__(self, measures_dict, calc_obj, stepping_limb):
+        super().__init__(*calc_obj)  # Initialize parent class with the provided arguments
+        self.measures_dict = measures_dict
+        self.stepping_limb = stepping_limb
 
+    def run(self, datatype, measures):
+        result = None
+        name = None
+        vals = pd.DataFrame()
+        for function in measures[datatype].keys():
+            if any(measures[datatype][function]):
+                if function != 'signed_angle':
+                    for param in itertools.product(*measures[datatype][function].values()):
+                        result = getattr(self, function)(*param)
 
-    ####################################################################################################################
-    ### Multi value calculations
-    ####################################################################################################################
+                        param_names = list(measures[datatype][function].keys())
+                        formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
+                        name = f"{function}({formatted_params})"
 
+                else:
+                    for param in measures[datatype][function].keys():
+                        result = getattr(self, function)(*measures['single_val_measure_list'][function][param])
+                        name = f"{function}({param})"
+            else:
+                # when no parameters required
+                result = getattr(self, function)()
+                name = function
+            vals[name] = result
+        return vals
 
-    def body_length_stance(self): # px
-        return self.calculate_body_length(0)
+    def get_all_results(self):
+        lr_contr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        lr_ipsi = utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
 
-    def body_length_swing(self): # px
-        return self.calculate_body_length(1)
+        measures = measures_list(stepping_limb=self.stepping_limb, lr_contr=lr_contr, lr_ipsi=lr_ipsi)
 
+        single_val = self.run('single_val_measure_list', measures)
+        multi_val = self.run('multi_val_measure_list', measures)
 
-
-
-
-    def back_skew_stance(self):
-        return self.calculate_back_skew(0)
-
-    def back_skew_swing(self):
-        return self.calculate_back_skew(1)
-
-   # def calculate_back_curvature(self):
-
-    # def back_curvature_stance(self):
-    #     return self.calculate_back_curvature(0)
-    #
-    # def back_curvature_swing(self):
-    #     return self.calculate_back_curvature(1)
-
-
-
-    def body_tilt_stance(self): # positive means back12 is lower than back1
-        return self.calculate_body_tilt(['Back1','Back12'], 0)
-
-    def body_tilt_swing(self): # positive means back12 is lower than back1
-        return self.calculate_body_tilt(['Back1','Back12'], 1)
-
-    def head_tilt_stance(self):
-        return self.calculate_body_tilt(['Nose','Back1'], 0)
-
-    def head_tilt_swing(self):
-        return self.calculate_body_tilt(['Nose','Back1'], 1)
-
-    def tail_tilt_stance(self):
-        return self.calculate_body_tilt(['Tail1','Tail12'], 0)
-
-    def tail_tilt_swing(self):
-        return self.calculate_body_tilt(['Tail1','Tail12'], 1)
-
-
-
-    def neck_z_stance(self):
-        return self.calculate_body_z('Back1', 0)
-
-    def neck_z_swing(self):
-        return self.calculate_body_z('Back1', 1)
-
-    def tail_z_stance(self):
-        return self.calculate_body_z('Tail1', 0)
-
-    def tail_z_swing(self):
-        return self.calculate_body_z('Tail1', 1)
-
-    def midback_z_stance(self):
-        height = self.calculate_body_z(['Back6','Back7'], 0)
-        return height.mean()
-
-    def midback_z_swing(self):
-        height = self.calculate_body_z(['Back6','Back7'], 1)
-        return height.mean()
-
-    def stepping_limb_z_stance(self):
-        return self.calculate_body_z(self.stepping_limb, 0)
-
-    def stepping_limb_z_swing(self):
-        return self.calculate_body_z(self.stepping_limb, 1)
-
-    def contra_limb_z_stance(self):
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-        body_part = 'ForepawToe%s' % lr
-        return self.calculate_body_z(body_part, 0)
-
-    def contra_limb_z_swing(self):
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-        body_part = 'ForepawToe%s' % lr
-        return self.calculate_body_z(body_part, 1)
-
-
-
-
-
-    def neck_x_displacement_stance(self):
-        x = self.calculate_body_x('Back1', 0, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def neck_x_displacement_swing(self):
-        x = self.calculate_body_x('Back1', 1, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def tail_x_displacement_stance(self):
-        x = self.calculate_body_x('Tail1', 0, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def tail_x_displacement_swing(self):
-        x = self.calculate_body_x('Tail1', 1, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def midback_x_displacement_stance(self):
-        x = self.calculate_body_x(['Back6','Back7'], 0, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def midback_x_displacement_swing(self):
-        x = self.calculate_body_x(['Back6','Back7'], 1, 'overhead')
-        return x.iloc[-1] - x.iloc[0]
-
-    def stepping_limb_x_displacement_stance(self):
-        x = self.calculate_body_x(self.stepping_limb, 0, 'front')
-        return x.iloc[-1] - x.iloc[0]
-
-    def stepping_limb_x_displacement_swing(self):
-        x = self.calculate_body_x(self.stepping_limb, 1, 'front')
-        return x.iloc[-1] - x.iloc[0]
-
-    def contra_limb_x_displacement_stance(self):
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-        body_part = 'ForepawToe%s' % lr
-        x = self.calculate_body_x(body_part, 0, 'front')
-        return x.iloc[-1] - x.iloc[0]
-
-    def contra_limb_x_displacement_swing(self):
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-        body_part = 'ForepawToe%s' % lr
-        x = self.calculate_body_x(body_part, 1, 'front')
-        return x.iloc[-1] - x.iloc[0]
-
-
-
-    # def neck_x_traj_stance(self):
-    #     x = self.calculate_body_x('Back1', 0, 'overhead')
-    #     return x.values
-    #
-    # def neck_x_traj_swing(self):
-    #     x = self.calculate_body_x('Back1', 1, 'overhead')
-    #     return x.values
-    #
-    # def tail_x_traj_stance(self):
-    #     x = self.calculate_body_x('Tail1', 0, 'overhead')
-    #     return x.values
-    #
-    # def tail_x_traj_swing(self):
-    #     x = self.calculate_body_x('Tail1', 1, 'overhead')
-    #     return x.values
-    #
-    # def midback_x_traj_stance(self):
-    #     x = self.calculate_body_x(['Back6','Back7'], 0, 'overhead')
-    #     return x.values
-    #
-    # def midback_x_traj_swing(self):
-    #     x = self.calculate_body_x(['Back6','Back7'], 1, 'overhead')
-    #     return x.values
-    #
-    # def stepping_limb_x_traj_stance(self):
-    #     x = self.calculate_body_x(self.stepping_limb, 0, 'front')
-    #     return x.values
-    #
-    # def stepping_limb_x_traj_swing(self):
-    #     x = self.calculate_body_x(self.stepping_limb, 1, 'front')
-    #     return x.values
-    #
-    # def contra_limb_x_traj_stance(self):
-    #     lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-    #     body_part = 'ForepawToe%s' % lr
-    #     x = self.calculate_body_x(body_part, 0, 'front')
-    #     return x.values
-    #
-    # def contra_limb_x_traj_swing(self):
-    #     lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-    #     body_part = 'ForepawToe%s' % lr
-    #     x = self.calculate_body_x(body_part, 1, 'front')
-    #     return x.values
-
-
-
-
-class GetMeasuresByStride_AllVal(CalculateMeasuresByStride):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-
-class GetMeasuresByStride_SingleVal(CalculateMeasuresByStride):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+        return single_val, multi_val
 
 
 class Save():
@@ -670,7 +571,7 @@ class Save():
         self.XYZw = utils.Utils().Get_XYZw_DFs(conditions)
         self.CalculateMeasuresByStride = CalculateMeasuresByStride
 
-    def find_pre_post_transition_strides(self, con, mouseID, r, numstrides=4):
+    def find_pre_post_transition_strides(self, con, mouseID, r, numstrides=3):
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
         pre_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'RunStart'].loc(axis=1)[
@@ -729,7 +630,9 @@ class Save():
         levels = [[mouseID],np.arange(0, 42), [-3, -2, -1, 0, 1]]
         multi_index = pd.MultiIndex.from_product(levels, names=['MouseID','Run', 'Stride'])
         measure_list_flat = [value for sublist in measure_list.values() for value in sublist]
-        measures = pd.DataFrame(index=multi_index,columns=measure_list_flat)
+        measures_single = pd.DataFrame(index=multi_index) #,columns=measure_list_flat)
+        measures_multi = pd.DataFrame(index=multi_index) #,columns=measure_list_flat)
+
 
         for r in tqdm(stride_borders.index.get_level_values(level='Run').unique()):
             stepping_limb = np.array(['ForepawToeR','ForepawToeL'])[(stride_borders.loc(axis=0)[r].loc(axis=1)[['ForepawToeR','ForepawToeL']].count() > 1).values][0]
@@ -738,39 +641,49 @@ class Save():
                     stride_start = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx]
                     stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1] - 1 # todo check i am right to consider the previous frame the end frame
 
-                    class_instance = self.CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
+                    #class_instance = self.CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
+                    calc_obj = CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
+                    measures_dict = measures_list(stepping_limb=stepping_limb,lr_contr=utils.Utils().picking_left_or_right(stepping_limb, 'contr'),lr_ipsi=utils.Utils().picking_left_or_right(stepping_limb, 'ipsi'))
 
-                    for m in measure_list_flat:
-                        try:
-                            method_name = m
-                            if hasattr(class_instance, method_name) and callable(getattr(class_instance, method_name)):
-                                method = getattr(class_instance, method_name)
-                                result = method()
-                                measures.loc(axis=0)[mouseID,r, s][m] = result
-                            else:
-                                print('Something went wrong for r: %s, stride: %s, measure: %s' %(r,s,m))
-                        except:
-                            print('cant plot measure %s' % m)
+                    run_measures = RunMeasures(measures_dict, calc_obj)
+                    singlevals, multivals = run_measures.get_all_results()
+                    measures_single.loc(axis=0)[mouseID, r, s] = singlevals
+                    measures_multi.loc(axis=0)[mouseID, r, s] = multivals
+
+                    # for m in measure_list_flat:
+                    #     try:
+                    #         method_name = m
+                    #         if hasattr(class_instance, method_name) and callable(getattr(class_instance, method_name)):
+                    #             method = getattr(class_instance, method_name)
+                    #             result = method()
+                    #             measures.loc(axis=0)[mouseID,r, s][m] = result
+                    #         else:
+                    #             print('Something went wrong for r: %s, stride: %s, measure: %s' %(r,s,m))
+                    #     except:
+                    #         print('cant plot measure %s' % m)
             except:
                 print('cant plot stride %s' %s)
 
-        return measures
+        return measures_single, measures_multi
 
     def get_discrete_measures_byrun_bystride_ALLMICE(self, con):
         mice = list(self.XYZw[con].keys())
 
-        mouse_measures_ALL = []
+        mouse_measures_single_ALL = []
+        mouse_measures_multi_ALL = []
         for midx, mouseID in enumerate(mice):
             try:
                 print('Calculating measures for %s (%s/%s)...' %(mouseID,midx,len(mice)-1))
                 SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con, mouseID)
-                mouse_measures = self.get_discrete_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
-                mouse_measures_ALL.append(mouse_measures)
+                mouse_measures_single, mouse_measures_multi = self.get_discrete_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
+                mouse_measures_single_ALL.append(mouse_measures_single)
+                mouse_measures_multi_ALL.append(mouse_measures_multi)
             except:
                 print('cant plot mouse %s' %mouseID)
-        mouse_measures_ALL = pd.concat(mouse_measures_ALL)
+        mouse_measures_single_ALL = pd.concat(mouse_measures_single_ALL)
+        mouse_measures_multi_ALL = pd.concat(mouse_measures_multi_ALL)
 
-        return mouse_measures_ALL
+        return mouse_measures_single_ALL, mouse_measures_multi_ALL
 
 
 class plotting():
@@ -982,6 +895,8 @@ class plotting():
 # df = plotting.get_discrete_measures_byrun_bystride_ALLMICE(con)
 
 
-
+conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
+save = Save(conditions)
+single, multi = save.get_discrete_measures_byrun_bystride_ALLMICE(conditions[0])
 
 

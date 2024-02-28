@@ -1,6 +1,8 @@
+import numpy as np
 ########################################################################################################################
 ################################################### User-set values ####################################################
 ########################################################################################################################
+
 vidstuff = {
     'cams': ['side','front','overhead'],
     'scorers': {
@@ -119,41 +121,167 @@ measure_list = {
 # #     'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
 # #     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
 # }
-measures_new = {
-    'multi_val_measure_list' : {
-        'instantaneous_swing_velocity': [],
-        'x': [],
-        'y': [],
-        'z' : [],
-        'traj': [],
-        'body_distance': [],
-        'back_height': [],
-        'back_skew': [],
-        'limb_rel_to_body': [],
-        'angle_3d': []
-    },
-    'single_val_measure_list': {
-        'stride_duration': [],
-        'stance_duration': [],
-        'swing_duration': [],
-        'cadence': [],
-        'duty_factor': [],
-        'walking_speed': [['Back6','False'],['Back6',True]],
-        'swing_velocity': [],
-        'stride_length': [],
-        'x': [],
-        'y': [],
-        'z': [],
-        'coo_xyz': [],
-        'coo_euclidean': [],
-        'bos_stancestart': [],
-        'ptp_amplitude_stride': [],
-        'body_distance': [],
-        'back_height': [],
-        'double_support': [],
-        'back_skew': [],
-        'limb_rel_to_body': [],
-        'angle_3d': []
+def measures_list(stepping_limb, lr_contr, lr_ipsi): ## add in displacement??
+    measures = {
+        'multi_val_measure_list' : {
+            'instantaneous_swing_velocity': {
+                'speed_correct': [True,False],
+                'xyz': ['x','y','z'],
+                'smooth': [False]
+            },
+            'x': {
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'y': {
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'z' : {
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'traj': {
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'step_phase': [None],
+                'full_stride': [True],
+                'speed_correct': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'body_distance': {
+                'bodyparts': [['Back1','Back12']],
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'back_height': {
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'back_skew': {
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'limb_rel_to_body': {
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, 0.25]
+            },
+            'signed_angle': {
+                'ToeAnkle_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), [stepping_limb,'ForepawAnkle%s' %lr_ipsi], 0.25],
+                'ToeAnkle_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), [stepping_limb, 'ForepawAnkle%s' %lr_ipsi], 0],
+                'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0.25],
+                'Back1Back12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0],
+                'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0.25],
+                'Tail1Tail12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0],
+                'NoseBack1_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0.25],
+                'NoseBack1_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0],
+                'Back1Back12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0.25],
+                'Back1Back12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0],
+                'Tail1Tail12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0.25],
+                'Tail1Tail12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0],
+                'NoseBack1_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0.25],
+                'NoseBack1_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0],
+            }
+        },
+        'single_val_measure_list': {
+            'stride_duration': [],
+            'stance_duration': [],
+            'swing_duration': [],
+            'cadence': [],
+            'duty_factor': [],
+            'walking_speed': {
+                'bodypart': ['Back6','Tail1'],
+                'speed_correct': [True,False]
+            },
+            'swing_velocity': {
+                'speed_correct': [True,False]
+            },
+            'stride_length': {
+                'speed_correct': [True,False]
+            },
+            'x': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'y': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'z': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True,False],
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'coo_xyz': {
+                'xyz': ['x','y','z']
+            },
+            'coo_euclidean': [],
+            'bos_stancestart': {
+                'ref_or_contr': ['ref','contr'],
+                'y_or_euc': ['y','euc']
+            },
+            'ptp_amplitude_stride': {
+                'bodypart': ['Tail1','Back6']
+            },
+            'body_distance': {
+                'bodyparts': [['Back1','Back12']],
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'back_height': {
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'double_support': [],
+            'back_skew': {
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            },
+            'limb_rel_to_body': {
+                'step_phase': [0, 1],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, 0.25]
+            }
+        }
     }
-}
-
+    return measures

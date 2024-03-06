@@ -8,8 +8,9 @@ import numpy as np
 #######################################################################################################################
 #######################################################################################################################
 ######################### CONFIGURATIONS ##############################
-video_file = r"M:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
-conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
+# video_file = r"H:\TEMP\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
+video_file = r"G:\APA_Project\Data\Behaviour\Dual-belt_APAs\videos\Raw_videos\Round_3\20230308\HM_20230308_APACharRepeat_FAA-1035243_None_side_1.avi"
+conditions = ['APAChar_LowHigh_Repeats_Wash_Day2']
 con = conditions[0]
 mouseID = 'FAA-1035243'
 view = 'Side'

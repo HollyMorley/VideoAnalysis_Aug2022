@@ -12,8 +12,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 import itertools
-
-
+from multiprocessing import Pool, cpu_count
 
 
 class CalculateMeasuresByStride():
@@ -63,6 +62,7 @@ class CalculateMeasuresByStride():
         :param buffer_size: percentage as decimal of stride length that want in frames either side of start and end of stride
         :return: the new data chunk
         """
+        warnings.simplefilter(action='ignore', category=FutureWarning)
         stride_length = self.stride_end - self.stride_start
         start = self.stride_start - round(stride_length * buffer_size)
         end = self.stride_end + round(stride_length * buffer_size)
@@ -139,20 +139,20 @@ class CalculateMeasuresByStride():
         Derivative of swing trajectory
         :return: dataframe of velocities for x, y and z
         """
-        swing_trajectory = self.traj(self.stepping_limb, step_phase=1,full_stride=False,speed_correct=speed_correct, buffer_size=0)
+        swing_trajectory = self.traj(self.stepping_limb, coord=xyz, step_phase=1,full_stride=False,speed_correct=False, aligned=False, buffer_size=0) ####todo check speed correct should be false!
         time_interval = self.swing_duration()
-        d_xyz = swing_trajectory.diff(axis=0)
+        d_xyz = swing_trajectory.diff()
         v_xyz = d_xyz/time_interval
         if smooth:
             # Optionally, smooth the velocities using Savitzky-Golay filter
             v_xyz = savgol_filter(v_xyz, window_length=3, polyorder=1)
         if not speed_correct:
-            return v_xyz[xyz]
+            return v_xyz
         else:
             if xyz == 'x':
-                return v_xyz[xyz] - self.calculate_belt_speed()
+                return v_xyz - self.calculate_belt_speed()
             else:
-                pass
+                return v_xyz
 
 
     ########### DISTANCES ###########:
@@ -173,7 +173,7 @@ class CalculateMeasuresByStride():
             x = self.data_chunk.loc(axis=1)[bodypart, 'x'][stsw_mask]
         x = x - self.calculate_belt_x_displacement() if speed_correct else x
         if all_vals:
-            return x
+            return x.droplevel(['Run','RunStage'],axis=0)
         else:
             return x.iloc[-1] - x.iloc[0]
 
@@ -185,7 +185,7 @@ class CalculateMeasuresByStride():
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             y = self.data_chunk.loc(axis=1)[bodypart, 'y'][stsw_mask]
         if all_vals:
-            return y
+            return y.droplevel(['Run','RunStage'],axis=0)
         else:
             return y.iloc[-1] - y.iloc[0]
 
@@ -197,22 +197,23 @@ class CalculateMeasuresByStride():
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             z = self.correct_z(self.data_chunk.loc(axis=1)[bodypart, 'z'][stsw_mask])
         if all_vals:
-            return z
+            return z.droplevel(['Run','RunStage'],axis=0)
         else:
             return z.iloc[-1] - z.iloc[0]
 
-    def traj(self, bodypart, step_phase, full_stride, speed_correct, buffer_size=0.25):
+    def traj(self, bodypart, coord ,step_phase, full_stride, speed_correct, aligned, buffer_size=0.25):
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            xyz = buffer_chunk.loc(axis=1)[bodypart, ['x','y','z']].droplevel('bodyparts',axis=1)
+            xyz = buffer_chunk.loc(axis=1)[bodypart, ['x','y','z']].droplevel('bodyparts',axis=1).droplevel(['Run','RunStage'],axis=0)
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             xyz = self.data_chunk.loc(axis=1)[bodypart, ['x','y','z']][stsw_mask].droplevel('bodyparts',axis=1)
         xyz['z'] = self.correct_z(xyz['z'])
         if speed_correct:
             xyz['x'] = xyz['x'] - self.calculate_belt_x_displacement()
-        xyz_aligned = xyz - xyz.iloc[0]
-        return xyz_aligned
+        if aligned:
+            xyz = xyz - xyz.iloc[0] ### todo cant align traj to first position when that is a nan
+        return xyz[coord]
 
 
     ########### BODY-RELATVE DISTANCES ###########:
@@ -226,12 +227,13 @@ class CalculateMeasuresByStride():
         swing_mask = self.data_chunk.loc(axis=1)[self.stepping_limb,'StepCycleFill'] == 1
         swing = self.data_chunk[swing_mask]
         mid_t = np.median(swing.index).astype(int)
-        mid_back = swing.loc(axis=0)[mid_t].loc(axis=0)['Back6', xyz]
-        limb = swing.loc(axis=0)[mid_t].loc(axis=0)[self.stepping_limb, xyz]
+        mid_back = swing.loc(axis=1)['Back6', xyz]  #.loc(axis=0)[mid_t]
+        limb = swing.loc(axis=1)[self.stepping_limb, xyz]
         if xyz == 'z':
             mid_back = self.correct_z(mid_back)
             limb = self.correct_z(limb)
-        return limb - mid_back
+
+        return limb[mid_t] - mid_back[mid_t]
 
     def coo_euclidean(self):
         swing_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == 1
@@ -265,8 +267,9 @@ class CalculateMeasuresByStride():
         return bos.values[0]
 
     def ptp_amplitude_stride(self, bodypart):
-        peak = self.correct_z(self.data_chunk.loc(axis=1)[bodypart,'z'].max())
-        trough = self.correct_z(self.data_chunk.loc(axis=1)[bodypart,'z'].min())
+        coords = self.correct_z(self.data_chunk.loc(axis=1)[bodypart,'z'])
+        peak = coords.max()
+        trough = coords.min()
         return peak - trough
 
     def body_distance(self, bodyparts, step_phase, all_vals, full_stride, buffer_size=0.25): ### eg body length, midback to forepaw
@@ -281,20 +284,21 @@ class CalculateMeasuresByStride():
             x2 = self.data_chunk.loc(axis=1)[bodypart2, 'x'][stsw_mask]
         length = abs(x1 - x2)
         if all_vals:
-            return length
+            return length.droplevel(['Run','RunStage'],axis=0)
         else:
             return length.mean()
 
-    def back_height(self, step_phase, all_vals, full_stride, buffer_size=0.25):
-        back_labels = ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                       'Back11', 'Back12']
+    def back_height(self, back_label, step_phase, all_vals, full_stride, buffer_size=0.25):
+        # back_labels = ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+        #                'Back11', 'Back12']
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            back_heights = self.correct_z(buffer_chunk.loc(axis=1)[back_labels, 'z'].droplevel(level='coords', axis=1).iloc[:, ::-1])
+            back_heights = self.correct_z(buffer_chunk.loc(axis=1)[back_label, 'z']).droplevel(['Run','RunStage'],axis=0) #.droplevel(level='coords', axis=1).iloc[:, ::-1])
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
-            back_heights = self.correct_z(self.data_chunk.loc(axis=1)[back_labels, 'z'][stsw_mask].droplevel(level='coords', axis=1).iloc[:, ::-1])
+            back_heights = self.correct_z(self.data_chunk.loc(axis=1)[back_label, 'z'][stsw_mask]) #.droplevel(level='coords', axis=1).iloc[:, ::-1])
         if all_vals:
+                #return back_heights.droplevel(['Run','RunStage'],axis=0)
             return back_heights
         else:
             return back_heights.mean(axis=0)
@@ -307,12 +311,12 @@ class CalculateMeasuresByStride():
         contr_swing_posframe_mask = self.data_chunk.loc(axis=1)['ForepawToe%s' % lr,'StepCycle'] ==1
         contr_swing_negframe_mask = self.XYZw[self.con][self.mouseID].loc(axis=0)[self.r,['RunStart', 'Transition', 'RunEnd'],np.arange(self.stride_start-round(stride_length/4),self.stride_start)].loc(axis=1)['ForepawToe%s' % lr, 'StepCycle'] == 1
         if any(contr_swing_posframe_mask):
-            contr_swing_frame = self.data_chunk.index[contr_swing_posframe_mask][0]
+            contr_swing_frame = self.data_chunk.index.get_level_values(level='FrameIdx')[contr_swing_posframe_mask][0]
             ref_stance_frame = self.data_chunk.index[0]
             stride_duration = self.stride_duration()
             result = ((contr_swing_frame - ref_stance_frame)/stride_duration) * 100
         elif any(contr_swing_negframe_mask):
-            contr_swing_frame = self.XYZw[self.con][self.mouseID].loc(axis=0)[self.r,['RunStart', 'Transition', 'RunEnd'],np.arange(self.stride_start-round(stride_length/4),self.stride_start)].index[contr_swing_negframe_mask][0]
+            contr_swing_frame = self.XYZw[self.con][self.mouseID].loc(axis=0)[self.r,['RunStart', 'Transition', 'RunEnd'],np.arange(self.stride_start-round(stride_length/4),self.stride_start)].index.get_level_values(level='FrameIdx')[contr_swing_negframe_mask][0]
             ref_stance_frame = self.data_chunk.index[0]
             stride_duration = self.stride_duration()
             result = ((contr_swing_frame - ref_stance_frame) / stride_duration) * 100
@@ -329,8 +333,14 @@ class CalculateMeasuresByStride():
     ########### BODY-RELATIVE POSITIONING ###########:
 
     def back_skew(self, step_phase, all_vals, full_stride, buffer_size=0.25): ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
+        back_labels = ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                       'Back11', 'Back12']
         mult = np.arange(1, 13)
-        true_back_height = self.back_height(step_phase, all_vals=all_vals, full_stride=full_stride, buffer_size=buffer_size)
+        true_back_height = []
+        for b in reversed(back_labels):
+            true_back_height_label = self.back_height(b, step_phase, all_vals=True, full_stride=full_stride, buffer_size=buffer_size)
+            true_back_height.append(true_back_height_label)
+        true_back_height = pd.concat(true_back_height,axis=1)
         COM = (true_back_height * mult).sum(axis=1) / true_back_height.sum(axis=1) # calculate centre of mass
         skew = np.median(mult) - COM
         if all_vals:
@@ -338,21 +348,25 @@ class CalculateMeasuresByStride():
         else:
             return skew.mean()
 
-    def limb_rel_to_body(self, step_phase, all_vals, full_stride, buffer_size=0.25): # back1 is 1, back 12 is 0, further forward than back 1 is 1+
+    def limb_rel_to_body(self, time, step_phase, all_vals, full_stride, buffer_size=0.25): # back1 is 1, back 12 is 0, further forward than back 1 is 1+
         ### WARNING: while mapping is not fixed, this will be nonsense as back and legs mapped separately
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            x = buffer_chunk.loc(axis=1)[['Back1','Back12',self.stepping_limb], 'x']
+            x = buffer_chunk.loc(axis=1)[['Back1','Back12',self.stepping_limb], 'x'].droplevel(['Run','RunStage'],axis=0)
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
             x = self.data_chunk.loc(axis=1)[['Back1','Back12',self.stepping_limb], 'x'][stsw_mask]
         x_zeroed = x - x['Back12']
         x_norm_to_neck = x_zeroed/x_zeroed['Back1']
-        position = x_norm_to_neck[self.stepping_limb].values[0]
+        position = x_norm_to_neck[self.stepping_limb]
+        position = pd.Series(position.values.flatten(),index=position.index)
         if all_vals:
             return position
         else:
-            return position.mean()
+            if time == 'start':
+                return position.iloc[0]
+            elif time == 'end':
+                return position.iloc[-1]
 
     def signed_angle(self, reference_vector, plane_normal, bodyparts, buffer_size=0.25):
         """
@@ -442,8 +456,9 @@ class CalculateMeasuresByStride():
 
         # Convert to degrees
         signed_angles_deg = np.degrees(signed_angles_rad)
+        signed_angles_deg = signed_angles_deg.flatten()
 
-        return pd.DataFrame(signed_angles_deg,index=coord_1)
+        return pd.Series(signed_angles_deg,index=coord_1.index.get_level_values(level='FrameIdx'))
 
     def angle_3d(self, bodypart1, bodypart2, reference_axis, step_phase, all_vals, full_stride, buffer_size=0.25):
         """
@@ -506,14 +521,66 @@ class CalculateMeasuresByStride():
         angle_degrees = np.degrees(angle_radians) + 90
 
         if all_vals:
-            return angle_degrees
+            return angle_degrees.droplevel(['Run','RunStage'],axis=0)
         else:
             return angle_degrees.mean()
 
 
-# class RunMeasures(CalculateMeasuresByStride):
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
+class CalculateMeasuresByRun():
+    def __init__(self, XYZw, con, mouseID, r, stepping_limb):
+        self.XYZw, self.con, self.mouseID, self.r, self.stepping_limb = XYZw, con, mouseID, r, stepping_limb
+
+        # calculate sumarised dataframe
+        self.data_chunk = self.XYZw[con][mouseID].loc(axis=0)[r]
+
+    def wait_time(self):
+        trial_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[0]
+        run_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[-1]
+        duration_idx = run_start_idx - trial_start_idx
+        return duration_idx/fps
+
+    def num_rbs(self, gap_thresh=30):
+        if np.any(self.data_chunk.index.get_level_values(level='RunStage') == 'RunBack'):
+            rb_chunk = self.data_chunk[self.data_chunk.index.get_level_values(level='RunStage') == 'RunBack']
+            nose_tail = rb_chunk.loc(axis=1)['Nose', 'x'] - rb_chunk.loc(axis=1)['Tail1', 'x']
+            nose_tail_bkwd = nose_tail[nose_tail < 0]
+            num = sum(np.diff(nose_tail_bkwd.index.get_level_values(level='FrameIdx')) > gap_thresh)
+            return num + 1
+        else:
+            return 0
+
+    def start_paw_pref(self): # todo update this when change scope of exp chunk in loco analysis
+        xr = self.data_chunk.loc(axis=1)['ForepawToeR','x'].droplevel(level='RunStage')
+        xl = self.data_chunk.loc(axis=1)['ForepawToeL','x'].droplevel(level='RunStage')
+        xr_start = xr.index[xr > 0][0]
+        xl_start = xl.index[xl > 0][0]
+        if xr_start < xl_start:
+            return micestuff['LR']['ForepawToeR']
+        else:
+            return micestuff['LR']['ForepawToeL']
+
+    def trans_paw_pref(self):
+        if self.stepping_limb == 'ForepawToeL':
+            return micestuff['LR']['ForepawToeL']
+        elif self.stepping_limb == 'ForepawToeR':
+            return micestuff['LR']['ForepawToeR']
+
+    def start_to_trans_paw_matching(self):
+        if self.start_paw_pref() == self.trans_paw_pref():
+            return True
+        else:
+            return False
+
+    def run(self):
+        column_names = ['wait_time','num_rbs','start_paw_pref','trans_paw_pref','start_to_trans_paw_matching']
+        index_names = pd.MultiIndex.from_tuples([(self.mouseID,self.r)])
+        df = pd.DataFrame(index=index_names, columns=column_names)
+        data = np.array([self.wait_time(),self.num_rbs(),self.start_paw_pref(),self.trans_paw_pref(),self.start_to_trans_paw_matching()])
+        df.loc[self.mouseID, self.r] = data
+        return df
+
+
+
 
 
 class RunMeasures(CalculateMeasuresByStride):
@@ -522,51 +589,118 @@ class RunMeasures(CalculateMeasuresByStride):
     run_measures = RunMeasures(measures_dict, calc_obj)
     results = run_measures.run()
     """
-    def __init__(self, measures_dict, calc_obj, stepping_limb):
-        super().__init__(*calc_obj)  # Initialize parent class with the provided arguments
-        self.measures_dict = measures_dict
-        self.stepping_limb = stepping_limb
+    def __init__(self, measures, calc_obj, buffer_size, stride):
+        super().__init__(calc_obj.XYZw, calc_obj.con, calc_obj.mouseID, calc_obj.r,
+                         calc_obj.stride_start, calc_obj.stride_end, calc_obj.stepping_limb)  # Initialize parent class with the provided arguments
+        self.measures = measures
+        self.buffer_size = buffer_size
+        self.stride = stride
 
-    def run(self, datatype, measures):
-        result = None
-        name = None
-        vals = pd.DataFrame()
+    def setup_df(self, datatype, measures):
+        col_names = []
         for function in measures[datatype].keys():
             if any(measures[datatype][function]):
                 if function != 'signed_angle':
                     for param in itertools.product(*measures[datatype][function].values()):
-                        result = getattr(self, function)(*param)
-
                         param_names = list(measures[datatype][function].keys())
                         formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
-                        name = f"{function}({formatted_params})"
+                        col_names.append((function, formatted_params))
+                else:
+                    for combo in measures[datatype]['signed_angle'].keys():
+                        col_names.append((function, combo))
+            else:
+                col_names.append((function, 'no_param'))
+
+        col_names_trimmed = []
+        for c in col_names:
+            if np.logical_and('full_stride:True' in c[1], 'step_phase:None' not in c[1]):
+                pass
+            elif np.logical_and('full_stride:False' in c[1], 'step_phase:None' in c[1]):
+                pass
+            else:
+                col_names_trimmed.append(c)
+
+        buffered_idx = self.get_buffer_chunk(self.buffer_size).index.get_level_values(level='FrameIdx')
+        # single_idx = pd.MultiIndex.from_tuples([(self.mouseID, int(self.r), self.stride)],
+        #                                        names=['MouseID', 'Run', 'Stride'])
+        if datatype == 'single_val_measure_list':
+            vals = pd.DataFrame(index=[0], columns=pd.MultiIndex.from_tuples(col_names_trimmed))
+        elif datatype == 'multi_val_measure_list':
+            # multi_index_tuples = [(a[0], a[1], a[2], b) for a in single_idx for b in buffered_idx]
+            # multi_index = pd.MultiIndex.from_tuples(multi_index_tuples,
+            #                                         names=['MouseID', 'Run', 'Stride', 'FrameIdx'])
+            vals = pd.DataFrame(index=buffered_idx, columns=pd.MultiIndex.from_tuples(col_names_trimmed))
+        return vals
+
+    def run_calculations(self, datatype, measures):
+        vals = self.setup_df(datatype,measures)
+
+        for function in measures[datatype].keys():
+            if any(measures[datatype][function]):
+                if function != 'signed_angle':
+                    for param in itertools.product(*measures[datatype][function].values()):
+                        param_names = list(measures[datatype][function].keys())
+                        formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
+
+                        if np.logical_and('full_stride:True' in formatted_params, 'step_phase:None' not in formatted_params):
+                            pass
+                        elif np.logical_and('full_stride:False' in formatted_params, 'step_phase:None' in formatted_params):
+                            pass
+                        else:
+                            result = getattr(self, function)(*param)
+                            if datatype == 'single_val_measure_list':
+                                vals.loc(axis=1)[(function, formatted_params)] = result
+                            elif datatype == 'multi_val_measure_list':
+                                # idx_mask = vals.index.get_level_values(level='Buffered_idx').isin(result.index)
+                                # full_idx = vals.index[idx_mask]
+                                vals.loc[result.index, (function, formatted_params)] = result.values
 
                 else:
-                    for param in measures[datatype][function].keys():
-                        result = getattr(self, function)(*measures['single_val_measure_list'][function][param])
-                        name = f"{function}({param})"
+                    for combo in measures[datatype]['signed_angle'].keys():
+                        result = getattr(self, function)(*measures[datatype][function][combo])
+                        # if datatype == 'single_val_measure_list':
+                        #     vals.loc(axis=1)[(function, combo)] = result
+                        # elif datatype == 'multi_val_measure_list':
+                        vals.loc[result.index, (function, combo)] = result.values
+
             else:
                 # when no parameters required
                 result = getattr(self, function)()
-                name = function
-            vals[name] = result
+                if datatype == 'single_val_measure_list':
+                    vals.loc(axis=1)[(function, 'no_param')] = result
+                elif datatype == 'multi_val_measure_list':
+                    vals.loc[result.index, (function, 'no_param')] = result.values
+
         return vals
 
+    def add_single_idx(self, data):
+        single_idx = pd.MultiIndex.from_tuples([(self.mouseID, int(self.r), self.stride)],
+                                               names=['MouseID', 'Run', 'Stride'])
+        data.set_index(single_idx, inplace=True)
+        return data
+
+    def add_multi_idx(selfself, data, single_data):
+        single_idx = single_data.index
+        multi_index_tuples = [(a[0], a[1], a[2], b) for a in single_idx for b in data.index]
+        multi_index = pd.MultiIndex.from_tuples(multi_index_tuples,
+                                                names=['MouseID', 'Run', 'Stride', 'FrameIdx'])
+        data.set_index(multi_index, inplace=True)
+        return data
+
     def get_all_results(self):
-        lr_contr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
-        lr_ipsi = utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        single_val = self.run_calculations('single_val_measure_list', self.measures)
+        multi_val = self.run_calculations('multi_val_measure_list', self.measures)
 
-        measures = measures_list(stepping_limb=self.stepping_limb, lr_contr=lr_contr, lr_ipsi=lr_ipsi)
+        # add in multi indexes
+        single_val_indexed = self.add_single_idx(single_val)
+        mult_val_indexed = self.add_multi_idx(multi_val,single_val_indexed)
 
-        single_val = self.run('single_val_measure_list', measures)
-        multi_val = self.run('multi_val_measure_list', measures)
-
-        return single_val, multi_val
+        return single_val_indexed, mult_val_indexed
 
 
 class Save():
-    def __init__(self, conditions):
-        self.conditions = conditions
+    def __init__(self, conditions, buffer_size=0.25):
+        self.conditions, self.buffer_size = conditions, buffer_size
         #self.data = utils.Utils().GetDFs(conditions,reindexed_loco=True)
         self.XYZw = utils.Utils().Get_XYZw_DFs(conditions)
         self.CalculateMeasuresByStride = CalculateMeasuresByStride
@@ -616,74 +750,161 @@ class Save():
                 stsw = self.find_pre_post_transition_strides(con=con,mouseID=mouseID,r=r)
                 SwSt.append(stsw)
             except:
-                print('Cant get stsw for run %s' %r)
+                pass
+                #print('Cant get stsw for run %s' %r)
         SwSt_df = pd.concat(SwSt)
 
         return SwSt_df
 
-    #def plot_discrete_RUN_x_STRIDE_subplots(self, SwSt, con, mouseID, view):
-    def get_discrete_measures_byrun_bystride(self, SwSt, con, mouseID):
+    def get_measures_byrun_bystride(self, SwSt, con, mouseID):
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+
         st_mask = (SwSt.loc(axis=1)[['ForepawToeR', 'ForepawToeL'],'StepCycle'] == 0).any(axis=1)
         stride_borders = SwSt[st_mask]
 
-        # create df for single mouse to put measures into
-        levels = [[mouseID],np.arange(0, 42), [-3, -2, -1, 0, 1]]
-        multi_index = pd.MultiIndex.from_product(levels, names=['MouseID','Run', 'Stride'])
-        measure_list_flat = [value for sublist in measure_list.values() for value in sublist]
-        measures_single = pd.DataFrame(index=multi_index) #,columns=measure_list_flat)
-        measures_multi = pd.DataFrame(index=multi_index) #,columns=measure_list_flat)
+        temp_single_list = []
+        temp_multi_list = []
+        temp_run_list = []
 
-
-        for r in tqdm(stride_borders.index.get_level_values(level='Run').unique()):
+        for r in tqdm(stride_borders.index.get_level_values(level='Run').unique(), desc=f"Processing: {mouseID}"):
             stepping_limb = np.array(['ForepawToeR','ForepawToeL'])[(stride_borders.loc(axis=0)[r].loc(axis=1)[['ForepawToeR','ForepawToeL']].count() > 1).values][0]
-            try:
-                for sidx, s in enumerate(stride_borders.loc(axis=0)[r].loc(axis=1)['Stride_no'][:-1]):
+            for sidx, s in enumerate(stride_borders.loc(axis=0)[r].loc(axis=1)['Stride_no']):#[:-1]):
+                # if len(stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')) <= sidx + 1:
+                #     print("Can't calculate s: %s" %s)
+                try:
                     stride_start = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx]
                     stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1] - 1 # todo check i am right to consider the previous frame the end frame
 
                     #class_instance = self.CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
                     calc_obj = CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
-                    measures_dict = measures_list(stepping_limb=stepping_limb,lr_contr=utils.Utils().picking_left_or_right(stepping_limb, 'contr'),lr_ipsi=utils.Utils().picking_left_or_right(stepping_limb, 'ipsi'))
+                    measures_dict = measures_list(buffer=self.buffer_size)
 
-                    run_measures = RunMeasures(measures_dict, calc_obj)
-                    singlevals, multivals = run_measures.get_all_results()
-                    measures_single.loc(axis=0)[mouseID, r, s] = singlevals
-                    measures_multi.loc(axis=0)[mouseID, r, s] = multivals
+                    runXstride_measures = RunMeasures(measures_dict, calc_obj, buffer_size=self.buffer_size, stride=s)
+                    single_val, multi_val = runXstride_measures.get_all_results()
+                    temp_single_list.append(single_val)
+                    temp_multi_list.append(multi_val)
+                except:
+                    pass
+                    #print("Cant calculate s: %s" %s)
 
-                    # for m in measure_list_flat:
-                    #     try:
-                    #         method_name = m
-                    #         if hasattr(class_instance, method_name) and callable(getattr(class_instance, method_name)):
-                    #             method = getattr(class_instance, method_name)
-                    #             result = method()
-                    #             measures.loc(axis=0)[mouseID,r, s][m] = result
-                    #         else:
-                    #             print('Something went wrong for r: %s, stride: %s, measure: %s' %(r,s,m))
-                    #     except:
-                    #         print('cant plot measure %s' % m)
-            except:
-                print('cant plot stride %s' %s)
+            run_measures = CalculateMeasuresByRun(XYZw=self.XYZw,con=con,mouseID=mouseID,r=r,stepping_limb=stepping_limb)
+            run_val = run_measures.run()
+            temp_run_list.append(run_val)
+        measures_bystride_single = pd.concat(temp_single_list)
+        measures_bystride_multi = pd.concat(temp_multi_list)
+        measures_byrun = pd.concat(temp_run_list)
 
-        return measures_single, measures_multi
+        return measures_bystride_single, measures_bystride_multi, measures_byrun
 
-    def get_discrete_measures_byrun_bystride_ALLMICE(self, con):
+    def get_measures_byrun_bystride_ALLMICE(self, con):
         mice = list(self.XYZw[con].keys())
 
-        mouse_measures_single_ALL = []
-        mouse_measures_multi_ALL = []
+        mouse_byStride_single_ALL = []
+        mouse_byStride_multi_ALL = []
+        mouse_byRun_ALL = []
         for midx, mouseID in enumerate(mice):
             try:
-                print('Calculating measures for %s (%s/%s)...' %(mouseID,midx,len(mice)-1))
+                print('######################################################################################\n'
+                      'Calculating measures for %s: %s (%s/%s)...\n'
+                      '######################################################################################' %(con,mouseID,midx,len(mice)-1))
                 SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con, mouseID)
-                mouse_measures_single, mouse_measures_multi = self.get_discrete_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
-                mouse_measures_single_ALL.append(mouse_measures_single)
-                mouse_measures_multi_ALL.append(mouse_measures_multi)
+                mouse_byStride_single, mouse_byStride_multi, mouse_byRun = self.get_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
+                mouse_byStride_single_ALL.append(mouse_byStride_single)
+                mouse_byStride_multi_ALL.append(mouse_byStride_multi)
+                mouse_byRun_ALL.append(mouse_byRun)
             except:
                 print('cant plot mouse %s' %mouseID)
-        mouse_measures_single_ALL = pd.concat(mouse_measures_single_ALL)
-        mouse_measures_multi_ALL = pd.concat(mouse_measures_multi_ALL)
+        mouse_byStride_single_ALLc = pd.concat(mouse_byStride_single_ALL)
+        mouse_byStride_multi_ALLc = pd.concat(mouse_byStride_multi_ALL)
+        mouse_byRun_ALLc = pd.concat(mouse_byRun_ALL)
 
-        return mouse_measures_single_ALL, mouse_measures_multi_ALL
+        return mouse_byStride_single_ALLc, mouse_byStride_multi_ALLc, mouse_byRun_ALLc
+
+    def process_mouse_data(self, mouseID, con):
+        try:
+            # Process data for the given mouseID
+            SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con=con, mouseID=mouseID)
+            single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
+            return single_byStride, multi_byStride, byRun
+        except Exception as e:
+            print(f"Error processing mouse {mouseID}: {e}")
+            return None, None, None
+
+    def process_mouse_data_wrapper(self, args):
+        mouseID, con = args
+        return self.process_mouse_data(mouseID, con)
+
+    def save_all_measures_parallel(self):
+        pool = Pool(cpu_count())
+        for con in self.conditions:
+            # Initialize multiprocessing Pool with number of CPU cores
+            results = []
+
+            # Process data for each mouseID in parallel
+            for mouseID in self.XYZw[con].keys():
+                result = pool.apply_async(self.process_mouse_data_wrapper, args=((mouseID, con),))
+                results.append(result)
+
+            # Aggregate results
+            single_byStride_all, multi_byStride_all, byRun_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            for result in results:
+                single_byStride, multi_byStride, byRun = result.get()
+                if single_byStride is not None:
+                    single_byStride_all = pd.concat([single_byStride_all, single_byStride])
+                if multi_byStride is not None:
+                    multi_byStride_all = pd.concat([multi_byStride_all, multi_byStride])
+                if byRun is not None:
+                    byRun_all = pd.concat([byRun_all, byRun])
+
+            # Write to HDF files
+            if 'Day' not in con:
+                dir = os.path.join(paths['filtereddata_folder'], con)
+            else:
+                dir = utils.Utils().Get_processed_data_locations(con)
+            single_byStride_all.to_hdf(os.path.join(dir, "MEASURES_single_kinematics_runXstride.h5"),
+                                       key='single_kinematics', mode='w')
+            multi_byStride_all.to_hdf(os.path.join(dir, "MEASURES_multi_kinematics_runXstride.h5"), key='multi_kinematics',
+                                      mode='w')
+            byRun_all.to_hdf(os.path.join(dir, "MEASURES_behaviour_run.h5"), key='behaviour', mode='w')
+
+        # Wait for all processes to complete and collect results
+        pool.close()
+        pool.join()
+
+
+    # def save_all_measures(self):
+    #     for con in self.conditions:
+    #         single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride_ALLMICE(con)
+    #         if 'Day' not in con:
+    #             dir = r"%s\%s" % (paths['filtereddata_folder'], con)
+    #         else:
+    #             dir = utils.Utils().Get_processed_data_locations(con)
+    #         single_byStride.to_hdf(r'%s\MEASURES_single_kinematics_runXstride.h5' %dir, key='single_kinematics', mode='w')
+    #         multi_byStride.to_hdf(r'%s\MEASURES_multi_kinematics_runXstride.h5' %dir, key='multi_kinematics', mode='w')
+    #         byRun.to_hdf(r'%s\MEASURES_behaviour_run.h5' %dir, key='behaviour', mode='w')
+
+    def save_all_measures(self):
+        for con in self.conditions:
+            single_byStride_all, multi_byStride_all, byRun_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            for mouseID in tqdm(self.XYZw[con].keys(), desc=f"Processing mice in: {con}"):
+                try:
+                    SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con, mouseID)
+                    single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt, con, mouseID)
+                    single_byStride_all = pd.concat([single_byStride_all, single_byStride])
+                    multi_byStride_all = pd.concat([multi_byStride_all, multi_byStride])
+                    byRun_all = pd.concat([byRun_all, byRun])
+                except Exception as e:
+                    print(f"Error processing mouse {mouseID}: {e}")
+            # Write to HDF files outside the loop
+            if 'Day' not in con:
+                dir = os.path.join(paths['filtereddata_folder'], con)
+            else:
+                dir = utils.Utils().Get_processed_data_locations(con)
+            single_byStride_all.to_hdf(os.path.join(dir, "MEASURES_single_kinematics_runXstride.h5"),
+                                       key='single_kinematics', mode='w')
+            multi_byStride_all.to_hdf(os.path.join(dir, "MEASURES_multi_kinematics_runXstride.h5"),
+                                      key='multi_kinematics', mode='w')
+            byRun_all.to_hdf(os.path.join(dir, "MEASURES_behaviour_run.h5"), key='behaviour', mode='w')
 
 
 class plotting():
@@ -894,9 +1115,9 @@ class plotting():
 # plotting = BasicMeasures.plotting(conditions)
 # df = plotting.get_discrete_measures_byrun_bystride_ALLMICE(con)
 
-
-conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
-save = Save(conditions)
-single, multi = save.get_discrete_measures_byrun_bystride_ALLMICE(conditions[0])
-
+#
+# conditions = ['APAChar_LowHigh_Repeats_Wash_Day1']
+# save = Save(conditions)
+# single, multi = save.get_discrete_measures_byrun_bystride_ALLMICE(conditions[0])
+# #
 

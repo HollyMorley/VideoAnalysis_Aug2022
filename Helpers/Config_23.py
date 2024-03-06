@@ -78,7 +78,11 @@ micestuff = {
         'MNone',
         'MR',
         'MLR'
-    ]
+    ],
+    'LR': {
+        'ForepawToeL': 1,
+        'ForepawToeR': 2
+    }
 }
 
 label_list = {
@@ -121,7 +125,7 @@ measure_list = {
 # #     'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
 # #     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
 # }
-def measures_list(stepping_limb, lr_contr, lr_ipsi): ## add in displacement??
+def measures_list(buffer): ## add in displacement??
     measures = {
         'multi_val_measure_list' : {
             'instantaneous_swing_velocity': {
@@ -130,75 +134,80 @@ def measures_list(stepping_limb, lr_contr, lr_ipsi): ## add in displacement??
                 'smooth': [False]
             },
             'x': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
                 'speed_correct': [True,False],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'y': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'z' : {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'traj': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'coord': ['x','y','z'],
                 'step_phase': [None],
                 'full_stride': [True],
                 'speed_correct': [True, False],
-                'buffer_size': [0, 0.25]
+                'aligned': [True], # False
+                'buffer_size': [0, buffer]
             },
             'body_distance': {
                 'bodyparts': [['Back1','Back12']],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'back_height': {
+                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
+                       'Back11', 'Back12'],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'back_skew': {
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'limb_rel_to_body': {
+                'time': [None],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
-                'buffer_size': [0, 0.25]
-            },
+                'buffer_size': [0, buffer]
+             },
             'signed_angle': {
-                'ToeAnkle_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), [stepping_limb,'ForepawAnkle%s' %lr_ipsi], 0.25],
-                'ToeAnkle_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), [stepping_limb, 'ForepawAnkle%s' %lr_ipsi], 0],
-                'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0.25],
+                'ToeAnkleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeL','ForepawAnkleL'], buffer],
+                'ToeAnkleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeL', 'ForepawAnkleL'], 0],
+                'ToeAnkleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeR', 'ForepawAnkleR'],buffer],
+                'ToeAnkleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['ForepawToeR', 'ForepawAnkleR'], 0],
+                'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],buffer],
                 'Back1Back12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0],
-                'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0.25],
+                'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],buffer],
                 'Tail1Tail12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0],
-                'NoseBack1_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0.25],
+                'NoseBack1_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],buffer],
                 'NoseBack1_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0],
-                'Back1Back12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0.25],
+                'Back1Back12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],buffer],
                 'Back1Back12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0],
-                'Tail1Tail12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0.25],
+                'Tail1Tail12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], buffer],
                 'Tail1Tail12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0],
-                'NoseBack1_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0.25],
+                'NoseBack1_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], buffer],
                 'NoseBack1_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0],
             }
         },
@@ -220,27 +229,25 @@ def measures_list(stepping_limb, lr_contr, lr_ipsi): ## add in displacement??
             },
             'x': {
                 # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
                 'speed_correct': [True,False],
-                'step_phase': [0, 1],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
             },
             'y': {
                 # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
-                'step_phase': [0, 1],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
             },
             'z': {
                 # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Back6','Tail12',stepping_limb,'ForepawToe%s' %lr_contr,'ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
-                'step_phase': [0, 1],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
@@ -258,26 +265,28 @@ def measures_list(stepping_limb, lr_contr, lr_ipsi): ## add in displacement??
             },
             'body_distance': {
                 'bodyparts': [['Back1','Back12']],
-                'step_phase': [0, 1],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
             },
             'back_height': {
-                'step_phase': [0, 1],
+                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
             },
             'double_support': [],
             'back_skew': {
-                'step_phase': [0, 1],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]
             },
             'limb_rel_to_body': {
-                'step_phase': [0, 1],
+                'time': ['start','end'],
+                'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, 0.25]

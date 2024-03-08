@@ -59,7 +59,7 @@ settings = {
 # }
 paths = {
         'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round2_Jan23',
-        'plotting_destfolder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Nov23'
+        'plotting_destfolder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Mar24'
 }
 
 micestuff = {
@@ -81,7 +81,7 @@ micestuff = {
     ],
     'LR': {
         'ForepawToeL': 1,
-        'ForepawToeR': 2
+        'ForepawToeR': 2,
     }
 }
 
@@ -93,38 +93,8 @@ label_list = {
                       'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12', 'StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL']
 }
 
-measure_list = {
-    'limb': ['walking_speed','stride_duration','cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
-    'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'
-    'whole_body': ['tail1_ptp_amplitude_stride',
-                   'tail1_speed',
-                   'body_length_stance', 'body_length_swing',
-                   'back_skew_stance', 'back_skew_swing',
-                   'neck_z_stance', 'neck_z_swing',
-                   'midback_z_stance', 'midback_z_swing',
-                   'tail1_z_stance', 'tail1_z_swing',
-                   'stepping_limb_z_stance', 'stepping_limb_z_swing',
-                   'contra_limb_z_stance', 'contra_limb_z_swing',
-                   'neck_x_displacement_stance', 'neck_x_displacement_swing',
-                   'midback_x_displacement_stance', 'midback_x_displacement_swing',
-                   'tail1_x_displacement_stance', 'tail1_x_displacement_swing',
-                   'stepping_limb_x_displacement_stance', 'stepping_limb_x_displacement_swing',
-                   'contra_limb_x_displacement_stance', 'contra_limb_x_displacement_swing',
-                   'stepping_limb_x_displacement_stance', 'stepping_limb_x_displacement_swing',
-                   'contra_limb_x_displacement_stance', 'contra_limb_x_displacement_swing'
-                   'head_tilt_stance', 'head_tilt_swing',
-                   'body_tilt_stance', 'body_tilt_swing',
-                   'tail_tilt_stance', 'tail_tilt_swing',
-                   'limb_rel_to_body_stance'], #, 'back_curvature_stance', 'back_curvature_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
-    #'behavioural': ['wait_time','no_rbs','transitioning_limb']
-}
-#
-# measure_list = {
-#      'limb': ['walking_speed','stride_duration'] #,'cadence','swing_velocity','stride_length','stance_duration','duty_factor','coo_x','coo_y'], ## for different plot add swing z trajectory & instantaneous swing vel,
-# #     'interlimb': ['bos_ref_stance', 'double_support'], # stance phase, supports, 'bos_hom_stance', 'tail1_displacement'
-# #     'whole_body': ['tail1_ptp_amplitude_stride', 'tail1_speed', 'body_length_stance', 'body_length_swing'] #,'back_skew_stance', 'back_skew_swing','neck_height_stance', 'neck_height_swing', 'midback_height_stance', 'midback_height_swing', 'tail1_height_stance', 'tail1_height_swing','head_tilt_stance', 'head_tilt_swing', 'body_tilt_stance', 'body_tilt_swing', 'tail_angle_stance', 'tail_angle_swing'], # x/y of paws during swing and stance, body sway (overhead), back curvature, , 'nose_ptp_amplitude_stride'
-# #     #'behavioural': ['wait_time','no_rbs','transitioning_limb']
-# }
+measure_type_names = ['single_kinematics_runXstride', 'multi_kinematics_runXstride', 'behaviour_run']
+
 def measures_list(buffer): ## add in displacement??
     measures = {
         'multi_val_measure_list' : {

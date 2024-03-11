@@ -31,7 +31,7 @@ class GetData():
         all_data_points = pd.concat(measure_all, axis=1).sort_index()
         return all_data_points
 
-class Plot(GetData):
+class PlotBehaviour(GetData):
     def __init__(self, conditions):
         super().__init__(conditions)
         # self.data = GetData.load_data(conditions)
@@ -94,19 +94,6 @@ class Plot(GetData):
                         ax[i].set_xlabel('Run', fontsize=14)
                     ax[i].set_title('%s' % con.split('_')[-1], fontsize=14, y=0.9)
                     ax[i].set_ylabel('Wait time (s)', fontsize=14)
-
-
-
-
-
-
-                # ax_inset = fig.add_axes([0.1, 0.1, 0.9, 0.3])
-                # for mouse, midx in enumerate(vals.columns.get_level_values(level='MouseID').unique()):
-                #     ax_inset.plot(vals.index, vals[midx], color=cmap(np.linspace(0, 1, len(vals.columns.get_level_values(level='MouseID').unique()))[mouse]), label="m%s" % midx[-3:])
-                #     ax_inset.set_ylim(0, 10)
-                #     ax_inset.set_title('Zoomed in')
-                #     ax_inset.set_xlabel('Run', fontsize=14)
-                #     ax_inset.set_ylabel('Wait time (s)', fontsize=14)
 
             ax[0].legend(loc='upper left', bbox_to_anchor=(1.01, 1.05))
             fig.subplots_adjust(right=0.89)
@@ -289,7 +276,7 @@ class Plot(GetData):
 
 def main():
     LowHigh_days_conditions = ['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3']
-    plotting = Plot(LowHigh_days_conditions)
+    plotting = PlotBehaviour(LowHigh_days_conditions)
     for time in ['start','trans']:
         for type in ['mice_across_days', 'all_mice_across_runs_singlecon']:
             plotting.paw_pref(type, time)

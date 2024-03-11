@@ -79,8 +79,8 @@ class MkFigs():
         ax.spines['right'].set_visible(False)
         return ax
 
-    def MkFig_TSStride(self, xlabel='Stride (%)', ylabel='', buffer=0.25):
-        fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    def MkFig_TSStride(self, ax, xlabel='Stride (%)', ylabel='', buffer=0.25):
+        #fig, ax = plt.subplots(1, 1, figsize=(10, 5))
         lower = int(0-100*buffer)
         upper = int(100+100*buffer)
         ax.set_xlim(lower,upper)
@@ -90,7 +90,7 @@ class MkFigs():
         ax.set_ylabel(ylabel, fontsize=self.axes_label_fs)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        return fig, ax
+        return ax
 
     def MkFig_BackShape(self, xlabel='Back marker', ylabel=''):
         fig, ax = plt.subplots(1, 1, figsize=(10, 5))

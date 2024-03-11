@@ -212,7 +212,7 @@ class CalculateMeasuresByStride():
         if speed_correct:
             xyz['x'] = xyz['x'] - self.calculate_belt_x_displacement()
         if aligned:
-            xyz = xyz - xyz.iloc[0] ### todo cant align traj to first position when that is a nan
+            xyz = xyz - xyz.loc(axis=0)[self.stride_start] ### todo cant align traj to first position when that is a nan
         return xyz[coord]
 
 
@@ -618,15 +618,16 @@ class RunMeasures(CalculateMeasuresByStride):
                 col_names_trimmed.append(c)
 
         buffered_idx = self.get_buffer_chunk(self.buffer_size).index.get_level_values(level='FrameIdx')
-        # single_idx = pd.MultiIndex.from_tuples([(self.mouseID, int(self.r), self.stride)],
-        #                                        names=['MouseID', 'Run', 'Stride'])
+        ## add in new index with either 'buffer' or 'stride' based on whether that frame is in the buffer or between stride start and end
+        buffer_mask = np.logical_and(buffered_idx >= self.stride_start, buffered_idx < self.stride_end)
+        idx_type = np.where(buffer_mask, 'stride', 'buffer')
+
+
         if datatype == 'single_val_measure_list':
-            vals = pd.DataFrame(index=[0], columns=pd.MultiIndex.from_tuples(col_names_trimmed))
+            vals = pd.DataFrame(index=[0], columns=pd.MultiIndex.from_tuples(col_names_trimmed, names=['Measure', 'Params']))
         elif datatype == 'multi_val_measure_list':
-            # multi_index_tuples = [(a[0], a[1], a[2], b) for a in single_idx for b in buffered_idx]
-            # multi_index = pd.MultiIndex.from_tuples(multi_index_tuples,
-            #                                         names=['MouseID', 'Run', 'Stride', 'FrameIdx'])
-            vals = pd.DataFrame(index=buffered_idx, columns=pd.MultiIndex.from_tuples(col_names_trimmed))
+            mult_index = pd.MultiIndex.from_arrays([buffered_idx, idx_type], names=['FrameIdx', 'Buffer'])
+            vals = pd.DataFrame(index=mult_index, columns=pd.MultiIndex.from_tuples(col_names_trimmed, names=['Measure', 'Params']))
         return vals
 
     def run_calculations(self, datatype, measures):
@@ -678,9 +679,10 @@ class RunMeasures(CalculateMeasuresByStride):
 
     def add_multi_idx(selfself, data, single_data):
         single_idx = single_data.index
-        multi_index_tuples = [(a[0], a[1], a[2], b) for a in single_idx for b in data.index]
+        data_idx = [data.index.get_level_values(level='FrameIdx'), data.index.get_level_values(level='Buffer')]
+        multi_index_tuples = [(a[0], a[1], a[2], data_idx[0][b], data_idx[1][b]) for a in single_idx for b in np.arange(len(data_idx[0]))]
         multi_index = pd.MultiIndex.from_tuples(multi_index_tuples,
-                                                names=['MouseID', 'Run', 'Stride', 'FrameIdx'])
+                                                names=['MouseID', 'Run', 'Stride', 'FrameIdx', 'Buffer'])
         data.set_index(multi_index, inplace=True)
         return data
 
@@ -798,10 +800,17 @@ class Save():
             # Process data for the given mouseID
             SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con=con, mouseID=mouseID)
             single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
-            return single_byStride, multi_byStride, byRun
+
+            # add mouseID to SwSt index
+            index = SwSt.index
+            multi_idx_tuples = [(mouseID, a[0], a[1], a[2]) for a in index]
+            multi_idx = pd.MultiIndex.from_tuples(multi_idx_tuples, names=['MouseID', 'Run', 'Stride', 'FrameIdx'])
+            SwSt.set_index(multi_idx, inplace=True)
+
+            return single_byStride, multi_byStride, byRun, SwSt
         except Exception as e:
             print(f"Error processing mouse {mouseID}: {e}")
-            return None, None, None
+            return None, None, None, None
 
     def process_mouse_data_wrapper(self, args):
         mouseID, con = args
@@ -819,19 +828,22 @@ class Save():
                 results.append(result)
 
             # Aggregate results
-            single_byStride_all, multi_byStride_all, byRun_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            single_byStride_all, multi_byStride_all, byRun_all, SwSt_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             for result in results:
-                single_byStride, multi_byStride, byRun = result.get()
+                single_byStride, multi_byStride, byRun, SwSt = result.get()
                 if single_byStride is not None:
                     single_byStride_all = pd.concat([single_byStride_all, single_byStride])
                 if multi_byStride is not None:
                     multi_byStride_all = pd.concat([multi_byStride_all, multi_byStride])
                 if byRun is not None:
                     byRun_all = pd.concat([byRun_all, byRun])
+                if SwSt is not None:
+                    SwSt_all = pd.concat([SwSt_all, SwSt])
 
             single_byStride_all = single_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
             multi_byStride_all = multi_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
             byRun_all = byRun_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+            #SwSt_all = SwSt_all.apply(pd.to_numeric, errors='coerce', downcast='float')
 
             # Write to HDF files
             if 'Day' not in con:
@@ -844,6 +856,7 @@ class Save():
             multi_byStride_all.to_hdf(os.path.join(dir, "MEASURES_multi_kinematics_runXstride.h5"), key='multi_kinematics',
                                       mode='w')
             byRun_all.to_hdf(os.path.join(dir, "MEASURES_behaviour_run.h5"), key='behaviour', mode='w')
+            SwSt_all.to_hdf(os.path.join(dir, "MEASURES_StrideInfo.h5"), key='stride_info', mode='w')
 
         # Wait for all processes to complete and collect results
         pool.close()

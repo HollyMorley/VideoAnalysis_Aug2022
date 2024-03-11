@@ -24,6 +24,12 @@ expstuff = {
         'APAPerRuns': [10,20,10], #### warning if change i have sometimes used the apachar variable to define perception runs too
         'APAVmtRuns': [10,15,10]
     },
+    'condition_exp_runs': {
+        'APACharRuns': {
+            'Short': [np.arange(1, 11), np.arange(11, 21), np.arange(21, 31), np.arange(31, 41)], # baseline, apa1, apa2, washout
+            'Extended': []
+        }
+    },
     'setup': {
         'distancescm': [13,12,11.5,11.5] # goes 0: wall1-wall0,  1: wall2-wall1, 3: wall3-wall2, 4: wall4-wall3
     },

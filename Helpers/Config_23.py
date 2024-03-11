@@ -148,8 +148,14 @@ def measures_list(buffer): ## add in displacement??
                 'buffer_size': [0, buffer]
             },
             'back_height': {
-                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
-                       'Back11', 'Back12'],
+                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
+                'step_phase': [None],
+                'all_vals': [True],
+                'full_stride': [True],
+                'buffer_size': [0, buffer]
+            },
+            'tail_height': {
+                'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10','Tail11', 'Tail12'],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],

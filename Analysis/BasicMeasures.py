@@ -303,6 +303,20 @@ class CalculateMeasuresByStride():
         else:
             return back_heights.mean(axis=0)
 
+    def tail_height(self, tail_label, step_phase, all_vals, full_stride, buffer_size=0.25):
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            tail_heights = self.correct_z(buffer_chunk.loc(axis=1)[tail_label, 'z']).droplevel(['Run','RunStage'],axis=0) #.droplevel(level='coords', axis=1).iloc[:, ::-1])
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'StepCycleFill'] == step_phase
+            tail_heights = self.correct_z(self.data_chunk.loc(axis=1)[tail_label, 'z'][stsw_mask]) #.droplevel(level='coords', axis=1).iloc[:, ::-1])
+        if all_vals:
+                #return back_heights.droplevel(['Run','RunStage'],axis=0)
+            return tail_heights
+        else:
+            return tail_heights.mean(axis=0)
+            
+
     ########### BODY-RELATIVE TIMINGS/PHASES ###########:
 
     def double_support(self): # %

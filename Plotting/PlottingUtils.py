@@ -92,8 +92,8 @@ class MkFigs():
         ax.spines['right'].set_visible(False)
         return ax
 
-    def MkFig_BackShape(self, xlabel='Back marker', ylabel=''):
-        fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    def MkFig_BackShape(self, ax, xlabel='Back marker', ylabel='z (mm)'):
+        #fig, ax = plt.subplots(1, 1, figsize=(10, 5))
         ax.set_xlim(0,13)
         xticks = range(1,13,1)
         ax.set_xticks(xticks)
@@ -107,7 +107,7 @@ class MkFigs():
                     fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
         ax.annotate('Tail', xytext=(0.15, -0.12), xy=(0, -0.12), xycoords='axes fraction', ha='center', va='center',
                     fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
-        return fig, ax
+        return ax
 
     def MkFig_PawPref(self, ax):
         #fig, ax = plt.subplots(1, 1, figsize=(5, 8))

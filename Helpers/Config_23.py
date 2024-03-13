@@ -26,7 +26,12 @@ expstuff = {
     },
     'condition_exp_runs': {
         'APACharRuns': {
-            'Short': [np.arange(1, 11), np.arange(11, 21), np.arange(21, 31), np.arange(31, 41)], # baseline, apa1, apa2, washout
+            'Short': {
+                'Baseline': np.arange(1, 11),
+                'APA1': np.arange(11, 21),
+                'APA2': np.arange(21, 31),
+                'Washout': np.arange(31, 41)
+            },
             'Extended': []
         }
     },
@@ -216,7 +221,7 @@ def measures_list(buffer): ## add in displacement??
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'y': {
                 # this is displacement
@@ -224,7 +229,7 @@ def measures_list(buffer): ## add in displacement??
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'z': {
                 # this is displacement
@@ -232,7 +237,7 @@ def measures_list(buffer): ## add in displacement??
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'coo_xyz': {
                 'xyz': ['x','y','z']
@@ -250,28 +255,35 @@ def measures_list(buffer): ## add in displacement??
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'back_height': {
                 'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
+            },
+            'tail_height': {
+                'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
+                'step_phase': [0, 1, None],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0, buffer]
             },
             'double_support': [],
             'back_skew': {
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             },
             'limb_rel_to_body': {
                 'time': ['start','end'],
                 'step_phase': [0, 1, None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, 0.25]
+                'buffer_size': [0, buffer]
             }
         }
     }

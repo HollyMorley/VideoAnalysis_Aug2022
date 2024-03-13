@@ -35,6 +35,15 @@ def remove_prepruns(data, con):
         raise ValueError("Experiment type not recognized, haven't configured to remove prepruns for this type")
     return data[con]
 
+def set_colormap(comparison):
+    if comparison == 'Day':
+        cmap = "mako_r"
+    elif comparison == 'ExpPhase':
+        cmap = "hls"
+    elif comparison == 'Stride':
+        cmap = "plasma"
+    return cmap
+
 ########################################################################################################################
 # Plotting functions
 ########################################################################################################################
@@ -92,21 +101,41 @@ class MkFigs():
         ax.spines['right'].set_visible(False)
         return ax
 
-    def MkFig_BackShape(self, ax, xlabel='Back marker', ylabel='z (mm)'):
+    def MkFig_byStride(self, ax, xlabel='Stride', ylabel=''):
+        ax.set_xlim(-3.5, 1.5)
+        ax.set_xticks(range(-3, 2, 1))
+        # ax.set_xticks(range(0, 5, 1))
+        ax.set_xticklabels(['-3', '-2', '-1', '0', '1'], fontsize=self.tick_fs)
+        ax.axvline(0, ls='--', color='k', linewidth=3, alpha=0.2)
+        ax.set_xlabel(xlabel, fontsize=self.axes_label_fs)
+        ax.set_ylabel(ylabel, fontsize=self.axes_label_fs)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        return ax
+
+    def MkFig_bySpeed(self, ax, xlabel='Speed (mm/s)', ylabel=''):
+        ax.set_xlabel(xlabel, fontsize=self.axes_label_fs)
+        ax.set_ylabel(ylabel, fontsize=self.axes_label_fs)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        return ax
+
+    def MkFig_BackShape(self, ax, xlabel='Back marker', ylabel='z (mm)', xlabels_visible=False):
         #fig, ax = plt.subplots(1, 1, figsize=(10, 5))
         ax.set_xlim(0,13)
         xticks = range(1,13,1)
         ax.set_xticks(xticks)
-        ax.set_xticklabels(xticks[::-1])
+        ax.set_xticklabels(xticks[::-1], fontsize=self.tick_fs)
         ax.set_xlabel(xlabel, fontsize=self.axes_label_fs)
         ax.set_ylabel(ylabel, fontsize=self.axes_label_fs)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         plt.subplots_adjust(bottom=0.15)
-        ax.annotate('Nose', xytext=(0.85, -0.12), xy=(1, -0.12), xycoords='axes fraction', ha='center', va='center',
-                    fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
-        ax.annotate('Tail', xytext=(0.15, -0.12), xy=(0, -0.12), xycoords='axes fraction', ha='center', va='center',
-                    fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
+        if xlabels_visible:
+            ax.annotate('Nose', xytext=(0.85, -0.12), xy=(1, -0.12), xycoords='axes fraction', ha='center', va='center',
+                        fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
+            ax.annotate('Tail', xytext=(0.15, -0.12), xy=(0, -0.12), xycoords='axes fraction', ha='center', va='center',
+                        fontstyle='italic', arrowprops=dict(arrowstyle='-|>'))
         return ax
 
     def MkFig_PawPref(self, ax):

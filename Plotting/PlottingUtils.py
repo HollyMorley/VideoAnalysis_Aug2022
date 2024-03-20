@@ -149,6 +149,7 @@ class MkFigs():
         # ax.set_xlabel('Paw preference')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        #
         return ax
 
     def MkFig_PolarbyTime(self, ax, xpos, ypos):

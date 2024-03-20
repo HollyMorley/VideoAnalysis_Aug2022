@@ -44,6 +44,9 @@ def set_colormap(comparison):
         cmap = "plasma"
     return cmap
 
+def remove_vowel(string):
+    return re.sub(r'[aeiou]', '', string)
+
 ########################################################################################################################
 # Plotting functions
 ########################################################################################################################
@@ -148,11 +151,13 @@ class MkFigs():
         ax.spines['right'].set_visible(False)
         return ax
 
-    def MkFig_PolarbyTime(self,times):
-        fig, ax = plt.subplots(1, 1, figsize=(10,8), subplot_kw=dict(polar=True))
+    def MkFig_PolarbyTime(self, ax, xpos, ypos):
+        #fig, ax = plt.subplots(1, 1, figsize=(10,8), subplot_kw=dict(polar=True))
+        # set ax as a polar plot
+        ax.plt.subplot(1, polar=True)
         ax.set_theta_zero_location('N')
         ax.set_theta_direction(-1)
-        return fig, ax
+        return ax
 
     # def MkFig_HeatMap(correlation_matrix, labels):
     #     fig, ax = plt.subplots(1, 1, figsize=(10,8))

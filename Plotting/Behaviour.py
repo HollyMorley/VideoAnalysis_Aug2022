@@ -60,6 +60,8 @@ class PlotBehaviour(GetData):
             ax.bar(vals.index, vals.values, label=vals.name, color=cmap(0.6))
             ax.errorbar(vals.index, vals.values, yerr=vars.values, fmt='none', ecolor='black', elinewidth=1, capsize=2)
             ax.set_ylabel('Wait time (s)', fontsize=14)
+            if not os.path.exists(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder'])):
+                os.makedirs(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder']))
             plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (paths['plotting_destfolder'], self.conditions, plot_type), format='png')
             plt.close(fig)
 
@@ -99,6 +101,8 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(right=0.89)
             fig.subplots_adjust(left=0.1)
 
+            if not os.path.exists(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder'])):
+                os.makedirs(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder']))
             plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (paths['plotting_destfolder'], self.conditions, plot_type), format='png')
             plt.close(fig)
 
@@ -143,6 +147,8 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.15)
             fig.subplots_adjust(right=0.7)
 
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
             plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(paths['plotting_destfolder'], pref_type, self.conditions, plot_type), format='png')
             plt.close(fig)
 
@@ -174,6 +180,8 @@ class PlotBehaviour(GetData):
                 fig.subplots_adjust(wspace=0.2)
                 fig.suptitle(con, fontsize=16)
 
+                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
+                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
                 plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(paths['plotting_destfolder'], pref_type, con, plot_type), format='png')
                 plt.close(fig)
 
@@ -206,6 +214,8 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.15)
             fig.subplots_adjust(right=0.7)
 
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
             plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(paths['plotting_destfolder'], self.conditions, plot_type), format='png')
             plt.close(fig)
 
@@ -237,6 +247,8 @@ class PlotBehaviour(GetData):
                 fig.subplots_adjust(wspace=0.2)
                 fig.suptitle(con, fontsize=16)
 
+                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
+                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
                 plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(paths['plotting_destfolder'], con, plot_type), format='png')
                 plt.close(fig)
 
@@ -269,6 +281,8 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.17)
             fig.subplots_adjust(bottom=0.15)
 
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
             plt.savefig(
                 r"%s\Behaviour\Paw_preferences\SteppingPawMutualInfo_%s.png" % (paths['plotting_destfolder'], con),
                 format='png')

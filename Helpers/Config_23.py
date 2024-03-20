@@ -70,7 +70,7 @@ settings = {
 # }
 paths = {
         'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round2_Jan23',
-        'plotting_destfolder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Mar24'
+        'plotting_destfolder': r'H:\Dual-belt_APAs\Plots\Mar24'
 }
 
 micestuff = {

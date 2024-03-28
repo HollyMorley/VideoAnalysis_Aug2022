@@ -44,7 +44,6 @@ class GetData():
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
         con, mouseID, r, s, data, swing_only, SwSt = args
-        big_list = []
         try:
             if swing_only:
                 start_idx = SwSt.loc(axis=0)[con, mouseID, r][np.logical_and(
@@ -53,16 +52,6 @@ class GetData():
             else:
                 start_idx = data.loc(axis=0)[con, mouseID, r, s, 'stride'].index[0]
 
-                # swing_end_indices = SwSt.loc(axis=0)[con, mouseID, r][np.any(
-                #     SwSt.loc(axis=0)[con, mouseID, r].loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 0,
-                #     axis=1)].index.get_level_values('FrameIdx')[1:]
-                # swing_frames = []
-                # for start_idx, end_idx in zip(swing_start_indices, swing_end_indices - 1):
-                #     frames_between = data.loc(axis=0)[:, :, :, :, start_idx:end_idx]
-                #     swing_frames.append(frames_between)
-
-
-            #start_idx = data.loc(axis=0)[con, mouseID, r, s, 'stride'].index[0]
             end_idx = data.loc(axis=0)[con, mouseID, r, s, 'stride'].index[-1]
             zeroed = data.loc(axis=0)[con, mouseID, r, s, :].index.get_level_values('FrameIdx') - start_idx
             norm_idx = zeroed / (end_idx - start_idx) * 100
@@ -72,28 +61,9 @@ class GetData():
                                    index=pd.MultiIndex.from_product([[con], [mouseID], [r], [s], new_index],
                                                                     names=['Condition', 'MouseID', 'Run', 'Stride',
                                                                            'RelTime']))
-
-            # # Swing only filtering
-            # if swing_only:
-            #     swing_start_indices = SwSt.loc(axis=0)[con, mouseID, r][np.any(SwSt.loc(axis=0)[con, mouseID, r].loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 1,
-            #                                       axis=1)].index.get_level_values('FrameIdx')
-            #     swing_end_indices = SwSt.loc(axis=0)[con, mouseID, r][np.any(SwSt.loc(axis=0)[con, mouseID, r].loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 0,
-            #                                     axis=1)].index.get_level_values('FrameIdx')[1:]
-            #
-            #     swing_frames = []
-            #     for start_idx, end_idx in zip(swing_start_indices, swing_end_indices - 1):
-            #         # if start_idx >= interp_ser.index.get_level_values(
-            #         #         'RelTime').min() and end_idx <= interp_ser.index.get_level_values('RelTime').max():
-            #         frames_between = interp_ser.loc(axis=0)[:, :, :, :, start_idx:end_idx]
-            #         #         frames_between = filtered_data.loc(axis=0)[:,:,:,:,start_idx:end_idx]
-            #
-            #         swing_frames.append(frames_between)
-            #     interp_ser = pd.concat(swing_frames)
-
-            big_list.append(interp_ser)
+            return interp_ser
         except:
             pass
-        return big_list
 
     def get_interp_data(self, data, swing_only=False):
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
@@ -105,7 +75,7 @@ class GetData():
 
         args_list = []
         for con in self.conditions:
-            print("Interpolating data for condition: %s" % con)
+            print("\nInterpolating data for condition: %s\n" % con)
             for mouseID in tqdm(data[con].index.get_level_values('MouseID').unique()):
                 for r in data[con].index.get_level_values('Run').unique():
                     for s in data[con].index.get_level_values('Stride').unique():
@@ -117,118 +87,18 @@ class GetData():
             results = list(
                 tqdm(pool.imap(self.process_data, args_list), total=len(args_list), desc="Processing", dynamic_ncols=True))
 
-        big_df = pd.concat([item for sublist in results for item in sublist])
+        filtered_series = [s for s in results if s is not None]
+        chunk_size = 100  # Adjust the chunk size as needed
+        chunks = [filtered_series[i:i + chunk_size] for i in range(0, len(filtered_series), chunk_size)]
+        with Pool(processes=cpu_count()) as pool:
+            concatenated_chunks = pool.map(self.concat_series, chunks)
+        big_df = pd.concat(concatenated_chunks)
+
+        #big_df = pd.concat([item for sublist in results for item in sublist])
         return big_df
 
-    # def get_interp_data(self, data, swing_only=False):
-    #     warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
-    #     stride_info = self.get_stride_data()
-    #     SwSt = pd.concat(stride_info, names=['Condition'])
-    #
-    #     big_list = []
-    #
-    #     for con in self.conditions:
-    #         print("Interpolating data for condition: %s" % con)
-    #         for mouseID in tqdm(data[con].index.get_level_values('MouseID').unique()):
-    #             for r in data[con].index.get_level_values('Run').unique():
-    #                 for s in data[con].index.get_level_values('Stride').unique():
-    #                     try:
-    #                         start_idx = data.loc(axis=0)[con, mouseID, r, s, 'stride'].index[0]
-    #                         end_idx = data.loc(axis=0)[con, mouseID, r, s, 'stride'].index[-1]
-    #                         zeroed = data.loc(axis=0)[con, mouseID, r, s, :].index.get_level_values(
-    #                             'FrameIdx') - start_idx
-    #                         norm_idx = zeroed / (end_idx - start_idx) * 100
-    #                         new_index = np.linspace(-25, 125, 100)
-    #                         new_vals = np.interp(new_index, norm_idx, data.loc(axis=0)[con, mouseID, r, s].values)
-    #                         interp_ser = pd.Series(data=new_vals, index=pd.MultiIndex.from_product(
-    #                             [[con], [mouseID], [r], [s], new_index],
-    #                             names=['Condition', 'MouseID', 'Run', 'Stride', 'RelTime']))
-    #
-    #                         # Swing only filtering
-    #                         if swing_only:
-    #                             swing_start_indices = SwSt[
-    #                                 np.any(SwSt.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 1,
-    #                                        axis=1)].index.get_level_values('FrameIdx')
-    #                             swing_end_indices = SwSt[np.any(
-    #                                 SwSt.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 0,
-    #                                 axis=1)].index.get_level_values('FrameIdx')[1:]
-    #
-    #                             swing_frames = []
-    #                             for start_idx, end_idx in zip(swing_start_indices, swing_end_indices - 1):
-    #                                 if start_idx >= interp_ser.index.get_level_values(
-    #                                         'RelTime').min() and end_idx <= interp_ser.index.get_level_values(
-    #                                         'RelTime').max():
-    #                                     frames_between = interp_ser.loc(axis=0)[:, :, :, :, start_idx:end_idx]
-    #                                     swing_frames.append(frames_between)
-    #                             interp_ser = pd.concat(swing_frames)
-    #
-    #                         big_list.append(interp_ser)
-    #                     except:
-    #                         pass
-    #
-    #     big_df = pd.concat(big_list)
-    #     return big_df
-
-    # def get_interp_data(self, data, swing_only=False):
-    #     warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
-    #
-    #     if not swing_only:
-    #         data = data.swaplevel('Buffer', 'FrameIdx')
-    #         big_list =[]
-    #         for con in self.conditions:
-    #             print("Interpolating data for condition: %s" % con)
-    #             for mouseID in data[con].index.get_level_values('MouseID').unique():
-    #                 for r in data[con].index.get_level_values('Run').unique():
-    #                     for s in data[con].index.get_level_values('Stride').unique():
-    #                         try:
-    #                             start_idx = data.loc(axis=0)[con,mouseID,r,s,'stride'].index[0]
-    #                             end_idx = data.loc(axis=0)[con,mouseID,r,s,'stride'].index[-1]
-    #                             zeroed = data.loc(axis=0)[con,mouseID,r,s,:].index.get_level_values('FrameIdx') - start_idx
-    #                             norm_idx = zeroed / (end_idx - start_idx) * 100
-    #                             new_index = np.linspace(-25, 125, 100)
-    #                             new_vals = np.interp(new_index, norm_idx, data.loc(axis=0)[con,mouseID,r,s].values)
-    #                             interp_ser = pd.Series(data=new_vals, index=pd.MultiIndex.from_product([[con], [mouseID], [r], [s], new_index], names=['Condition', 'MouseID', 'Run', 'Stride', 'RelTime']))
-    #                             big_list.append(interp_ser)
-    #                             # cnt += len(data.loc(axis=0)[con,mouseID,r,s])
-    #                         except:
-    #                             pass
-    #     else:
-    #         big_list = []
-    #         for con in self.conditions:
-    #             print("Interpolating data for condition: %s" % con)
-    #             for mouseID in data[con].index.get_level_values('MouseID').unique():
-    #                 for r in data[con].index.get_level_values('Run').unique():
-    #                     for s in data[con].index.get_level_values('Stride').unique():
-    #                         try:
-    #                             start_idx = data.loc(axis=0)[con,mouseID,r,s].index[0]
-    #                             end_idx = data.loc(axis=0)[con,mouseID,r,s].index[-1]
-    #                             zeroed = data.loc(axis=0)[con,mouseID,r,s].index.get_level_values('FrameIdx') - start_idx
-    #                             norm_idx = zeroed / (end_idx - start_idx) * 100
-    #                             new_index = np.linspace(0, 100, 100)
-    #                             new_vals = np.interp(new_index, norm_idx, data.loc(axis=0)[con,mouseID,r,s].values)
-    #                             interp_ser = pd.Series(data=new_vals, index=pd.MultiIndex.from_product([[con], [mouseID], [r], [s], new_index], names=['Condition', 'MouseID', 'Run', 'Stride', 'RelTime']))
-    #                             big_list.append(interp_ser)
-    #                         except:
-    #                             pass
-    #     big_df = pd.concat(big_list)
-    #     return big_df
-    #
-    # def filter_swing_data(self, data):
-    #     stride_info = self.get_stride_data()
-    #     SwSt = pd.concat(stride_info, names=['Condition'])
-    #
-    #     filtered_data = data.xs('stride', level='Buffer', axis=0)
-    #
-    #     swing_start_indices = SwSt[np.any(SwSt.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 1, axis=1)].index.get_level_values('FrameIdx')
-    #     swing_end_indices = SwSt[np.any(SwSt.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'StepCycle'] == 0, axis=1)].index.get_level_values('FrameIdx')[1:]
-    #
-    #     swing_frames = []
-    #     for start_idx, end_idx in zip(swing_start_indices, swing_end_indices-1):
-    #         frames_between = filtered_data.loc(axis=0)[:,:,:,:,start_idx:end_idx]
-    #         swing_frames.append(frames_between)
-    #     swing_frames_df = pd.concat(swing_frames)
-    #
-    #     return swing_frames_df
+    def concat_series(self, series_list):
+        return pd.concat(series_list, axis=0, ignore_index=False)
 
 class PlotKinematics(GetData):
     def __init__(self, conditions):
@@ -275,8 +145,8 @@ class PlotKinematics(GetData):
     # Plotting Functions
     #######################################################################################################################
     def plot_InstVel(self, data, params, plottype):
-        swing_data = self.filter_swing_data(data)
-        swing_data_interp = self.get_interp_data(swing_data, swing_only=True)
+        #swing_data = self.filter_swing_data(data)
+        swing_data_interp = self.get_interp_data(data, swing_only=True)
 
         if plottype == 'byStride_byPhase':
             for con in self.conditions:

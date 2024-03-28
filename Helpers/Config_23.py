@@ -180,10 +180,10 @@ def measures_list(buffer): ## add in displacement??
                 'buffer_size': [0, buffer]
              },
             'signed_angle': {
-                'ToeAnkleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeL','ForepawAnkleL'], buffer],
-                'ToeAnkleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeL', 'ForepawAnkleL'], 0],
-                'ToeAnkleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawToeR', 'ForepawAnkleR'],buffer],
-                'ToeAnkleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['ForepawToeR', 'ForepawAnkleR'], 0],
+                'ToeAnkleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleL','ForepawToeL'], buffer],
+                'ToeAnkleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleL', 'ForepawToeL'], 0],
+                'ToeAnkleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleR', 'ForepawToeR'],buffer],
+                'ToeAnkleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['ForepawAnkleR', 'ForepawToeR'], 0],
                 'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],buffer],
                 'Back1Back12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0],
                 'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],buffer],

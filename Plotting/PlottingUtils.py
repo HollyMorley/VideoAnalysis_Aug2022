@@ -152,10 +152,10 @@ class MkFigs():
         #
         return ax
 
-    def MkFig_PolarbyTime(self, ax, xpos, ypos):
+    def MkFig_PolarbyTime(self, ax):
         #fig, ax = plt.subplots(1, 1, figsize=(10,8), subplot_kw=dict(polar=True))
         # set ax as a polar plot
-        ax.plt.subplot(1, polar=True)
+        #ax.plt.subplot(1, polar=True)
         ax.set_theta_zero_location('N')
         ax.set_theta_direction(-1)
         return ax

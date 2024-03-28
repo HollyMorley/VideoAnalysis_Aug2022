@@ -633,7 +633,7 @@ class RunMeasures(CalculateMeasuresByStride):
 
         buffered_idx = self.get_buffer_chunk(self.buffer_size).index.get_level_values(level='FrameIdx')
         ## add in new index with either 'buffer' or 'stride' based on whether that frame is in the buffer or between stride start and end
-        buffer_mask = np.logical_and(buffered_idx >= self.stride_start, buffered_idx < self.stride_end)
+        buffer_mask = np.logical_and(buffered_idx >= self.stride_start, buffered_idx <= self.stride_end)
         idx_type = np.where(buffer_mask, 'stride', 'buffer')
 
 

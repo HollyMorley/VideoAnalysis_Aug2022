@@ -7,6 +7,13 @@ from tqdm import tqdm
 import pickle
 import os
 
+########################################################################################################################
+# example of how to use this code
+# from Preprocessing import MappingRealWorld
+# map = MappingRealWorld.SaveMappedFiles(all=False, condition='APAChar_LowHigh', exptype='Repeats', wash='NoWash', day='Day1')
+# map.batch_save_mapped_files()
+########################################################################################################################
+
 class SaveMappedFiles():
     """
     Gathers all experimental directories (or specified directories based on experiment types/conditions) and runs
@@ -31,8 +38,9 @@ class SaveMappedFiles():
                         data_subdirs.append(new)
             data_subdirs = np.unique(data_subdirs)
         else:
-            dir_selection = os.path.join(paths['filtereddata_folder'], self.condition, self.exptype, self.wash,
-                                         self.day)
+            # dir_selection = os.path.join(paths['filtereddata_folder'], self.condition, self.exptype, self.wash,
+            #                              self.day)
+            dir_selection = utils.Utils().generate_path(paths['filtereddata_folder'], self.condition, self.exptype, self.wash, self.day)
             # get all subdirectories
             data_subdirs = []
             for root, subdirs, files in os.walk(dir_selection):
@@ -48,7 +56,10 @@ class SaveMappedFiles():
     def batch_save_mapped_files(self):
         dirs = self.get_paths()
         for d in tqdm(dirs):
-            condition = '_'.join(list(filter(lambda x: len(x) > 0, d.split('\\')))[-4:])
+            if 'Wash' in d:
+                condition = '_'.join(list(filter(lambda x: len(x) > 0, d.split('\\')))[-4:])
+            else: # in the case of Extended experiments where there is no wash condition
+                condition = '_'.join(list(filter(lambda x: len(x) > 0, d.split('\\')))[-3:])
             MapCon = MapSingleConditionFiles(condition)
             print('\n-----------------------------------------------------------------------------------\n'
                   'Calculating and saving real world coordinates for:\n'
@@ -69,14 +80,19 @@ class MapSingleConditionFiles():
         components = self.conditions.split('_')
         condition = '_'.join(components[:2])
         exptype = components[2]
-        wash = components[3]
-        day = components[4]
-        return condition, exptype, wash, day
+        if 'Wash' in self.conditions:
+            wash = components[3]
+            day = components[4]
+            return condition, exptype, wash, day
+        else:
+            day = components[3]
+            return condition, exptype, day
 
     def map_all_mice(self, con):
         mice = list(self.data[con].keys())
         mice_XYZw = dict.fromkeys(mice)
         for midx, mouseID in enumerate(mice):
+            print('Mapping mouse %s' %mouseID)
             Map = MapSingleMouseFile(self.data, con, mouseID)
             XYZw = Map.get_real_xyz()
             mice_XYZw[mouseID] = XYZw
@@ -92,10 +108,16 @@ class MapSingleConditionFiles():
     def save_XYZw(self):
         # XYZw = self.map_all_conditions()
         XYZw = self.map_all_mice(self.conditions)
-        condition, exptype, wash, day = self.get_con_components()
-        path = paths['filtereddata_folder']
-        with open(r'%s\\%s\\%s\\%s\\%s\\allmice_%s_XYZw.pickle' %(path,condition, exptype, wash, day, self.conditions), 'wb') as f:
-            pickle.dump(XYZw, f, protocol=pickle.HIGHEST_PROTOCOL)
+        if 'Wash' in self.conditions:
+            condition, exptype, wash, day = self.get_con_components()
+            path = paths['filtereddata_folder']
+            with open(r'%s\\%s\\%s\\%s\\%s\\allmice_%s_XYZw.pickle' %(path,condition, exptype, wash, day, self.conditions), 'wb') as f:
+                pickle.dump(XYZw, f, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            condition, exptype, day = self.get_con_components()
+            path = paths['filtereddata_folder']
+            with open(r'%s\\%s\\%s\\%s\\allmice_%s_XYZw.pickle' %(path,condition, exptype, day, self.conditions), 'wb') as f:
+                pickle.dump(XYZw, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 class MapSingleMouseFile():
@@ -223,6 +245,25 @@ class MapSingleMouseFile():
         XYZw = pd.concat([sideXoverhead_XYZw, sideXfront_XYZw], axis=1)
         XYZw = self.add_in_step_phase(XYZw)
         return XYZw
+
+
+if __name__ == '__main__':
+    # write instructions how to use the below code
+    # e.g. python MappingRealWorld.py --all=True --condition=APAChar_LowHigh --exptype=Repeats --wash=NoWash --day=Day1
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--all', type=bool, default=False, help='Set to True to map all conditions')
+    parser.add_argument('--condition', type=str, default='APAChar_LowHigh', help='Condition to map')
+    parser.add_argument('--exptype', type=str, default='Repeats', help='Experiment type')
+    parser.add_argument('--wash', type=str, default='NoWash', help='Wash condition')
+    parser.add_argument('--day', type=str, default='Day1', help='Day of experiment')
+    args = parser.parse_args()
+
+    map = SaveMappedFiles(all=args.all, condition=args.condition, exptype=args.exptype, wash=args.wash, day=args.day)
+
+    map.batch_save_mapped_files()
+    print('Mapping complete')
 
 
 

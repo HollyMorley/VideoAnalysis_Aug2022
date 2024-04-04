@@ -32,8 +32,9 @@ class GetData():
 
 
 class PlotKinematics(GetData):
-    def __init__(self, conditions):
+    def __init__(self, conditions, directory):
         super().__init__(conditions)
+        self.plotting_path = '\\'.join([paths['plotting_destfolder'], directory])
         self.ls = 14
         self.ts = 12
 
@@ -144,11 +145,11 @@ class PlotKinematics(GetData):
             fig.subplots_adjust(left=0.08)
 
             #check if the folder exists, if not create it
-            if not os.path.exists(r"%s\Kinematics_single\walking_speed" % paths['plotting_destfolder']):
-                os.makedirs(r"%s\Kinematics_single\walking_speed" % paths['plotting_destfolder'])
+            if not os.path.exists(r"%s\Kinematics_single\walking_speed" % self.plotting_path):
+                os.makedirs(r"%s\Kinematics_single\walking_speed" % self.plotting_path)
             filepath = PlottingUtils.remove_vowel("WalkingSpeedCounts_%s_speedcorr=%s_bodypart=%s_%s" %(conditions, speed_correct, bodypart, plot_type))
             plt.savefig(r"%s\Kinematics_single\walking_speed\%s.png" %
-                        (paths['plotting_destfolder'], filepath), format='png')
+                        (self.plotting_path, filepath), format='png')
             plt.close(fig)
 
         elif plot_type == 'AllDays_byMouse':
@@ -179,11 +180,11 @@ class PlotKinematics(GetData):
             fig.subplots_adjust(bottom=0.05)
 
             # check if the folder exists, if not create it
-            if not os.path.exists(r"%s\Kinematics_single\walking_speed" % paths['plotting_destfolder']):
-                os.makedirs(r"%s\Kinematics_single\walking_speed" % paths['plotting_destfolder'])
+            if not os.path.exists(r"%s\Kinematics_single\walking_speed" % self.plotting_path):
+                os.makedirs(r"%s\Kinematics_single\walking_speed" % self.plotting_path)
             filepath = PlottingUtils.remove_vowel("WalkingSpeedCounts_%s_speedcorr=%s_bodypart=%s_%s" %(conditions, speed_correct, bodypart, plot_type))
             plt.savefig(r"%s\Kinematics_single\walking_speed\%s.png" % (
-            paths['plotting_destfolder'], filepath), format='png')
+            self.plotting_path, filepath), format='png')
             plt.close(fig)
 
 
@@ -246,11 +247,11 @@ class PlotKinematics(GetData):
                 fig.subplots_adjust(bottom=0.05)
 
                 # check if the folder exists, if not create it
-                if not os.path.exists(r"%s\Kinematics_single\%s_height" % (paths['plotting_destfolder'], bodypart)):
-                    os.makedirs(r"%s\Kinematics_single\%s_height" % (paths['plotting_destfolder'], bodypart))
+                if not os.path.exists(r"%s\Kinematics_single\%s_height" % (self.plotting_path, bodypart)):
+                    os.makedirs(r"%s\Kinematics_single\%s_height" % (self.plotting_path, bodypart))
                 filepath = PlottingUtils.remove_vowel("%s_bodypart=%s_stepphase=%s_fullstride=%s_%s" %(con, bodypart, step_phase, full_stride, plot_type))
                 plt.savefig(
-                    r"%s\Kinematics_single\%s_height\%s.png" % (paths['plotting_destfolder'], bodypart, filepath),format='png')
+                    r"%s\Kinematics_single\%s_height\%s.png" % (self.plotting_path, bodypart, filepath),format='png')
                 plt.close(fig)
 
     def plot_byStride(self, measuredata, measure, params, plottype):
@@ -315,8 +316,8 @@ class PlotKinematics(GetData):
         fig.subplots_adjust(hspace=0.5)
 
         # check if the folder exists, if not create it
-        if not os.path.exists(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure)):
-            os.makedirs(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure))
+        if not os.path.exists(r"%s\Kinematics_single\%s" % (self.plotting_path, measure)):
+            os.makedirs(r"%s\Kinematics_single\%s" % (self.plotting_path, measure))
 
         conditions = str(self.conditions).replace('[', '').replace(']', '').replace('\'', '').replace(' ', '')
         conditions = conditions.replace(',', '-')
@@ -327,7 +328,7 @@ class PlotKinematics(GetData):
         filepath = filepath
 
         plt.savefig(
-            r"%s\Kinematics_single\%s\%s.png" % (paths['plotting_destfolder'], measure, filepath), format='png')
+            r"%s\Kinematics_single\%s\%s.png" % (self.plotting_path, measure, filepath), format='png')
         plt.close(fig)
 
     def plot_byRun(self, measuredata, measure, params, plottype):
@@ -393,12 +394,12 @@ class PlotKinematics(GetData):
         fig.subplots_adjust(hspace=0.5)
 
         # check if the folder exists, if not create it
-        if not os.path.exists(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure)):
-            os.makedirs(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure))
+        if not os.path.exists(r"%s\Kinematics_single\%s" % (self.plotting_path, measure)):
+            os.makedirs(r"%s\Kinematics_single\%s" % (self.plotting_path, measure))
         filepath = PlottingUtils.remove_vowel("%s_%s_%s_%s_byRun" %(measure, conditions, params, plottype))
         filepath = filepath.replace(':', '=')
         plt.savefig(
-            r"%s\Kinematics_single\%s\%s.png" % (paths['plotting_destfolder'], measure, filepath), format='png')
+            r"%s\Kinematics_single\%s\%s.png" % (self.plotting_path, measure, filepath), format='png')
         plt.close(fig)
 
     def plot_bySpeed(self, measuredata, measure, params, plottype):
@@ -472,24 +473,23 @@ class PlotKinematics(GetData):
                 fig.subplots_adjust(hspace=0.3)
 
             # check if the folder exists, if not create it
-            if not os.path.exists(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure)):
-                os.makedirs(r"%s\Kinematics_single\%s" % (paths['plotting_destfolder'], measure))
+            if not os.path.exists(r"%s\Kinematics_single\%s" % (self.plotting_path, measure)):
+                os.makedirs(r"%s\Kinematics_single\%s" % (self.plotting_path, measure))
             filepath = PlottingUtils.remove_vowel("%s_%s_%s_%s_bySpeed" %(measure, conditions, params, plottype))
             filepath = filepath.replace(':', '=')
             plt.savefig(
-                r"%s\Kinematics_single\%s\%s.png" % (paths['plotting_destfolder'], measure,filepath), format='png')
+                r"%s\Kinematics_single\%s\%s.png" % (self.plotting_path, measure,filepath), format='png')
             plt.close(fig)
         else:
             raise ValueError('The index of the speed data does not match the index of the measure data')
 
 
 
-def main():
+def main(conditions, directory):
     warnings.simplefilter(action='ignore', category=FutureWarning)
-    LowHigh_days_conditions = ['APAChar_LowHigh_Repeats_Wash_Day1', 'APAChar_LowHigh_Repeats_Wash_Day2',
-                               'APAChar_LowHigh_Repeats_Wash_Day3']
-    plotting = PlotKinematics(LowHigh_days_conditions)
-
+    # LowHigh_days_conditions = ['APAChar_LowHigh_Repeats_Wash_Day1', 'APAChar_LowHigh_Repeats_Wash_Day2',
+    #                            'APAChar_LowHigh_Repeats_Wash_Day3']
+    plotting = PlotKinematics(conditions, directory)
     # Run plots
     plotting.back_tail_height()
     plotting.walking_speed()
@@ -497,5 +497,10 @@ def main():
     plotting.param_measures(buffer=0.25)
 
 if __name__ == '__main__':
-    main()
+    dir_name = input('Enter the directory name where the plots are stored: ')
+    con_names = input('Enter the conditions to process separated by comma:\n e.g. APAChar_LowHigh_Repeats_Wash_Day1,'
+                      'APAChar_LowHigh_Repeats_Wash_Day2,APAChar_LowHigh_Repeats_Wash_Day3')
+    con_names_split = con_names.split(',')
+    conditions = con_names_split
+    main(conditions, dir_name)
     print("Finished saving plots!! Hope they look good (don't freak out if they don't though!) :)")

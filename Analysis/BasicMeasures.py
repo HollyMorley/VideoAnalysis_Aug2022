@@ -548,10 +548,14 @@ class CalculateMeasuresByRun():
         self.data_chunk = self.XYZw[con][mouseID].loc(axis=0)[r]
 
     def wait_time(self):
-        trial_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[0]
-        run_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[-1]
-        duration_idx = run_start_idx - trial_start_idx
-        return duration_idx/fps
+        indexes = self.data_chunk.index.get_level_values('RunStage').unique()
+        if 'TrialStart' in indexes:
+            trial_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[0]
+            run_start_idx = self.data_chunk.loc(axis=0)['TrialStart'].index[-1]
+            duration_idx = run_start_idx - trial_start_idx
+            return duration_idx/fps
+        else:
+            return 0
 
     def num_rbs(self, gap_thresh=30):
         if np.any(self.data_chunk.index.get_level_values(level='RunStage') == 'RunBack'):

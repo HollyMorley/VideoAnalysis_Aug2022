@@ -11,6 +11,7 @@ import seaborn as sns
 import itertools
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
+from functools import partial
 
 
 class GetData():
@@ -40,6 +41,9 @@ class GetData():
             data[con] = PlottingUtils.remove_prepruns(data, con)
         return data
 
+    def interpolate_columns(self, col, new_index, norm_idx):
+        return np.interp(new_index, norm_idx, col.values)
+
     def process_data(self, args):
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -56,12 +60,12 @@ class GetData():
             zeroed = data.loc(axis=0)[con, mouseID, r, s, :].index.get_level_values('FrameIdx') - start_idx
             norm_idx = zeroed / (end_idx - start_idx) * 100
             new_index = np.linspace(-25, 125, 100) if not swing_only else np.linspace(0, 100, 50)
-            new_vals = np.interp(new_index, norm_idx, data.loc(axis=0)[con, mouseID, r, s].values)
-            interp_ser = pd.Series(data=new_vals,
-                                   index=pd.MultiIndex.from_product([[con], [mouseID], [r], [s], new_index],
+            interpolate_partial = partial(self.interpolate_columns, new_index=new_index, norm_idx=norm_idx)
+            interpolated_data = data.loc(axis=0)[con, mouseID, r, s].apply(interpolate_partial, axis=0)
+            interpolated_data = interpolated_data.set_index(pd.MultiIndex.from_product([[con], [mouseID], [r], [s], new_index],
                                                                     names=['Condition', 'MouseID', 'Run', 'Stride',
                                                                            'RelTime']))
-            return interp_ser
+            return interpolated_data
         except:
             pass
 
@@ -75,30 +79,22 @@ class GetData():
 
         args_list = []
         for con in self.conditions:
-            print("\nInterpolating data for condition: %s\n" % con)
-            for mouseID in tqdm(data[con].index.get_level_values('MouseID').unique()):
-                for r in data[con].index.get_level_values('Run').unique():
-                    for s in data[con].index.get_level_values('Stride').unique():
+            for mouseID in data.loc(axis=0)[con].index.get_level_values('MouseID').unique():
+                for r in data.loc(axis=0)[con].index.get_level_values('Run').unique():
+                    for s in data.loc(axis=0)[con].index.get_level_values('Stride').unique():
                         try:
                             args_list.append((con, mouseID, r, s, data, swing_only, SwSt))
                         except:
                             pass
+        print("Interopolating data...")
         with Pool(processes=cpu_count()) as pool:
             results = list(
                 tqdm(pool.imap(self.process_data, args_list), total=len(args_list), desc="Processing", dynamic_ncols=True))
 
         filtered_series = [s for s in results if s is not None]
-        chunk_size = 100  # Adjust the chunk size as needed
-        chunks = [filtered_series[i:i + chunk_size] for i in range(0, len(filtered_series), chunk_size)]
-        with Pool(processes=cpu_count()) as pool:
-            concatenated_chunks = pool.map(self.concat_series, chunks)
-        big_df = pd.concat(concatenated_chunks)
+        big_series = pd.concat(filtered_series, axis=0, ignore_index=False)
+        return big_series
 
-        #big_df = pd.concat([item for sublist in results for item in sublist])
-        return big_df
-
-    def concat_series(self, series_list):
-        return pd.concat(series_list, axis=0, ignore_index=False)
 
 class PlotKinematics(GetData):
     def __init__(self, conditions):
@@ -114,54 +110,89 @@ class PlotKinematics(GetData):
     def calculate_and_plot_allmeasures(self, buffer):
         all_measures_list =  measures_list(buffer)
         for measure in all_measures_list["multi_val_measure_list"].keys():
+            print('##############################################################################################\n'
+                  'Plotting measure: %s\n'
+                  '##############################################################################################' % (measure))
             data = self.get_measure(measure)
             if measure != 'signed_angle':
-                for param in itertools.product(*all_measures_list['multi_val_measure_list'][measure].values()):
-                    param_names = list(all_measures_list['multi_val_measure_list'][measure].keys())
-                    formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
-                    if measure != 'instantaneous_swing_velocity':
+                if measure != 'instantaneous_swing_velocity':
+                    interp_data = self.get_interp_data(data, swing_only=False)
+                    for param in itertools.product(*all_measures_list['multi_val_measure_list'][measure].values()):
+                        param_names = list(all_measures_list['multi_val_measure_list'][measure].keys())
+                        formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
                         if f"buffer_size:{buffer}" in formatted_params:
-                            data_param = data[formatted_params]
-                            interp_data = self.get_interp_data(data_param)
-                            self.plot_byStride(interp_data, measure, formatted_params, plottype='SingleMouse_byStride_byPhase')
+                            data_param = interp_data[formatted_params]
+                            self.plot_byStride(data_param, measure, formatted_params, plottype='SingleMouse_byStride_byPhase')
                         else:
                             pass
                             ## there is no buffer, need a separate plotting function for this
+                else:
+                    interp_data = self.get_interp_data(data, swing_only=True)
+                    for param in itertools.product(*all_measures_list['multi_val_measure_list'][measure].values()):
+                        param_names = list(all_measures_list['multi_val_measure_list'][measure].keys())
+                        formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
+                        data_param = interp_data[formatted_params]
+                        self.plot_InstVel(data_param, formatted_params, plottype='byStride_byPhase')
             else:
+                interp_data = self.get_interp_data(data, swing_only=False)
+
                 for param in all_measures_list['multi_val_measure_list'][measure].keys():
                     param_details = all_measures_list['multi_val_measure_list'][measure][param]
-                    data_param = data[param]
-                    interp_data = self.get_interp_data(data_param)
+                    data_param = interp_data[param]
                     # if buffer is included
                     if param_details[-1] == buffer:
-                        self.plot_byStride(interp_data, param, plottype='SingleMouse_byStride_byPhase')
+                        self.plot_byStride(data_param, 'signed_angle', param, plottype='SingleMouse_byStride_byPhase')
                     # if buffer is not included
                     elif param_details[-1] == 0:
-                        self.plot_angles(interp_data, param, plottype='SingleMouse_byStride_byPhase')
-                        self.plot_angles(interp_data, param, plottype='byStride_byPhase')
+                        self.plot_angles(data_param, param, plottype='SingleMouse_byStride_byPhase')
+                        self.plot_angles(data_param, param, plottype='byStride_byPhase')
 
 
     #######################################################################################################################
     # Plotting Functions
     #######################################################################################################################
     def plot_InstVel(self, data, params, plottype):
-        #swing_data = self.filter_swing_data(data)
-        swing_data_interp = self.get_interp_data(data, swing_only=True)
-
         if plottype == 'byStride_byPhase':
+            cmap = PlottingUtils.set_colormap('ExpPhase')
+            colors = sns.color_palette(cmap, len(expstuff['condition_exp_runs']['APACharRuns']['Short']))
             for con in self.conditions:
                 fig, ax = plt.subplots(4, 1, figsize=(10, 5))
                 for pidx, phase in enumerate(expstuff['condition_exp_runs']['APACharRuns']['Short'].keys()):
                     for sidx, stride in enumerate([-3, -2, -1, 0]):
                         try:
                             phase_runs = expstuff['condition_exp_runs']['APACharRuns']['Short'][phase]
-                            mean = swing_data_interp.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).mean()
-                            sem = swing_data_interp.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).sem()
-                            ax[sidx].plot(mean.index, mean.values, label=phase)
-                            ax[sidx].fill_between(mean.index, mean.values - sem.values, mean.values + sem.values, alpha=0.3)
-                            ax[sidx].set_xlabel('% of swing')
+                            mean = data.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).mean()
+                            sem = data.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).sem()
+                            ax[sidx].plot(mean.index, mean.values, label=phase, color=colors[pidx])
+                            ax[sidx].fill_between(mean.index, mean.values - sem.values, mean.values + sem.values, alpha=0.3, color=colors[pidx])
+                            ax[sidx].set_xticks([])
+                            ax[sidx].spines['top'].set_visible(False)
+                            ax[sidx].spines['right'].set_visible(False)
+                            ax[sidx].set_title(f"Stride {stride}", y=0.98, x=0.9, fontsize=self.ls, fontstyle='italic')
                         except:
                             pass
+                ax[0].legend(loc='upper left', bbox_to_anchor=(1.01, 1.05), fontsize=self.ls)
+                ax[-1].set_xlabel('% of swing', fontsize=self.ls)
+                ax[-1].set_xticks([0, 25, 50, 75, 100])
+                ax[-1].set_xticklabels(['0', '25', '50', '75', '100'], fontsize=self.ts)
+                ax[1].set_ylabel('Instantaneous Swing Velocity (mm/s)', fontsize=self.ls, y=-0.25)
+
+                fig.subplots_adjust(hspace=0.5)
+                fig.subplots_adjust(left=0.1)
+                fig.subplots_adjust(right=0.8)
+
+                # check if the folder exists, if not create it
+                if not os.path.exists(r"%s\Kinematics_multi\instantaneous_velocity" % (paths['plotting_destfolder'])):
+                    os.makedirs(r"%s\Kinematics_multi\instantaneous_velocity" % (paths['plotting_destfolder']))
+                con_form = str(con).replace('[', '').replace(']', '').replace('\'', '').replace(' ', '')
+                con_form = con_form.replace(',', '-')
+                filepath = PlottingUtils.remove_vowel("%s_%s_%s" % (params, con_form, plottype))
+                filepath = filepath.replace(':', '=').replace(' ', '')
+
+                plt.savefig(
+                    r"%s\Kinematics_multi\instantaneous_velocity\%s.png" % (paths['plotting_destfolder'], filepath), format='png')
+                plt.close(fig)
+
 
     def plot_byStride(self, data, measure, params, plottype):
         ###### data here is the interpolated data
@@ -205,8 +236,10 @@ class PlotKinematics(GetData):
                 # check if the folder exists, if not create it
                 if not os.path.exists(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], measure)):
                     os.makedirs(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], measure))
-                filepath = PlottingUtils.remove_vowel("%s_%s_%s_%s_byRun" % (measure, con, params, plottype))
-                filepath = filepath.replace(':', '=')
+                con_form = str(con).replace('[', '').replace(']', '').replace('\'', '').replace(' ', '')
+                con_form = con_form.replace(',', '-')
+                filepath = PlottingUtils.remove_vowel("%s_%s_%s_%s_byRun" % (measure, con_form, params, plottype))
+                filepath = filepath.replace(':', '=').replace(' ', '')
                 plt.savefig(
                     r"%s\Kinematics_multi\%s\%s.png" % (paths['plotting_destfolder'], measure, filepath), format='png')
                 plt.close(fig)
@@ -214,27 +247,19 @@ class PlotKinematics(GetData):
         # if plottype == 'SingleMouse_byStride_byPhase_zscore':
 
 
-    #
-    def plot_angles(self, alldata, param, plottype):
-        ###########
-        # temp:
-        measures = measures_list(0.25)
-        param_titles = list(measures['multi_val_measure_list']['signed_angle'].keys())
-        param = param_titles[2]
-        data = alldata[param]
-        data_rad = np.radians(data)
-        # create a list of 4 seperate seaborn color palettes
+    def plot_angles(self, data, param, plottype):
         cmaps = ["YlOrRd", "YlGn", "PuBu", "PuRd"]
 
         if plottype == 'SingleMouse_byStride_byPhase':
             for con in self.conditions:
-                fig, ax = plt.subplots(4, 11, figsize=(30, 15), subplot_kw={'projection': 'polar'})
+                fig, ax = plt.subplots(4, 11, figsize=(35, 12), subplot_kw={'projection': 'polar'})
                 Mouse = []
                 for pidx, phase in enumerate(expstuff['condition_exp_runs']['APACharRuns']['Short'].keys()):
                     for sidx, stride in enumerate([-3, -2, -1, 0]):
-                        for midx, mouseID in enumerate(data_rad.index.get_level_values('MouseID').unique()):
+                        for midx, mouseID in enumerate(data.index.get_level_values('MouseID').unique()):
                             try:
                                 phase_runs = expstuff['condition_exp_runs']['APACharRuns']['Short'][phase]
+                                data_rad = np.radians(data)
                                 mean = data_rad.loc(axis=0)[con, mouseID, phase_runs, stride].groupby(['RelTime']).mean()
                                 times_normalised = mean.index
 
@@ -248,7 +273,7 @@ class PlotKinematics(GetData):
                                 lc.set_linewidth(2)
                                 ax[sidx, midx].add_collection(lc)
 
-                                ax[sidx, midx].set_theta_zero_location('N')  # Set 0 degrees to the top
+                                ax[sidx, midx].set_theta_zero_location('S')  # Set 0 degrees to the top
                                 ax[sidx, midx].set_theta_direction(-1)  # Set the direction to clockwise
 
                                 if sidx == 0:
@@ -274,7 +299,8 @@ class PlotKinematics(GetData):
                     ax[sidx, 0].yaxis.set_label_coords(-0.5, 0.5)
                 fig.text(0.008, 0.89, 'Stride', va='center', rotation='horizontal', fontsize=self.ls, fontstyle='italic')
 
-                fig.subplots_adjust(hspace=0.4)
+                fig.subplots_adjust(hspace=0.1)
+                fig.subplots_adjust(wspace=0.4)
                 fig.subplots_adjust(bottom=0.05)
                 fig.subplots_adjust(left=0.05)
                 fig.subplots_adjust(right=0.9)
@@ -282,7 +308,10 @@ class PlotKinematics(GetData):
                 # check if the folder exists, if not create it
                 if not os.path.exists(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], param)):
                     os.makedirs(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], param))
-                filepath = PlottingUtils.remove_vowel("SignedAngleSingleMice_%s_%s_%s" % (con, param, plottype))
+                con_form = str(con).replace('[', '').replace(']', '').replace('\'', '').replace(' ', '')
+                con_form = con_form.replace(',', '-')
+                filepath = PlottingUtils.remove_vowel("SignedAngleSingleMice_%s_%s_%s" % (con_form, param, plottype))
+                filepath = filepath.replace(':', '=').replace(' ', '')
                 plt.savefig(
                     r"%s\Kinematics_multi\signed_angle\%s.png" % (paths['plotting_destfolder'], filepath), format='png')
                 plt.close(fig)
@@ -295,6 +324,7 @@ class PlotKinematics(GetData):
                 for pidx, phase in enumerate(expstuff['condition_exp_runs']['APACharRuns']['Short'].keys()):
                     for sidx, stride in enumerate([-3, -2, -1, 0]):
                         phase_runs = expstuff['condition_exp_runs']['APACharRuns']['Short'][phase]
+                        data_rad = np.radians(data)
                         mean = data_rad.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).mean()
                         sem = data_rad.loc(axis=0)[con, :, phase_runs, stride].groupby(['RelTime']).sem()
                         times_normalised = mean.index
@@ -313,7 +343,7 @@ class PlotKinematics(GetData):
                         ax[sidx].fill_betweenx(times_normalised, mean.values - sem.values, mean.values + sem.values,
                                                alpha=0.3, color=shade_colors[pidx])
 
-                        ax[sidx].set_theta_zero_location('N')  # Set 0 degrees to the top
+                        ax[sidx].set_theta_zero_location('S')  # Set 0 degrees to the top
                         ax[sidx].set_theta_direction(-1)  # Set the direction to clockwise
 
                     cbar_ax = fig.add_axes(
@@ -332,21 +362,20 @@ class PlotKinematics(GetData):
                 # check if the folder exists, if not create it
                 if not os.path.exists(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], param)):
                     os.makedirs(r"%s\Kinematics_multi\%s" % (paths['plotting_destfolder'], param))
-                filepath = PlottingUtils.remove_vowel("SignedAngleMiceAverage_%s_%s_%s" % (con, param, plottype))
+                con_form = str(con).replace('[', '').replace(']', '').replace('\'', '').replace(' ', '')
+                con_form = con_form.replace(',', '-')
+                filepath = PlottingUtils.remove_vowel("SignedAngleMiceAverage_%s_%s_%s" % (con_form, param, plottype))
+                filepath = filepath.replace(':', '=').replace(' ', '')
                 plt.savefig(
                     r"%s\Kinematics_multi\signed_angle\%s.png" % (paths['plotting_destfolder'], filepath), format='png')
                 plt.close(fig)
-
-
 
 
 def main():
     LowHigh_days_conditions = ['APAChar_LowHigh_Repeats_Wash_Day1', 'APAChar_LowHigh_Repeats_Wash_Day2',
                                'APAChar_LowHigh_Repeats_Wash_Day3']
     plotting = PlotKinematics(LowHigh_days_conditions)
-    # for m in measure:
-    #     data = plotting.get_measure(m)
-    #     plotting.plot_trajectories(data)
+    plotting.calculate_and_plot_allmeasures(0.25)
 
 
 if __name__ == '__main__':

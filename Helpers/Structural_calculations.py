@@ -39,17 +39,24 @@ class GetRealDistances:
 
         # calculate mean of each coordinate across all runs
         for r in self.data[self.con][self.mouseID][view].index.get_level_values(level='Run').unique().astype(int):
+            index_levels = self.data[self.con][self.mouseID][view].loc(axis=0)[r].index.get_level_values('RunStage').unique()
+            if 'TrialStart' in index_levels:
+                phase = 'TrialStart'
+            else:
+                phase = 'RunStart'
+                if view == 'Front' and position == 'start': # because front and start is always processed first
+                    print('No TrialStart phase found for run %s, using RunStart instead' % r)
             # retrieve y axis data
             y_L.append(
-                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['%sL'%label_name, 'y']))
+                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, phase].loc(axis=1)['%sL'%label_name, 'y']))
             y_R.append(
-                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['%sR'%label_name, 'y']))
+                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, phase].loc(axis=1)['%sR'%label_name, 'y']))
 
             # retrieve x axis data
             x_L.append(
-                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['%sL'%label_name, 'x']))
+                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, phase].loc(axis=1)['%sL'%label_name, 'x']))
             x_R.append(
-                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['%sR'%label_name, 'x']))
+                np.mean(self.data[self.con][self.mouseID][view].loc(axis=0)[r, phase].loc(axis=1)['%sR'%label_name, 'x']))
 
         L_y_mean = np.mean(y_L)
         R_y_mean = np.mean(y_R)
@@ -79,8 +86,14 @@ class GetRealDistances:
         x_l = []
         y_r = []
         for r in self.data[self.con][self.mouseID]['Side'].index.get_level_values(level='Run').unique().astype(int):
-            x_l.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'x']))
-            y_r.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, 'TrialStart'].loc(axis=1)['Belt5', 'y']))
+            index_levels = self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r].index.get_level_values(
+                'RunStage').unique()
+            if 'TrialStart' in index_levels:
+                phase = 'TrialStart'
+            else:
+                phase = 'RunStart'
+            x_l.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, phase].loc(axis=1)['Belt5', 'x']))
+            y_r.append(np.mean(self.data[self.con][self.mouseID]['Side'].loc(axis=0)[r, phase].loc(axis=1)['Belt5', 'y']))
 
         # L side
         x_L = np.mean(x_l)

@@ -16,6 +16,14 @@ class Utils:
     def __init__(self):
         super().__init__()
 
+    def generate_path(self, *args, **kwargs):
+        path_parts = [str(arg) for arg in args if arg]
+        for key, value in kwargs.items():
+            if value:
+                path_parts.append(key)
+                path_parts.append(value)
+        return os.path.join(*path_parts)
+
     def GetDFs(self, conditions, reindexed_loco=False):
         '''
         :param conditions: list of experimental conditions want to plot/analyse eg 'APAChar_HighLow', 'APAChar_LowHigh_Day1', 'APAVMT_LowHighac'. NB make sure to include the day if for a condition which has repeats

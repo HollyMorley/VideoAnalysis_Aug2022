@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import sem
 from sklearn.metrics import mutual_info_score
-from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
-from feature_engine.encoding import RareLabelEncoder, OrdinalEncoder
+# from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+# from feature_engine.encoding import RareLabelEncoder, OrdinalEncoder
 
 
 class GetData():
@@ -32,8 +32,9 @@ class GetData():
         return all_data_points
 
 class PlotBehaviour(GetData):
-    def __init__(self, conditions):
+    def __init__(self, conditions, directory):
         super().__init__(conditions)
+        self.plotting_path = '\\'.join([paths['plotting_destfolder'], directory])
         # self.data = GetData.load_data(conditions)
 
     def wait_time_bar_line(self, plot_type, zoom=False, var='sem', cmap_name='Blues'):
@@ -60,9 +61,9 @@ class PlotBehaviour(GetData):
             ax.bar(vals.index, vals.values, label=vals.name, color=cmap(0.6))
             ax.errorbar(vals.index, vals.values, yerr=vars.values, fmt='none', ecolor='black', elinewidth=1, capsize=2)
             ax.set_ylabel('Wait time (s)', fontsize=14)
-            if not os.path.exists(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder'])):
-                os.makedirs(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder']))
-            plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (paths['plotting_destfolder'], self.conditions, plot_type), format='png')
+            if not os.path.exists(r"%s\Behaviour\Wait_times" % (self.plotting_path)):
+                os.makedirs(r"%s\Behaviour\Wait_times" % (self.plotting_path))
+            plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (self.plotting_path, self.conditions, plot_type), format='png')
             plt.close(fig)
 
         elif plot_type == 'all_mice_across_runs_across_days':
@@ -101,9 +102,9 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(right=0.89)
             fig.subplots_adjust(left=0.1)
 
-            if not os.path.exists(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder'])):
-                os.makedirs(r"%s\Behaviour\Wait_times" % (paths['plotting_destfolder']))
-            plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (paths['plotting_destfolder'], self.conditions, plot_type), format='png')
+            if not os.path.exists(r"%s\Behaviour\Wait_times" % (self.plotting_path)):
+                os.makedirs(r"%s\Behaviour\Wait_times" % (self.plotting_path))
+            plt.savefig(r"%s\Behaviour\Wait_times\WaitTime_%s_%s.png" % (self.plotting_path, self.conditions, plot_type), format='png')
             plt.close(fig)
 
 
@@ -147,9 +148,9 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.15)
             fig.subplots_adjust(right=0.7)
 
-            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
-                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
-            plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(paths['plotting_destfolder'], pref_type, self.conditions, plot_type), format='png')
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (self.plotting_path)):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (self.plotting_path))
+            plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(self.plotting_path, pref_type, self.conditions, plot_type), format='png')
             plt.close(fig)
 
         elif plot_type == 'all_mice_across_runs_singlecon':
@@ -180,9 +181,9 @@ class PlotBehaviour(GetData):
                 fig.subplots_adjust(wspace=0.2)
                 fig.suptitle(con, fontsize=16)
 
-                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
-                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
-                plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(paths['plotting_destfolder'], pref_type, con, plot_type), format='png')
+                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (self.plotting_path)):
+                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (self.plotting_path))
+                plt.savefig(r"%s\Behaviour\Paw_preferences\PawPref_%s_%s_%s.png"%(self.plotting_path, pref_type, con, plot_type), format='png')
                 plt.close(fig)
 
     def paw_matching(self, plot_type):
@@ -214,9 +215,9 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.15)
             fig.subplots_adjust(right=0.7)
 
-            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
-                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
-            plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(paths['plotting_destfolder'], self.conditions, plot_type), format='png')
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (self.plotting_path)):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (self.plotting_path))
+            plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(self.plotting_path, self.conditions, plot_type), format='png')
             plt.close(fig)
 
         if plot_type == 'all_mice_across_runs_singlecon':
@@ -247,9 +248,9 @@ class PlotBehaviour(GetData):
                 fig.subplots_adjust(wspace=0.2)
                 fig.suptitle(con, fontsize=16)
 
-                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
-                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
-                plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(paths['plotting_destfolder'], con, plot_type), format='png')
+                if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (self.plotting_path)):
+                    os.makedirs(r"%s\Behaviour\Paw_preferences" % (self.plotting_path))
+                plt.savefig(r"%s\Behaviour\Paw_preferences\PawMatching_%s_%s.png"%(self.plotting_path, con, plot_type), format='png')
                 plt.close(fig)
 
     def paw_pref_mutual_info(self):
@@ -281,16 +282,16 @@ class PlotBehaviour(GetData):
             fig.subplots_adjust(left=0.17)
             fig.subplots_adjust(bottom=0.15)
 
-            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder'])):
-                os.makedirs(r"%s\Behaviour\Paw_preferences" % (paths['plotting_destfolder']))
+            if not os.path.exists(r"%s\Behaviour\Paw_preferences" % (self.plotting_path)):
+                os.makedirs(r"%s\Behaviour\Paw_preferences" % (self.plotting_path))
             plt.savefig(
-                r"%s\Behaviour\Paw_preferences\SteppingPawMutualInfo_%s.png" % (paths['plotting_destfolder'], con),
+                r"%s\Behaviour\Paw_preferences\SteppingPawMutualInfo_%s.png" % (self.plotting_path, con),
                 format='png')
             plt.close(fig)
 
-def main():
-    LowHigh_days_conditions = ['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3']
-    plotting = PlotBehaviour(LowHigh_days_conditions)
+def main(conditions, directory):
+    # conditions = ['APAChar_LowHigh_Repeats_Wash_Day1','APAChar_LowHigh_Repeats_Wash_Day2','APAChar_LowHigh_Repeats_Wash_Day3']
+    plotting = PlotBehaviour(conditions, directory)
     for time in ['start','trans']:
         for type in ['mice_across_days', 'all_mice_across_runs_singlecon']:
             plotting.paw_pref(type, time)
@@ -301,5 +302,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    dir_name = input('Enter the directory name where the plots are stored: ')
+    con_names = input('Enter the conditions to process separated by comma:\n e.g. APAChar_LowHigh_Repeats_Wash_Day1,'
+                      'APAChar_LowHigh_Repeats_Wash_Day2,APAChar_LowHigh_Repeats_Wash_Day3')
+    con_names_split = con_names.split(',')
+    conditions = con_names_split
+    main(conditions, dir_name)
     print("Finished saving plots!! Hope they look good (don't freak out if they don't though!) :)")

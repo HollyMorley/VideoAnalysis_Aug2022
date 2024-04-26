@@ -518,7 +518,8 @@ class Utils:
             b = blocks[i, 1] - blocks[i, 0] < block_min_size
             block_under_thresh.append(b)
 
-        blocks = blocks[~np.array(block_under_thresh)]
+        if np.any(blocks):
+            blocks = blocks[~np.array(block_under_thresh)]
 
         return blocks
 

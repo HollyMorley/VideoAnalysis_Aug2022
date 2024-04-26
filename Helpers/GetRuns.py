@@ -79,7 +79,7 @@ class GetRuns:
             print('The following files have been trimmed and are now %s runs long:\n%s\n%s\n%s' %(len(dfs['side'].index.get_level_values(level='Run').unique()), files['Side'], files['Front'], files['Overhead']))
 
 
-    def Main(self, destfolder=(), files=None, directory=None, pcutoff=pcutoff):
+    def MainRunning(self, destfolder=(), files=None, directory=None, pcutoff=pcutoff):
         # if inputting file paths, make sure to put in [] even if just one
         # to get file names here, just input either files = [''] or directory = '' into function
         # destfolder should be raw format
@@ -746,9 +746,13 @@ class GetRuns:
         DataframeCoor_overhead.loc(axis=1)['RunStage'] = RunStage
 
         for rsidx, rs in enumerate(expstuff['exp_chunks']['RunStages']):
-            DataframeCoor_side.at[runstages[rs].index, 'RunStage'] = rs
-            DataframeCoor_front.at[runstages[rs].index, 'RunStage'] = rs
-            DataframeCoor_overhead.at[runstages[rs].index, 'RunStage'] = rs
+            DataframeCoor_side.loc(axis=0)[runstages[rs].index].loc(axis=1)['RunStage'] = rs
+            DataframeCoor_front.loc(axis=0)[runstages[rs].index].loc(axis=1)['RunStage'] = rs
+            DataframeCoor_overhead.loc(axis=0)[runstages[rs].index].loc(axis=1)['RunStage'] = rs
+
+            # DataframeCoor_side.at[runstages[rs].index, 'RunStage'] = rs
+            # DataframeCoor_front.at[runstages[rs].index, 'RunStage'] = rs
+            # DataframeCoor_overhead.at[runstages[rs].index, 'RunStage'] = rs
 
         DataframeCoor_side.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
         DataframeCoor_front.set_index(['Run', 'FrameIdx'], append=False, inplace=True)
@@ -1067,3 +1071,12 @@ class GetRuns:
             }
 
         return results
+
+def Main(destfolder, directory):
+    Run = GetRuns()
+    Run.MainRunning(destfolder=destfolder, directory=directory)
+
+if __name__ == '__main__':
+    destfolder = 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round2_Jan23\\APAChar_LowMid\\Extended\\Day1'
+    directory = 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_AnalysedFiles\\20230320'
+    Main(destfolder, directory)

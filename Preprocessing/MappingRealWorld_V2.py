@@ -2,16 +2,13 @@ from Helpers.utils_3d_reconstruction import CameraData, BeltPoints
 from Helpers import utils
 from Helpers.Config_23 import *
 
-import os, cv2, warnings
+import os, cv2
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib import colormaps
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from pycalib.calib import lookat, triangulate, triangulate_Npts
-
-
 
 
 class MapExperiment:
@@ -21,7 +18,6 @@ class MapExperiment:
         self.DataframeCoor_overhead = DataframeCoor_overhead
 
         self.cameras = CameraData(snapshot_paths)
-
         self.cameras_specs = self.cameras.specs
         self.cameras_intrinsics = self.cameras.intrinsic_matrices
 
@@ -30,16 +26,14 @@ class MapExperiment:
         self.belt_coords_WCS = self.belt_pts.coords_WCS
 
     def plot_CamCoorSys(self):
-        fig, ax = self.belt_pts.plot_CCS(self.cameras)
-        return fig, ax
+        return self.belt_pts.plot_CCS(self.cameras)
 
     def plot_WorldCoorSys(self):
-        fig, ax = self.belt_pts.plot_WCS()
-        return fig, ax
+        return self.belt_pts.plot_WCS()
 
     def estimate_pose(self):
         cameras_extrinsics = self.cameras.compute_cameras_extrinsics(self.belt_coords_WCS, self.belt_coords_CCS)
-        print('Reprojection errors:\n%s' %[(cam, cameras_extrinsics[cam]['repr_err']) for cam in cameras_extrinsics])
+        self.print_reprojection_errors(cameras_extrinsics)
         return cameras_extrinsics
 
     def estimate_pose_with_guess(self):
@@ -48,91 +42,38 @@ class MapExperiment:
             self.belt_coords_CCS,
             use_extrinsics_ini_guess=True
         )
-        print('Reprojection errors (w/ initial guess):\n%s' %[(cam, cameras_extrinsics_ini_guess[cam]['repr_err'])
-                                                              for cam in cameras_extrinsics_ini_guess])
+        self.print_reprojection_errors(cameras_extrinsics_ini_guess, with_guess=True)
         return cameras_extrinsics_ini_guess
+
+    def print_reprojection_errors(self, cameras_extrinsics, with_guess=False):
+        if with_guess:
+            print('Reprojection errors (w/ initial guess):')
+        else:
+            print('Reprojection errors:')
+        for cam, data in cameras_extrinsics.items():
+            print(f'{cam}: {data["repr_err"]}')
 
     def plot_cam_locations_and_pose(self, cameras_extrinsics):
         fig, ax = self.belt_pts.plot_WCS()
-
         for cam in self.cameras.specs:
-
-            rot_cam_my_def = cameras_extrinsics[cam]['rotm'].T
-
-            rot_cam_opencv = cameras_extrinsics[cam]['rotm']
-            cob_cam_opencv = cameras_extrinsics[cam]['rotm'].T  # cob=change of basis
-
-            vec_WCS_to_CCS = - cob_cam_opencv @ cameras_extrinsics[cam]['tvec']
-
-            # add scatter
-            ax.scatter(
-                vec_WCS_to_CCS[0],
-                vec_WCS_to_CCS[1],
-                vec_WCS_to_CCS[2],
-                s=50,
-                c="b",
-                marker=".",
-                linewidth=0.5,
-                alpha=1,
-            )
-
-            # add text
-            ax.text(
-                vec_WCS_to_CCS[0, 0],
-                vec_WCS_to_CCS[1, 0],
-                vec_WCS_to_CCS[2, 0],
-                s=cam,
-                c="b",
-            )
-
-            # add pose
-            for row, color in zip(rot_cam_opencv, ["r", "g", "b"]):
-                ax.quiver(
-                    vec_WCS_to_CCS[0],
-                    vec_WCS_to_CCS[1],
-                    vec_WCS_to_CCS[2],
-                    row[0],
-                    row[1],
-                    row[2],
-                    color=color,
-                    length=500,
-                    arrow_length_ratio=0,
-                    normalize=True,
-                    linewidth=2,
-                )
-                ax.axis("equal")
+            vec_WCS_to_CCS, rot_cam_opencv = self.get_camera_vectors(cameras_extrinsics, cam)
+            self.add_camera_pose(ax, cam, vec_WCS_to_CCS, rot_cam_opencv)
         return fig, ax
 
+    def get_camera_vectors(self, cameras_extrinsics, cam):
+        cob_cam_opencv = cameras_extrinsics[cam]['rotm'].T
+        vec_WCS_to_CCS = -cob_cam_opencv @ cameras_extrinsics[cam]['tvec']
+        return vec_WCS_to_CCS, cameras_extrinsics[cam]['rotm']
 
-    def triangulate_bp(self, points_2d, camera_models):
-        points_3d = camera_models.find3d(points_2d)
-        return points_3d
-
-        # ############################################################################
-        # ################################# OLD CODE #################################
-        # ############################################################################
-        # pts1 = np.array(pts1, dtype=np.float32)
-        # pts2 = np.array(pts2, dtype=np.float32)
-        #
-        # # Get extrinsic parameters
-        # rvec1 = cameras_extrinsics[camera_name1]['rvec']
-        # tvec1 = cameras_extrinsics[camera_name1]['tvec']
-        # rvec2 = cameras_extrinsics[camera_name2]['rvec']
-        # tvec2 = cameras_extrinsics[camera_name2]['tvec']
-        #
-        # # Get intrinsic parameters
-        # camera_matrix1 = self.cameras_intrinsics[camera_name1]
-        # camera_matrix2 = self.cameras_intrinsics[camera_name2]
-        #
-        # # Perform triangulation
-        # points_3d_homogeneous = cv2.triangulatePoints(
-        #     np.hstack((cv2.Rodrigues(rvec1)[0], tvec1)), np.hstack((cv2.Rodrigues(rvec2)[0], tvec2)),
-        #     pts1, pts2
-        # )
-        # points_3d = points_3d_homogeneous / points_3d_homogeneous[3]
-        # points_3d_euclidean = points_3d[:3] / points_3d[3]
-        # return points_3d_euclidean
-
+    def add_camera_pose(self, ax, cam, vec_WCS_to_CCS, rot_cam_opencv):
+        ax.scatter(*vec_WCS_to_CCS, s=50, c="b", marker=".", linewidth=0.5, alpha=1)
+        ax.text(*vec_WCS_to_CCS.flatten(), s=cam, c="b")
+        for row, color in zip(rot_cam_opencv, ["r", "g", "b"]):
+            ax.quiver(
+                *vec_WCS_to_CCS.flatten(), *row, color=color,
+                length=500, arrow_length_ratio=0, normalize=True, linewidth=2
+            )
+        ax.axis("equal")
 
 
 class GetSingleExpData:
@@ -154,6 +95,33 @@ class GetSingleExpData:
         DataframeCoor_overhead = pd.read_hdf(self.overhead_file)
         self.DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[vidstuff['scorers']['overhead']].copy()
 
+    def get_realworld_coords(self, cameras_extrinsics, cameras_intrinsics):
+        # Initial setup and data preparation
+        labels, side_coords, front_coords, overhead_coords = self.prepare_data()
+
+        # Get camera parameters
+        K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(cameras_extrinsics, cameras_intrinsics)
+
+        # Set up dataframes for results
+        real_world_coords_allparts, repr_error_allparts, repr_allparts = self.setup_dataframes(labels)
+
+        # Step 5: Process each body part
+        for bidx, body_part in enumerate(labels['all']):
+            print(f"Triangulating {body_part}...")
+            self.process_body_part(
+                bidx, body_part,
+                side_coords, front_coords, overhead_coords,
+                cameras_extrinsics, cameras_intrinsics,
+                P_gt, Nc, real_world_coords_allparts,
+                repr_error_allparts, repr_allparts
+            )
+        print('done')
+        return real_world_coords_allparts, repr_error_allparts
+
+    def prepare_data(self):
+        labels = self.find_common_bodyparts()
+        side_coords, front_coords, overhead_coords = self.get_common_camera_arrays(labels)
+        return labels, side_coords, front_coords, overhead_coords
 
     def find_common_bodyparts(self):
         # for each camera pair, find the common body parts
@@ -269,6 +237,29 @@ class GetSingleExpData:
 
         return K, R_gt, t_gt, P_gt, Nc
 
+    def setup_dataframes(self, labels):
+        multi_column = pd.MultiIndex.from_product([labels['all'], ['x', 'y', 'z']])
+        real_world_coords_allparts = pd.DataFrame(columns=multi_column)
+        multi_column_err = pd.MultiIndex.from_product([labels['all'], ['side', 'front', 'overhead'], ['x', 'y']])
+        repr_error_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err) #todo remove hardcoding
+        repr_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err) #todo remove hardcoding
+        return real_world_coords_allparts, repr_error_allparts, repr_allparts
+
+    def process_body_part(self, bidx, body_part, side_coords, front_coords, overhead_coords, cameras_extrinsics,
+                          cameras_intrinsics, P_gt, Nc, real_world_coords_allparts, repr_error_allparts, repr_allparts):
+        coords_2d_all, likelihoods = self.get_coords_and_likelihoods(bidx, side_coords, front_coords, overhead_coords)
+
+        coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = self.find_empty_cameras(coords_2d_all, likelihoods,
+                                                                                        P_gt, Nc)
+
+        real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err = self.triangulate_points(
+            coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics, cameras_intrinsics, coords_2d_all)
+
+        self.store_results(
+            body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err,
+            real_world_coords_allparts, repr_error_allparts, repr_allparts
+        )
+
     def find_empty_cameras(self, coords_2d, likelihoods, P_gt, Nc):
         empty_cameras = np.where(np.all(np.all(np.isnan(coords_2d), axis=2), axis=1))
         if len(empty_cameras) > 0:
@@ -281,155 +272,123 @@ class GetSingleExpData:
             P_gt_bp = P_gt
         return coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras
 
-    def triangulate(self, coords_2d, point_idx, Nc_bp, P_gt_bp):
-        # Gather points from each camera for the current point index
-        points_from_all_cameras = [coords_2d[camera_idx, point_idx, :] for camera_idx in range(Nc_bp)]
-        # Reshape to meet the input requirement of the triangulate function
-        x_2d = np.array(points_from_all_cameras)
-        # Assuming triangulate function accepts x_2d of shape (Nc, 2) and returns (x, y, z) coordinates
-        w = triangulate(x_2d, P_gt_bp)  # Make sure P_gt and triangulate function are prepared to handle this
-        return w
+    def get_coords_and_likelihoods(self, bidx, side_coords, front_coords, overhead_coords):
+        coords_2d_all = np.array([side_coords[:, bidx, :2], front_coords[:, bidx, :2], overhead_coords[:, bidx, :2]])
+        likelihoods = np.array([side_coords[:, bidx, 2], front_coords[:, bidx, 2], overhead_coords[:, bidx, 2]])
 
-    def get_realworld_coords(self, mapping_obj, cameras_extrinsics, cameras_intrinsics):
-        # get 3 numpy arrays where labels are in the same order for all 3 camera views
-        labels = self.find_common_bodyparts()
-        side_coords, front_coords, overhead_coords = self.get_common_camera_arrays(labels)  # shape (num_rows, num_labels, 3)
+        coords_2d_all = coords_2d_all[:, 7170:7900, :]  #todo remove hardcoding
+        likelihoods = likelihoods[:, 7170:7900] #todo remove hardcoding
 
-        # for all 4 paws, insert the toe x coordinate from the front view for the respective ankle
-        for paw in ['Forepaw', 'Hindpaw']:
-            for hand in ['L','R']:
-                front_coords[:, labels['all'].index(f'{paw}Ankle{hand}'), 0] = front_coords[:, labels['all'].index(f'{paw}Toe{hand}'), 0]
+        return coords_2d_all, likelihoods
 
+    def triangulate_points(self, coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics, cameras_intrinsics,
+                           coords_2d_all):
+        real_world_coords = []
+        side_err = []
+        front_err = []
+        overhead_err = []
+        side_repr = []
+        front_repr = []
+        overhead_repr = []
 
-        K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(cameras_extrinsics, cameras_intrinsics)
-
-        # set up new dataframe to store the real world coordinates
-        multi_column = pd.MultiIndex.from_product([labels['all'], ['x', 'y', 'z']])
-        real_world_coords_allparts = pd.DataFrame(columns=multi_column)
-        multi_column_err = pd.MultiIndex.from_product([labels['all'], ['side', 'front', 'overhead'], ['x', 'y']])
-        repr_error_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err)
-        repr_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err)
-
-        # Loop over each body part to triangulate
-        for bidx, body_part in enumerate(labels['all']):
-            print(f"Triangulating {body_part}...")
-            coords_2d_all = np.array([side_coords[:,bidx,:2], front_coords[:,bidx,:2], overhead_coords[:,bidx,:2]])
-            likelihoods = np.array([side_coords[:,bidx,2], front_coords[:,bidx,2], overhead_coords[:,bidx,2]])
-
-            #todo################################## TEMPORARY ########################################
-            coords_2d_all = coords_2d_all[:,7170:7900,:]  # temporary to reduce the number of points to triangulate
-            likelihoods = likelihoods[:,7170:7900]
-            #-----------------------------------------------------------------------------------------
-
-
-
-            # check if any of the cameras are empty/nans and remove this camera
-            coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = self.find_empty_cameras(coords_2d_all, likelihoods, P_gt, Nc)
-
-            real_world_coords = []
-            side_err = []
-            front_err = []
-            overhead_err = []
-            side_repr = []
-            front_repr = []
-            overhead_repr = []
-
-            Np = len(coords_2d[0])
-            # Loop over each point across all cameras
-            for point_idx in range(Np):
-                if Nc_bp < 3:
-                    # where there are just 2 cameras with available data, if both have greater than pcutoff likelihood, triangulate
-                    conf = np.all(likelihoods[:,point_idx] > pcutoff)
-                    if conf:
-                        wcs = self.triangulate(coords_2d, point_idx, Nc_bp, P_gt_bp)
-                        real_world_coords.append(wcs)
-                    else:
-                        wcs = np.array([np.nan, np.nan, np.nan, np.nan])
-                        real_world_coords.append(wcs)
-                elif Nc_bp == 3:
-                    conf = np.where(likelihoods[:,point_idx] > pcutoff)[0]
-                    if len(conf) <= 1:
-                        wcs = np.array([np.nan, np.nan, np.nan, np.nan])
-                        real_world_coords.append(wcs)
-                    elif len(conf) == 2:
-                        wcs = self.triangulate(coords_2d[conf], point_idx, 2, P_gt_bp[conf])
-                        real_world_coords.append(wcs)
-                    elif len(conf) == 3:
-                        wcs = self.triangulate(coords_2d, point_idx, Nc_bp, P_gt_bp)
-                        real_world_coords.append(wcs)
-
-                if np.all(wcs != np.nan):
-                    for c, cam in enumerate(['side', 'front', 'overhead']):
-                        CCS_repr, _ = cv2.projectPoints(
-                            wcs[:3],
-                            cv2.Rodrigues(cameras_extrinsics[cam]['rotm'])[0],
-                            cameras_extrinsics[cam]['tvec'],
-                            cameras_intrinsics[cam],
-                            np.array([]),
-                        )
-                        if np.all(np.isnan(coords_2d_all[c, point_idx])):
-                            repr_error = np.array([[np.nan,np.nan]])
-                            repr = np.array([[np.nan,np.nan]])
-                        else:
-                            repr_error = np.linalg.norm(CCS_repr - coords_2d_all[c, point_idx], axis=1)
-                            repr = CCS_repr
-                        #err[cam].append(repr_error)
-                        if cam == 'side':
-                            side_err.append(repr_error)
-                            side_repr.append(repr)
-                        elif cam == 'front':
-                            front_err.append(repr_error)
-                            front_repr.append(repr)
-                        elif cam == 'overhead':
-                            overhead_err.append(repr_error)
-                            overhead_repr.append(repr)
-
-            # Convert list of 3D points to a numpy array for easier handling
-            real_world_coords = np.array(real_world_coords).T  # Possibly transpose depending on how triangulate outputs data
-
-            side_repr_arr = np.array(side_repr).T
-            front_repr_arr = np.array(front_repr).T
-            overhead_repr_arr = np.array(overhead_repr).T
-
-            side_err_arr = np.array(side_err).T
-            front_err_arr = np.array(front_err).T
-            overhead_err_arr = np.array(overhead_err).T
-
-            # Normalize if Y is in homogeneous coordinates (if Y has 4 rows)
-            if real_world_coords.shape[0] == 4:
-                real_world_coords = real_world_coords[:3, :] / real_world_coords[3, :]
-            real_world_coords = real_world_coords.T  # Ensure shape is compatible for comparison
-
-            if len(real_world_coords.shape) == 1:
-                # fill the column with nans if all the values are nans
-                real_world_coords_allparts[body_part, 'x'] = np.nan
-                real_world_coords_allparts[body_part, 'y'] = np.nan
-                real_world_coords_allparts[body_part, 'z'] = np.nan
+        Np = len(coords_2d[0])
+        for point_idx in range(Np):
+            if Nc_bp < 3:
+                # where there are just 2 cameras with available data, if both have greater than pcutoff likelihood, triangulate
+                conf = np.all(likelihoods[:, point_idx] > pcutoff)
+                wcs = self.triangulate(coords_2d, point_idx, Nc_bp, P_gt_bp) if conf else np.array(
+                    [np.nan, np.nan, np.nan, np.nan])
             else:
-                real_world_coords_allparts[body_part, 'x'] = real_world_coords[:,0]
-                real_world_coords_allparts[body_part, 'y'] = real_world_coords[:,1]
-                real_world_coords_allparts[body_part, 'z'] = real_world_coords[:,2]
+                conf = np.where(likelihoods[:, point_idx] > pcutoff)[0]
+                wcs = self.handle_three_cameras(conf, coords_2d, point_idx, Nc_bp, P_gt_bp)
 
-            repr_allparts[body_part, 'side', 'x'] = np.squeeze(side_repr_arr[0,:])
-            repr_allparts[body_part, 'side', 'y'] = np.squeeze(side_repr_arr[1,:])
-            repr_allparts[body_part, 'front', 'x'] = np.squeeze(front_repr_arr[0,:])
-            repr_allparts[body_part, 'front', 'y'] = np.squeeze(front_repr_arr[1,:])
-            repr_allparts[body_part, 'overhead', 'x'] = np.squeeze(overhead_repr_arr[0,:])
-            repr_allparts[body_part, 'overhead', 'y'] = np.squeeze(overhead_repr_arr[1,:])
+            real_world_coords.append(wcs)
+            self.project_back_to_cameras(wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
+                                    front_err, overhead_err, side_repr, front_repr, overhead_repr)
 
-            repr_error_allparts[body_part, 'side', 'x'] = side_err_arr[0,:][0]
-            repr_error_allparts[body_part, 'side', 'y'] = side_err_arr[1,:][0]
-            repr_error_allparts[body_part, 'front', 'x'] = front_err_arr[0,:][0]
-            repr_error_allparts[body_part, 'front', 'y'] = front_err_arr[1,:][0]
-            repr_error_allparts[body_part, 'overhead', 'x'] = overhead_err_arr[0,:][0]
-            repr_error_allparts[body_part, 'overhead', 'y'] = overhead_err_arr[1,:][0]
+        return self.finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+                                    overhead_err)
+
+    def handle_three_cameras(self, conf, coords_2d, point_idx, Nc_bp, P_gt_bp):
+        if len(conf) <= 1:
+            return np.array([np.nan, np.nan, np.nan, np.nan])
+        elif len(conf) == 2:
+            return self.triangulate(coords_2d[conf], point_idx, 2, P_gt_bp[conf])
+        else:
+            return self.triangulate(coords_2d, point_idx, Nc_bp, P_gt_bp)
+
+    def project_back_to_cameras(self, wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
+                           front_err, overhead_err, side_repr, front_repr, overhead_repr):
+        if np.all(wcs != np.nan):
+            for c, cam in enumerate(['side', 'front', 'overhead']):
+                CCS_repr, _ = cv2.projectPoints(
+                    wcs[:3],
+                    cv2.Rodrigues(cameras_extrinsics[cam]['rotm'])[0],
+                    cameras_extrinsics[cam]['tvec'],
+                    cameras_intrinsics[cam],
+                    np.array([]),
+                )
+                repr_error = np.array([[np.nan, np.nan]]) if np.all(
+                    np.isnan(coords_2d_all[c, point_idx])) else np.linalg.norm(CCS_repr - coords_2d_all[c, point_idx],
+                                                                               axis=1)
+                repr = np.array([[np.nan, np.nan]]) if np.all(np.isnan(coords_2d_all[c, point_idx])) else CCS_repr
+
+                if cam == 'side':
+                    side_err.append(repr_error)
+                    side_repr.append(repr)
+                elif cam == 'front':
+                    front_err.append(repr_error)
+                    front_repr.append(repr)
+                elif cam == 'overhead':
+                    overhead_err.append(repr_error)
+                    overhead_repr.append(repr)
+
+    def finalize_coords(self, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+                        overhead_err):
+        real_world_coords = np.array(real_world_coords).T
+        side_repr_arr = np.array(side_repr).T
+        front_repr_arr = np.array(front_repr).T
+        overhead_repr_arr = np.array(overhead_repr).T
+        side_err_arr = np.array(side_err).T
+        front_err_arr = np.array(front_err).T
+        overhead_err_arr = np.array(overhead_err).T
+
+        if real_world_coords.shape[0] == 4:
+            real_world_coords = real_world_coords[:3, :] / real_world_coords[3, :]
+        real_world_coords = real_world_coords.T
+
+        return real_world_coords, side_repr_arr, front_repr_arr, overhead_repr_arr, side_err_arr, front_err_arr, overhead_err_arr
+
+    def store_results(self, body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+                      overhead_err, real_world_coords_allparts, repr_error_allparts, repr_allparts):
+        if len(real_world_coords.shape) == 1:
+            real_world_coords_allparts[body_part, 'x'] = np.nan
+            real_world_coords_allparts[body_part, 'y'] = np.nan
+            real_world_coords_allparts[body_part, 'z'] = np.nan
+        else:
+            real_world_coords_allparts[body_part, 'x'] = real_world_coords[:, 0]
+            real_world_coords_allparts[body_part, 'y'] = real_world_coords[:, 1]
+            real_world_coords_allparts[body_part, 'z'] = real_world_coords[:, 2]
+
+        repr_allparts[body_part, 'side', 'x'] = np.squeeze(side_repr[0, :])
+        repr_allparts[body_part, 'side', 'y'] = np.squeeze(side_repr[1, :])
+        repr_allparts[body_part, 'front', 'x'] = np.squeeze(front_repr[0, :])
+        repr_allparts[body_part, 'front', 'y'] = np.squeeze(front_repr[1, :])
+        repr_allparts[body_part, 'overhead', 'x'] = np.squeeze(overhead_repr[0, :])
+        repr_allparts[body_part, 'overhead', 'y'] = np.squeeze(overhead_repr[1, :])
+
+        repr_error_allparts[body_part, 'side', 'x'] = side_err[0, :][0]
+        repr_error_allparts[body_part, 'side', 'y'] = side_err[1, :][0]
+        repr_error_allparts[body_part, 'front', 'x'] = front_err[0, :][0]
+        repr_error_allparts[body_part, 'front', 'y'] = front_err[1, :][0]
+        repr_error_allparts[body_part, 'overhead', 'x'] = overhead_err[0, :][0]
+        repr_error_allparts[body_part, 'overhead', 'y'] = overhead_err[1, :][0]
+
+    ########################################################################################################################
 
 
 
 
-            # clear items to free up memory
-            del coords_2d, P_gt_bp, Nc_bp, empty_cameras, real_world_coords, conf
-        return real_world_coords_allparts, repr_error_allparts
 
     def plot_3d_mouse(self, real_world_coords_allparts, labels, frame):
         skeleton = [
@@ -557,7 +516,7 @@ class GetSingleExpData:
         wcs_fig, wcs_ax = mapping_obj.plot_WorldCoorSys()
         loc_and_pose_fig, lp_ax = mapping_obj.plot_cam_locations_and_pose(cameras_extrinsics)
 
-        triang = self.get_realworld_coords(mapping_obj, cameras_extrinsics, cameras_intrinsics)
+        triang = self.get_realworld_coords(cameras_extrinsics, cameras_intrinsics)
 
         # Save the plots
         path = '\\'.join(self.side_file.split("\\")[:-1])

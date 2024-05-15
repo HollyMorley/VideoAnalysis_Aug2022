@@ -98,20 +98,20 @@ class CameraData:
         box_length = 470  # mm
         box_width = 52  # mm
         box_height = 70  # mm
-        cam2panel_distance = 1000  # mm; estimated distance between a CCS origin and the closest plane in the captured volume.
+        #cam2panel_distance = 1000  # mm; estimated distance between a CCS origin and the closest plane in the captured volume.
 
         # Initial guess for the translation vector (tvec) from each camera
         # tvec: is expressed in CCS; from the origin of the CCS to the origin of the WCS.
         # I assume each camera centre is ~1m from the centre of the captured volume's closest plane.
         tvec_guess = dict()
         tvec_guess["side"] = np.array(
-            [-box_length / 2, box_height / 2, cam2panel_distance]
+            [-box_length / 2, box_height / 2, 1050]#cam2panel_distance]
         ).reshape(-1, 1)
         tvec_guess["front"] = np.array(
-            [-box_width / 2, box_height / 2, box_length + cam2panel_distance]
+            [-box_width / 2, box_height / 2, box_length + 760] #cam2panel_distance]
         ).reshape(-1, 1)
         tvec_guess["overhead"] = np.array(
-            [-box_length / 2, box_width / 2, box_height + cam2panel_distance]
+            [-box_length / 2, box_width / 2, box_height + 1330]#cam2panel_distance]
         ).reshape(-1, 1)
 
         # Initial guess for the rotation matrix

@@ -11,12 +11,13 @@ class CameraData:
     TODO: probably a class per camera makes more sense.
     """
 
-    def __init__(self, snapshot_paths):
+    def __init__(self, snapshot_paths=[]):
         self.view_paths = snapshot_paths
         self.specs = self.get_cameras_specs()
         self.views = self.get_cameras_views()
         self.intrinsic_matrices = self.get_cameras_intrinsics()
         self.extrinsics_ini_guess = self.get_cameras_extrinsics_guess()
+        # todo might need to add conditions here so that only use views if necessary, ie if want more than just the intrinsic matrices
 
     def get_cameras_specs(self) -> dict:
         """
@@ -29,20 +30,32 @@ class CameraData:
                 "x_size_px": 1920,
                 "pixel_size_x_mm": 4.8e-3,  # 4.8um = 4.8e-3 mm
                 "pixel_size_y_mm": 4.8e-3,  # 4.8um = 4.8e-3 mm
+                "principal_point_x_px": 960,
+                "principal_point_y_px": 600,
+                "crop_offset_x": 0,
+                "crop_offset_y": 607,
             },
             "front": {
-                "focal_length_mm": 16,
+                "focal_length_mm": 12,
                 "y_size_px": 320,  # ok?
                 "x_size_px": 296,  # ok?
                 "pixel_size_x_mm": 3.45e-3,
                 "pixel_size_y_mm": 3.45e-3,
+                "principal_point_x_px": 960,
+                "principal_point_y_px": 600,
+                "crop_offset_x": 652,
+                "crop_offset_y": 477,
             },
             "overhead": {
-                "focal_length_mm": 12,
+                "focal_length_mm": 16,
                 "y_size_px": 116,  # ok?
                 "x_size_px": 992,  # ok?
-                "pixel_size_x_mm": 3.45e-3,
-                "pixel_size_y_mm": 3.45e-3,
+                "pixel_size_x_mm": 4.8e-3,
+                "pixel_size_y_mm": 4.8e-3,
+                "principal_point_x_px": 960,
+                "principal_point_y_px": 600,
+                "crop_offset_x": 608,
+                "crop_offset_y": 914,
             },
         }
 
@@ -71,10 +84,15 @@ class CameraData:
             fx = self.specs[cam]["focal_length_mm"] / self.specs[cam]["pixel_size_x_mm"]
             fy = self.specs[cam]["focal_length_mm"] / self.specs[cam]["pixel_size_y_mm"]
 
-            # origin offset
-            cx = int(self.specs[cam]["x_size_px"] / 2.0)
-            cy = int(self.specs[cam]["y_size_px"] / 2.0)
-            # potentially refine cx, cy to the centre of the middle pixel?
+            # Origin offset in the full camera frame
+            cx = self.specs[cam].get("principal_point_x_px", self.specs[cam]["x_size_px"] / 2.0)
+            cy = self.specs[cam].get("principal_point_y_px", self.specs[cam]["y_size_px"] / 2.0)
+
+            # Adjust for cropping if crop offsets are provided
+            offset_x = self.specs[cam].get("crop_offset_x", 0)
+            offset_y = self.specs[cam].get("crop_offset_y", 0)
+            cx -= offset_x
+            cy -= offset_y
 
             # build intrinsics matrix
             camera_intrinsics[cam] = np.array(
@@ -96,7 +114,7 @@ class CameraData:
         """
         # Estimated size of captured volume
         box_length = 470  # mm
-        box_width = 52  # mm
+        box_width = 53.5  # mm
         box_height = 70  # mm
         #cam2panel_distance = 1000  # mm; estimated distance between a CCS origin and the closest plane in the captured volume.
 
@@ -240,6 +258,9 @@ class BeltPoints:
             "StartPlatL": 3,
             "TransitionR": 1,
             "TransitionL": 2,
+            "Door": 4,
+            'StepR': 5,
+            'StepL': 6,
         }
         self.fn_points_str2int = np.vectorize(lambda x: self.points_str2int[x])
 
@@ -254,8 +275,11 @@ class BeltPoints:
             [
                 [0.0, 0.0, 0.0],
                 [470.0, 0.0, 0.0],
-                [470.0, 52.0, 0.0],
-                [0.0, 52.0, 0.0],
+                [470.0, 53.5, 0.0],
+                [0.0, 53.5, 0.0],
+                [-8.2, 26.0, 48.5],
+                [0.0, 0.0, 5.0],
+                [0.0, 53.5, 5.0],
             ]
         )
 
@@ -288,20 +312,24 @@ class BeltPoints:
 
     def plot_CCS(self, camera: CameraData):
         """
-        Plot belt points in each CCS.
-        """
+        Plot belt points in each CCS.        """
         try:
             # Check belt points in CCS (1-3)
             fig, axes = plt.subplots(2, 2)
 
             for cam, ax in zip(camera.specs.keys(), axes.reshape(-1)):
                 # add image
-                ax.imshow(camera.views[cam])
+                #ax.imshow(camera.views[cam])
+                x_offset = camera.specs[cam].get("crop_offset_x", 0)
+                y_offset = camera.specs[cam].get("crop_offset_y", 0)
 
-                # add scatter
+                # add image with crop offset
+                ax.imshow(camera.views[cam], extent=[x_offset, camera.views[cam].shape[1] + x_offset, camera.views[cam].shape[0] + y_offset, y_offset])
+
+                # add scatter offset by crop_offset_x and crop_offset_y
                 ax.scatter(
-                    x=self.coords_CCS[cam][:, 0],
-                    y=self.coords_CCS[cam][:, 1],
+                    x=self.coords_CCS[cam][:, 0] + camera.specs[cam].get("crop_offset_x", 0),
+                    y=self.coords_CCS[cam][:, 1] + camera.specs[cam].get("crop_offset_y", 0),
                     s=50,
                     c="r",
                     marker="x",
@@ -311,8 +339,8 @@ class BeltPoints:
 
                 # add image center
                 ax.scatter(
-                    x=camera.views[cam].shape[1] / 2,
-                    y=camera.views[cam].shape[0] / 2,
+                    x = camera.specs[cam]["principal_point_x_px"],
+                    y = camera.specs[cam]["principal_point_y_px"],
                     s=50,
                     c="b",
                     marker="o",
@@ -320,18 +348,18 @@ class BeltPoints:
                     label=range(self.coords_CCS[cam].shape[0]),
                 )
 
-                # add text
+                # add text offset by crop_offset_x and crop_offset_y
                 for id in range(self.coords_CCS[cam].shape[0]):
                     ax.text(
-                        x=self.coords_CCS[cam][id, 0],
-                        y=self.coords_CCS[cam][id, 1],
+                        x=self.coords_CCS[cam][id, 0] + camera.specs[cam].get("crop_offset_x", 0),
+                        y=self.coords_CCS[cam][id, 1] + camera.specs[cam].get("crop_offset_y", 0),
                         s=id,
                         c="r",
                     )
 
                 # set axes limits,
-                ax.set_xlim(0, camera.specs[cam]["x_size_px"])
-                ax.set_ylim(0, camera.specs[cam]["y_size_px"])
+                ax.set_xlim(0, camera.specs[cam]["principal_point_x_px"] * 2)
+                ax.set_ylim(0, camera.specs[cam]["principal_point_y_px"] * 2)
                 ax.invert_yaxis()
 
                 # add labels

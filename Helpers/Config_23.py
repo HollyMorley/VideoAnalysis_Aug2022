@@ -45,7 +45,7 @@ expstuff = {
     }
 }
 structural_stuff = {
-    'belt_width': 52, # mm
+    'belt_width': 53.5, # mm
     'belt_length_sideviewrange': 600, # mm
     'belt_length_sideviewend': 130 # mm
 }
@@ -95,7 +95,17 @@ micestuff = {
     'LR': {
         'ForepawToeL': 1,
         'ForepawToeR': 2,
-    }
+    },
+    'skeleton':[
+        ('Nose', 'Back1'), ('EarL', 'Back1'), ('EarR', 'Back1'), ('Back1', 'Back2'), ('Back2', 'Back3'),
+        ('Back3', 'Back4'), ('Back4', 'Back5'), ('Back5', 'Back6'), ('Back6', 'Back7'), ('Back7', 'Back8'),
+        ('Back8', 'Back9'), ('Back9', 'Back10'), ('Back10', 'Back11'), ('Back11', 'Back12'), ('Back12', 'Tail1'),
+        ('Tail1', 'Tail2'), ('Tail2', 'Tail3'), ('Tail3', 'Tail4'), ('Tail4', 'Tail5'), ('Tail5', 'Tail6'),
+        ('Tail6', 'Tail7'), ('Tail7', 'Tail8'), ('Tail8', 'Tail9'), ('Tail9', 'Tail10'), ('Tail10', 'Tail11'),
+        ('Tail11', 'Tail12'), ('Back3', 'ForepawAnkleL'), ('Back3', 'ForepawAnkleR'), ('Back9', 'HindpawAnkleL'),
+        ('Back9', 'HindpawAnkleR'), ('ForepawAnkleL', 'ForepawToeL'), ('ForepawAnkleR', 'ForepawToeR'),
+        ('HindpawAnkleR', 'HindpawToeR'), ('HindpawAnkleL', 'HindpawToeL')
+        ]
 }
 
 label_list_World = ['Door','StartPlatL','StartPlatR','TransitionL','TransitionR','Nose','EarL','EarR','Back1','Back2',

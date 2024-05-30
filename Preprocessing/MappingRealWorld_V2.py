@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib import colormaps
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from pycalib.calib import triangulate
 
 
 class MapExperiment:
@@ -82,18 +83,292 @@ class GetSingleExpData:
         self.front_file = front_file
         self.overhead_file = overhead_file
 
-        # Get (and clean up) dataframes for one mouse (/vid) for each view point
-        DataframeCoor_side = pd.read_hdf(self.side_file)
+        self.DataframeCoor_side = self.load_and_clean_data(side_file, 'side')
+        self.DataframeCoor_front = self.load_and_clean_data(front_file, 'front')
+        self.DataframeCoor_overhead = self.load_and_clean_data(overhead_file, 'overhead')
+
+        self.DataframeCoor_overhead.loc(axis=1)['StartPlatL', 'y'] = self.DataframeCoor_overhead.loc(axis=1)['StartPlatL', 'y'] - 7
+        self.DataframeCoor_overhead.loc(axis=1)['TransitionL', 'y'] = self.DataframeCoor_overhead.loc(axis=1)['TransitionL', 'y'] - 2
+
+
+    def load_and_clean_data(self, file, view):
+        df = pd.read_hdf(file)
         try:
-            self.DataframeCoor_side = DataframeCoor_side.loc(axis=1)[vidstuff['scorers']['side']].copy()
+            return df.loc(axis=1)[vidstuff['scorers'][view]].copy()
         except:
-            self.DataframeCoor_side = DataframeCoor_side.loc(axis=1)[vidstuff['scorers']['side_new']].copy()
+            return df.loc(axis=1)[vidstuff['scorers'][f'{view}_new']].copy()
 
-        DataframeCoor_front = pd.read_hdf(self.front_file)
-        self.DataframeCoor_front = DataframeCoor_front.loc(axis=1)[vidstuff['scorers']['front']].copy()
+    ###################################################################################################################
+    # Map the camera views to the real world coordinates for each video file
+    ###################################################################################################################
 
-        DataframeCoor_overhead = pd.read_hdf(self.overhead_file)
-        self.DataframeCoor_overhead = DataframeCoor_overhead.loc(axis=1)[vidstuff['scorers']['overhead']].copy()
+    def TEMP_belt_coords(self):
+        temp_side_labels = pd.read_csv(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230320\side_manual_labels_estimated_real.csv")
+        temp_front_labels = pd.read_csv(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230320\front_manual_labels_estimated_real.csv")
+        temp_overhead_labels = pd.read_csv(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\20230320\overhead_manual_labels_estimated_real.csv")
+
+        temp_side_labels = pd.melt(temp_side_labels, id_vars=['label'], value_vars=['x', 'y'], var_name='coords').sort_values(by='label').reset_index(drop=True)
+        temp_front_labels = pd.melt(temp_front_labels, id_vars=['label'], value_vars=['x', 'y'], var_name='coords').sort_values(by='label').reset_index(drop=True)
+        temp_overhead_labels = pd.melt(temp_overhead_labels, id_vars=['label'], value_vars=['x', 'y'], var_name='coords').sort_values(by='label').reset_index(drop=True)
+
+        # Sorting temp_side_labels based on the order of bodyparts in belt_coords
+        belt_coords = self.get_belt_coords()
+        order = belt_coords[['bodyparts', 'coords']].apply(tuple, axis=1)
+        temp_side_labels['order'] = temp_side_labels[['label', 'coords']].apply(tuple, axis=1)
+        temp_front_labels['order'] = temp_front_labels[['label', 'coords']].apply(tuple, axis=1)
+        temp_overhead_labels['order'] = temp_overhead_labels[['label', 'coords']].apply(tuple, axis=1)
+
+        temp_side_labels_sorted = temp_side_labels.set_index('order').loc[order].reset_index(drop=True)
+        temp_front_labels_sorted = temp_front_labels.set_index('order').loc[order].reset_index(drop=True)
+        temp_overhead_labels_sorted = temp_overhead_labels.set_index('order').loc[order].reset_index(drop=True)
+
+        # combine side, front and overhead labels into one dataframe
+        temp_labels = pd.concat([temp_side_labels_sorted, temp_front_labels_sorted['value'], temp_overhead_labels_sorted['value']], axis=1, ignore_index=True)
+        temp_labels.columns = ['bodyparts', 'coords', 'side', 'front', 'overhead']
+
+        return temp_labels
+
+
+    def map(self):
+        # TODO: restore this: belt_coords = self.get_belt_coords()
+        belt_coords = self.TEMP_belt_coords()
+        snapshot_paths = self.save_video_frames()
+
+        mapping_obj = MapExperiment(self.DataframeCoor_side, self.DataframeCoor_front, self.DataframeCoor_overhead, belt_coords, snapshot_paths)
+        cameras_extrinsics = mapping_obj.estimate_pose()
+        cameras_intrinsics = mapping_obj.cameras_intrinsics
+        cameras_specs = mapping_obj.cameras_specs
+
+        # plotting to check if the mapping is correct
+        ccs_fig, ccs_ax = mapping_obj.plot_CamCoorSys()
+        wcs_fig, wcs_ax = mapping_obj.plot_WorldCoorSys()
+        loc_and_pose_fig, lp_ax = mapping_obj.plot_cam_locations_and_pose(cameras_extrinsics)
+
+        triang = self.get_realworld_coords(cameras_extrinsics, cameras_intrinsics)
+
+        # Save the plots
+        path = '\\'.join(self.side_file.split("\\")[:-1])
+        if '_Pre_' in self.side_file:
+            file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:6])
+        else:
+            file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:5])
+
+        ccs_fig.savefig(os.path.join(path, f"{file_tag}_CCS.png"))
+        wcs_fig.savefig(os.path.join(path, f"{file_tag}_WCS.png"))
+        loc_and_pose_fig.savefig(os.path.join(path, f"{file_tag}_Loc_and_Pose.png"))
+
+    def get_points_in_CCS_from_standard_image(self):
+        side_coords = pd.read_csv(r"C:\Users\hmorl\OneDrive\Desktop\side_post_labels.csv")
+        front_coords = pd.read_csv(r"C:\Users\hmorl\OneDrive\Desktop\front_post_labels.csv")
+        overhead_coords = pd.read_csv(r"C:\Users\hmorl\OneDrive\Desktop\overhead_post_labels.csv")
+
+        # rearrange the data so that labels column is first and the x and y column are stacked together so that there is a new column called coords containing either x or y
+        side_coords = pd.melt(side_coords, id_vars=['label'], value_vars=['x', 'y'],
+                              var_name='coords').sort_values(by='label').reset_index(drop=True)
+        front_coords = pd.melt(front_coords, id_vars=['label'], value_vars=['x', 'y'],
+                               var_name='coords').sort_values(by='label').reset_index(drop=True)
+        overhead_coords = pd.melt(overhead_coords, id_vars=['label'], value_vars=['x', 'y'],
+                                  var_name='coords').sort_values(by='label').reset_index(drop=True)
+
+        # concat the dataframes together but dont repeat the coords and label columns
+        coords = pd.concat([side_coords, front_coords['value'], overhead_coords['value']], axis=1,
+                           ignore_index=True)
+        # rename the columns to the correct names
+        coords.columns = ['bodyparts', 'coords', 'side', 'front', 'overhead']
+
+        return coords
+
+    def get_belt_coords(self):
+        side_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
+        front_mask = np.all(self.DataframeCoor_front.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
+        overhead_mask = np.all(self.DataframeCoor_overhead.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
+
+        belt_coords_side = self.DataframeCoor_side.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][side_mask]
+        belt_coords_front = self.DataframeCoor_front.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][front_mask]
+        belt_coords_overhead = self.DataframeCoor_overhead.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][overhead_mask]
+
+        side_mean = belt_coords_side.mean(axis=0)
+        front_mean = belt_coords_front.mean(axis=0)
+        overhead_mean = belt_coords_overhead.mean(axis=0)
+
+        # concatenate the mean values of the belt coordinates from the 3 camera views with the camera names as columns
+        belt_coords = pd.concat([side_mean, front_mean, overhead_mean], axis=1)
+        belt_coords.columns = ['side', 'front', 'overhead']
+
+        # add step coordinates
+        step_coordsR = self.get_step_coords(belt_coords.loc(axis=0)['StartPlatR'], 'StepR')
+        step_coordsL = self.get_step_coords(belt_coords.loc(axis=0)['StartPlatL'], 'StepL')
+        coords = pd.concat([belt_coords, step_coordsR, step_coordsL], axis=0)
+
+        # add door coordinates
+        door_coords = self.get_door_coords()
+        coords.reset_index(inplace=True, drop=False)
+        coords = pd.concat([coords, door_coords], axis=0).reset_index(drop=True)
+
+        return coords
+
+    def get_door_coords(self):
+        side_mask = self.DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > pcutoff
+        front_mask = self.DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > pcutoff
+        overhead_mask = self.DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > pcutoff
+        mask = side_mask & front_mask & overhead_mask
+
+        # change masks so that door is also in closed position
+        side = self.DataframeCoor_side.loc(axis=1)['Door', ['x','y']][mask]
+        front = self.DataframeCoor_front.loc(axis=1)['Door', ['x','y']][mask]
+        overhead = self.DataframeCoor_overhead.loc(axis=1)['Door', ['x','y']][mask]
+
+        sem_factor = 100
+        side_closed_mask = np.logical_and(side['Door', 'y'] < side['Door', 'y'].mean() + side['Door', 'y'].sem() * sem_factor, side['Door', 'y'] > side['Door', 'y'].mean() - side['Door', 'y'].sem() * sem_factor)
+        front_closed_mask = np.logical_and(front['Door', 'y'] < front['Door', 'y'].mean() + front['Door', 'y'].sem() * sem_factor, front['Door', 'y'] > front['Door', 'y'].mean() - front['Door', 'y'].sem() * sem_factor)
+        overhead_closed_mask = np.logical_and(overhead['Door', 'x'] < overhead['Door', 'x'].mean() + overhead['Door', 'x'].sem() * sem_factor, overhead['Door', 'x'] > overhead['Door', 'x'].mean() - overhead['Door', 'x'].sem() * sem_factor)
+        closed_mask = side_closed_mask & front_closed_mask & overhead_closed_mask
+
+        side_mean = side[closed_mask].mean(axis=0)
+        front_mean = front[closed_mask].mean(axis=0)
+        overhead_mean = overhead[closed_mask].mean(axis=0)
+
+        # concatenate the mean values of the door coordinates from the 3 camera views with the camera names as columns
+        door_coords = pd.concat([side_mean, front_mean, overhead_mean], axis=1)
+        door_coords.columns = ['side', 'front', 'overhead']
+        door_coords.reset_index(inplace=True, drop=False)
+
+        return door_coords
+
+    def get_step_coords(self, coords, step_name):
+        # add body part 'Step' to the coords dataframe as index
+        coords.index = pd.MultiIndex.from_product([[step_name], coords.index], names=['bodyparts', 'coords'])
+        coords.loc(axis=0)[step_name, 'y'].loc(axis=0)['side'] = coords.loc(axis=0)[step_name, 'y'].loc(axis=0)['side'] - 18
+        coords.loc(axis=0)[step_name, 'y'].loc(axis=0)['front'] = coords.loc(axis=0)[step_name, 'y'].loc(axis=0)['front'] - 15
+        return coords
+
+    def plot_frame_byView(self, view):
+        # plot video frame on graph so that when hover mouse it will readout the coordinates
+        if view == 'side':
+            df = self.DataframeCoor_side
+            file = self.side_file
+        elif view == 'front':
+            df = self.DataframeCoor_front
+            file = self.front_file
+        elif view == 'overhead':
+            df = self.DataframeCoor_overhead
+            file = self.overhead_file
+        else:
+            raise ValueError('Invalid view specified.')
+
+        exp_day = file.split("\\")[-2] if view != 'front' else file.split("\\")[-3]
+        if '_Pre_' in file:
+            video_file_tag = '_'.join(file.split("\\")[-1].split("_")[0:6])
+        else:
+            video_file_tag = '_'.join(file.split("\\")[-1].split("_")[0:5])
+
+        video_dir = os.path.join(paths['video_folder'], exp_day)
+        video_files = [f for f in os.listdir(video_dir) if f.startswith(video_file_tag) and f.endswith('.avi')]
+
+        if len(video_files) != 3:
+            print("Error: Expected 3 video files.")
+            return
+
+        # Create masks
+        corner_mask = np.all(
+            df.loc(axis=1)[['StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR', 'Door'], 'likelihood'] > pcutoff, axis=1)
+        mouse_mask = np.all(df.loc(axis=1)[['Nose', 'EarR', 'Tail1', 'Tail12'], 'likelihood'] < pcutoff, axis=1)
+        mask = corner_mask & mouse_mask
+
+        if not mask.any():
+            print(f"No frames found matching the criteria for {view}.")
+            return
+
+        frame_num = df[mask].index[0]
+
+        # Open video file for the specified view
+        video_file = next((f for f in video_files if view in f), None)
+        if not video_file:
+            print(f"Error: No video file found for view {view}")
+            return
+
+        video_path = os.path.join(video_dir, video_file)
+        cap = cv2.VideoCapture(video_path)
+
+        # Read and plot the frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = cap.read()
+        if ret:
+            fig, ax = plt.subplots()
+            ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            ax.set_title(f"{view} camera")
+
+            # Add mouse hover functionality
+            def format_coord(x, y):
+                return f'x={x:.2f}, y={y:.2f}'
+
+            ax.format_coord = format_coord
+
+            plt.show()
+        else:
+            print(f"Error reading frame for {video_file}")
+
+        # Release video capture object
+        cap.release()
+
+
+    def save_video_frames(self):
+        # save frame from side front and overhead camera views
+        exp_day = self.side_file.split("\\")[-2]
+        if '_Pre_' in self.side_file:
+            video_file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:6])
+        else:
+            video_file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:5])
+        video_dir = os.path.join(paths['video_folder'], exp_day)
+        # find files beginning with video_file_tag adn ending avi under video_dir
+        video_files = [f for f in os.listdir(video_dir) if
+                        f.startswith(video_file_tag) and f.endswith('.avi')]
+        if len(video_files) == 3:
+            # get frame where all corners are visible but mouse is not present
+            corner_front_mask = np.all(self.DataframeCoor_front.loc(axis=1)[['StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR'], 'likelihood'] > pcutoff, axis=1)
+            corner_side_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR'], 'likelihood'] > pcutoff, axis=1)
+            corner_mask = corner_front_mask & corner_side_mask
+
+            door_mask = self.DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > pcutoff
+            y = self.DataframeCoor_front.loc(axis=1)['Door','y'][door_mask]
+            door_closed_mask = y > y[y > y.mean()].median()
+            # make mask in the shape of corner_mask where door_closed_mask is True
+            corner_mask = np.logical_and(corner_mask, door_closed_mask)
+
+            mouse_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['Nose', 'EarR', 'Tail1', 'Tail12'], 'likelihood'] < pcutoff, axis=1)
+            mask = corner_mask & mouse_mask
+            frame_num = self.DataframeCoor_side[mask].index[0] + 200
+
+            # Open video files
+            cap_dict = {}
+            for video_file in video_files:
+                cap_dict[video_file] = cv2.VideoCapture(os.path.join(video_dir, video_file))
+
+            # Read and save frames
+            Path = {'side': None, 'front': None, 'overhead': None}
+            for video_file, cap in cap_dict.items():
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+                if ret:
+                    # find which of side, front and overhead is in the video_file name and save cam_name as that value
+                    cam_name = [cam for cam in ['side', 'front', 'overhead'] if cam in video_file][0]
+                    path = os.path.join(paths['data_folder'], exp_day, f"{video_file.split('.')[0]}_{frame_num}.jpg")
+                    cv2.imwrite(path, frame)
+                    Path[cam_name] = path
+                else:
+                    print(f"Error reading frame for {video_file}")
+
+            # Release video capture objects
+            for cap in cap_dict.values():
+                cap.release()
+
+            return Path
+        else:
+            raise ValueError(f"No video files found for {video_file_tag}")
+
+    ####################################################################################################################
+    # Triangulate the 3D coordinates of the common body parts in the same order for all 3 camera views
+    ####################################################################################################################
 
     def get_realworld_coords(self, cameras_extrinsics, cameras_intrinsics):
         # Initial setup and data preparation
@@ -105,7 +380,7 @@ class GetSingleExpData:
         # Set up dataframes for results
         real_world_coords_allparts, repr_error_allparts, repr_allparts = self.setup_dataframes(labels)
 
-        # Step 5: Process each body part
+        # Process each body part
         for bidx, body_part in enumerate(labels['all']):
             print(f"Triangulating {body_part}...")
             self.process_body_part(
@@ -124,55 +399,55 @@ class GetSingleExpData:
         return labels, side_coords, front_coords, overhead_coords
 
     def find_common_bodyparts(self):
-        # for each camera pair, find the common body parts
-        side_bodyparts = self.DataframeCoor_side.columns.get_level_values('bodyparts').unique()
-        front_bodyparts = self.DataframeCoor_front.columns.get_level_values('bodyparts').unique()
-        overhead_bodyparts = self.DataframeCoor_overhead.columns.get_level_values('bodyparts').unique()
+        side_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_side)
+        front_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_front)
+        overhead_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_overhead)
+        common_bodyparts = self.get_intersected_bodyparts(
+            side_bodyparts, front_bodyparts, overhead_bodyparts
+        )
+        all_bodyparts = self.get_all_bodyparts(
+            side_bodyparts, front_bodyparts, overhead_bodyparts, common_bodyparts
+        )
+        labels = self.create_labels_dict(
+            side_bodyparts, front_bodyparts, overhead_bodyparts, all_bodyparts, common_bodyparts
+        )
+        return labels
 
-        common_bodyparts_sidexfront = list(np.intersect1d(side_bodyparts, front_bodyparts))
-        common_bodyparts_sidexoverhead = list(np.intersect1d(side_bodyparts, overhead_bodyparts))
-        common_bodyparts_frontxoverhead = list(np.intersect1d(front_bodyparts, overhead_bodyparts))
+    def get_unique_bodyparts(self, dataframe):
+        return dataframe.columns.get_level_values('bodyparts').unique()
 
-        # find common body parts between all 3 camera views
-        common_bodyparts = list(set(common_bodyparts_sidexfront) & set(common_bodyparts_sidexoverhead) & set(
-            common_bodyparts_frontxoverhead))
+    def get_intersected_bodyparts(self, side_bodyparts, front_bodyparts, overhead_bodyparts):
+        sidexfront = np.intersect1d(side_bodyparts, front_bodyparts)
+        sidexoverhead = np.intersect1d(side_bodyparts, overhead_bodyparts)
+        frontxoverhead = np.intersect1d(front_bodyparts, overhead_bodyparts)
+        return list(set(sidexfront) & set(sidexoverhead) & set(frontxoverhead))
 
-        # find all bodyparts that are in at least 2 camera views
-        all_bodyparts = list(set(common_bodyparts_sidexfront) | set(common_bodyparts_sidexoverhead) | set(
-            common_bodyparts_frontxoverhead))
+    def get_all_bodyparts(self, side_bodyparts, front_bodyparts, overhead_bodyparts, common_bodyparts):
+        sidexfront = np.intersect1d(side_bodyparts, front_bodyparts)
+        sidexoverhead = np.intersect1d(side_bodyparts, overhead_bodyparts)
+        frontxoverhead = np.intersect1d(front_bodyparts, overhead_bodyparts)
+        return list(set(sidexfront) | set(sidexoverhead) | set(frontxoverhead))
 
-        # find the values in each camera that are in all_bodyparts
+    def create_labels_dict(self, side_bodyparts, front_bodyparts, overhead_bodyparts, all_bodyparts, common_bodyparts):
         side = list(set(side_bodyparts) & set(all_bodyparts))
         front = list(set(front_bodyparts) & set(all_bodyparts))
         overhead = list(set(overhead_bodyparts) & set(all_bodyparts))
-
-        # remove Hand from all lists where it is present
-        lists_to_check = [all_bodyparts, common_bodyparts, common_bodyparts_sidexfront,
-                          common_bodyparts_sidexoverhead, common_bodyparts_frontxoverhead,
-                          side, front, overhead]
-
-        for lst in lists_to_check:
-            if 'Hand' in lst:
-                lst.remove('Hand')
-            # sort the lists if anything inside
-            if len(lst) > 0:
-                lst.sort()
-
-        # if the same labels in all_bodyparts are in label_list_World, replace with label_list_World as this is in order
+        self.remove_hand_from_lists([all_bodyparts, common_bodyparts, side, front, overhead])
         if set(all_bodyparts) == set(label_list_World):
             all_bodyparts = label_list_World
         else:
             raise ValueError('The labels in all_bodyparts are not the same as label_list_World')
+        return {
+            'all': all_bodyparts, 'allcommon': common_bodyparts, 'side': side,
+            'front': front, 'overhead': overhead
+        }
 
-        labels = {'all': all_bodyparts,
-                'allcommon': common_bodyparts,
-                'sidexfront': common_bodyparts_sidexfront,
-                'sidexoverhead': common_bodyparts_sidexoverhead,
-                'frontxoverhead': common_bodyparts_frontxoverhead,
-                'side': side,
-                'front': front,
-                'overhead': overhead}
-        return labels
+    def remove_hand_from_lists(self, lists):
+        for lst in lists:
+            if 'Hand' in lst:
+                lst.remove('Hand')
+            if len(lst) > 0:
+                lst.sort()
 
     def get_common_camera_arrays(self, labels):
         """
@@ -252,6 +527,10 @@ class GetSingleExpData:
         coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = self.find_empty_cameras(coords_2d_all, likelihoods,
                                                                                         P_gt, Nc)
 
+        # TODO: remove hardcoding in overhead camera
+        if body_part == 'EarL':
+            coords_2d[2,:,0] += 4
+
         real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err = self.triangulate_points(
             coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics, cameras_intrinsics, coords_2d_all)
 
@@ -306,8 +585,19 @@ class GetSingleExpData:
             self.project_back_to_cameras(wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
                                     front_err, overhead_err, side_repr, front_repr, overhead_repr)
 
-        return self.finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+        final = self.finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
                                     overhead_err)
+        return final
+
+
+    def triangulate(self, coords_2d, point_idx, Nc_bp, P_gt_bp):
+        # Gather points from each camera for the current point index
+        points_from_all_cameras = [coords_2d[camera_idx, point_idx, :] for camera_idx in range(Nc_bp)]
+        # Reshape to meet the input requirement of the triangulate function
+        x_2d = np.array(points_from_all_cameras)
+        # Assuming triangulate function accepts x_2d of shape (Nc, 2) and returns (x, y, z) coordinates
+        w = triangulate(x_2d, P_gt_bp)  # Make sure P_gt and triangulate function are prepared to handle this
+        return w
 
     def handle_three_cameras(self, conf, coords_2d, point_idx, Nc_bp, P_gt_bp):
         if len(conf) <= 1:
@@ -320,6 +610,8 @@ class GetSingleExpData:
     def project_back_to_cameras(self, wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
                            front_err, overhead_err, side_repr, front_repr, overhead_repr):
         if np.all(wcs != np.nan):
+        #if np.all(~np.isnan(wcs)):
+            wcs[2] = wcs[2] #+ 30 # TODO REMOVE!!!!!!!!
             for c, cam in enumerate(['side', 'front', 'overhead']):
                 CCS_repr, _ = cv2.projectPoints(
                     wcs[:3],
@@ -384,25 +676,131 @@ class GetSingleExpData:
         repr_error_allparts[body_part, 'overhead', 'x'] = overhead_err[0, :][0]
         repr_error_allparts[body_part, 'overhead', 'y'] = overhead_err[1, :][0]
 
-    ########################################################################################################################
+    def plot_2d_prep_frame(self, view, frame_number):
+        # Determine the correct video file based on the view
+        if view == 'side':
+            video_file = self.side_file
+        elif view == 'front':
+            video_file = self.front_file
+        elif view == 'overhead':
+            video_file = self.overhead_file
+        else:
+            raise ValueError('Invalid view')
 
 
+        exp_day = video_file.split("\\")[-2] if view != 'front' else video_file.split("\\")[-3]
+        if '_Pre_' in video_file:
+            video_file_tag = '_'.join(video_file.split("\\")[-1].split("_")[0:6])
+        else:
+            video_file_tag = '_'.join(video_file.split("\\")[-1].split("_")[0:5])
+
+        video_dir = os.path.join(paths['video_folder'], exp_day)
+        video_files = [f for f in os.listdir(video_dir) if f.startswith(video_file_tag) and f.endswith('.avi')]
+
+
+        # Select the video file corresponding to the specified view
+        video_file = next((f for f in video_files if view in f), None)
+        if not video_file:
+            raise FileNotFoundError(f"No video file found for view {view}")
+
+        video_path = os.path.join(video_dir, video_file)
+
+        # Capture the specific frame from the video
+        cap = cv2.VideoCapture(video_path)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            raise ValueError(f"Error reading frame {frame_number} from {video_path}")
+
+        return frame
+
+    def plot_2d_skeleton_overlay_on_frame_fromOriginal_singleView(self, frame_number, labels, view):
+        # plot the video frame
+        frame = self.plot_2d_prep_frame(view, frame_number)
+
+        # get the relevant df from self.DataframeCoor_side, *front or *overhead
+        data_file = self.DataframeCoor_side if view == 'side' else self.DataframeCoor_front if view == 'front' else self.DataframeCoor_overhead
+
+        # # minus 10 from the y of overhead view
+        # if view == 'overhead':
+        #     data_file.loc(axis=1)['StartPlatL', 'y'] = data_file.loc(axis=1)['StartlatL', 'y'] - 7
+
+        # Plot the 2D skeleton overlay on the frame
+        cmap = plt.get_cmap('viridis')
+        fig, ax = plt.subplots()
+        ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        for i, body_part in enumerate(labels['all']):
+            if body_part in labels[view]:
+                conf = data_file.loc[frame_number, (body_part, 'likelihood')]
+                if conf > pcutoff:
+                    x = data_file.loc[frame_number, (body_part, 'x')]
+                    y = data_file.loc[frame_number, (body_part, 'y')]
+                    if np.isfinite(x) and np.isfinite(y):
+                        ax.scatter(x, y, color=cmap(i/len(labels['all'])), s=6, label=body_part, zorder=100)
+                        #ax.text(x, y, body_part, fontsize=8, color='r')
+        # draw lines for skeleton connections underneath the scatter points
+        # for start, end in micestuff['skeleton']:
+        #     sx = data_file.loc[frame_number, (start, 'x')]
+        #     sy = data_file.loc[frame_number, (start, 'y')]
+        #     ex = data_file.loc[frame_number, (end, 'x')]
+        #     ey = data_file.loc[frame_number, (end, 'y')]
+        #     ax.plot([sx, ex], [sy, ey], 'grey', linewidth=0.7, zorder=0)
+
+        ax.axis('off')
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=6)
+        plt.title("Original")
+        plt.show()
+        return fig, ax
+
+    def plot_2d_skeleton_overlay_on_frame_fromOriginal_allViews(self, frame_number, labels):
+        for view in ['side', 'front', 'overhead']:
+            self.plot_2d_skeleton_overlay_on_frame_fromOriginal_singleView(frame_number, labels, view)
+
+    def plot_2d_skeleton_overlay_on_frame_fromReprojection_singleView(self, repr_allparts, frame_number, labels, view):
+        # plot the video frame
+        frame = self.plot_2d_prep_frame(view, frame_number)
+
+        # get the relevant columns from repr_allparts for the view
+        repr = repr_allparts.xs(view,level=1,axis=1)
+
+        # Plot the 2D skeleton overlay on the frame
+        cmap = plt.get_cmap('viridis')
+        fig, ax = plt.subplots()
+        ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        for i, body_part in enumerate(labels['all']):
+            if body_part in labels[view]:
+                x = repr.loc[frame_number, (body_part, 'x')]
+                y = repr.loc[frame_number, (body_part, 'y')]
+                if np.isfinite(x) and np.isfinite(y):
+                    ax.scatter(x, y, color=cmap(i/len(labels['all'])), s=6, label=body_part, zorder=100)
+                    #ax.text(x, y, body_part, fontsize=8, color='r')
+        belt_coords_hardcoded = self.TEMP_belt_coords()
+        belt_coords_hardcoded = belt_coords_hardcoded.set_index(['bodyparts', 'coords'])
+        for belt_part in belt_coords_hardcoded.index.get_level_values('bodyparts').unique():
+            x = belt_coords_hardcoded.loc(axis=0)[belt_part, 'x'][view]
+            y = belt_coords_hardcoded.loc(axis=0)[belt_part, 'y'][view]
+            # make scatter with cross marker
+            ax.scatter(x, y, color='red', marker='x', s=6, label=belt_part, zorder=100)
+        # draw lines for skeleton connections underneath the scatter points
+        for start, end in micestuff['skeleton']:
+            sx, sy = repr.loc[frame_number, (start, 'x')], repr.loc[frame_number, (start, 'y')]
+            ex, ey = repr.loc[frame_number, (end, 'x')], repr.loc[frame_number, (end, 'y')]
+            ax.plot([sx, ex], [sy, ey], 'grey', linewidth=0.7, zorder=0)
+        ax.axis('off')
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=6)
+        plt.title("Reprojection")
+        plt.show()
+        return fig, ax
+
+    def plot_2d_skeleton_overlay_on_frame_fromReprojection_allViews(self, repr_allparts, frame_number, labels):
+        for view in ['side', 'front', 'overhead']:
+            self.plot_2d_skeleton_overlay_on_frame_fromReprojection_singleView(repr_allparts, frame_number, labels, view)
 
 
 
     def plot_3d_mouse(self, real_world_coords_allparts, labels, frame):
-        skeleton = [
-            ('Nose', 'Back1'), ('EarL', 'Back1'), ('EarR', 'Back1'), ('Back1', 'Back2'), ('Back2', 'Back3'),
-            ('Back3', 'Back4'), ('Back4', 'Back5'), ('Back5', 'Back6'), ('Back6', 'Back7'), ('Back7', 'Back8'),
-            ('Back8', 'Back9'), ('Back9', 'Back10'), ('Back10', 'Back11'), ('Back11', 'Back12'), ('Back12', 'Tail1'),
-            ('Tail1', 'Tail2'), ('Tail2', 'Tail3'), ('Tail3', 'Tail4'), ('Tail4', 'Tail5'), ('Tail5', 'Tail6'),
-            ('Tail6', 'Tail7'), ('Tail7', 'Tail8'), ('Tail8', 'Tail9'), ('Tail9', 'Tail10'), ('Tail10', 'Tail11'),
-            ('Tail11', 'Tail12'), ('Back2', 'ForepawAnkleL'), ('Back2', 'ForepawAnkleR'), ('Back8', 'HindpawAnkleL'),
-            ('Back8', 'HindpawAnkleR'), ('ForepawAnkleL', 'ForepawToeL'), ('ForepawAnkleR', 'ForepawToeR'),
-            ('HindpawAnkleR', 'HindpawToeR'), ('HindpawAnkleL', 'HindpawToeL'), ('Back8', 'HindpawToeL'),
-            ('Back8', 'HindpawToeR'), ('Back2', 'ForepawToeL'), ('Back2', 'ForepawToeR')
-        ]
-
         # plt 3d scatter of all body parts at frame 500 and colour them based on the body part using viridis
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -411,15 +809,16 @@ class GetSingleExpData:
         for i, body_part in enumerate(labels['all']):
             # scatter with small marker size
             ax.scatter(coords[body_part, 'x'], coords[body_part, 'y'], coords[body_part, 'z'],
-                       label=body_part, c=cmap(i/len(labels['all'])), s=10)
+                       label=body_part, color=cmap(i/len(labels['all'])), s=10)
         # Draw lines for each connection
-        for start, end in skeleton:
+        for start, end in micestuff['skeleton']:
             sx, sy, sz = coords[(start, 'x')], coords[(start, 'y')], coords[(start, 'z')]
             ex, ey, ez = coords[(end, 'x')], coords[(end, 'y')], coords[(end, 'z')]
             ax.plot([sx, ex], [sy, ey], [sz, ez], 'gray')  # Draw line in gray
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=6)
         # set axes as equal scales so each tick on each axis represents the same space
         ax.axis('equal')
+        #ax.set_box_aspect([1, 1, 1])  # Aspect ratio is 1:1:1 for x:y:z
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
@@ -430,19 +829,6 @@ class GetSingleExpData:
         temp = temp.reset_index(drop=True)
         n_frames = len(temp)  # number of frames
 
-        # Define connections between body parts
-        skeleton = [
-            ('Nose', 'Back1'), ('EarL', 'Back1'), ('EarR', 'Back1'), ('Back1', 'Back2'), ('Back2', 'Back3'),
-            ('Back3', 'Back4'), ('Back4', 'Back5'), ('Back5', 'Back6'), ('Back6', 'Back7'), ('Back7', 'Back8'),
-            ('Back8', 'Back9'), ('Back9', 'Back10'), ('Back10', 'Back11'), ('Back11', 'Back12'), ('Back12', 'Tail1'),
-            ('Tail1', 'Tail2'), ('Tail2', 'Tail3'), ('Tail3', 'Tail4'), ('Tail4', 'Tail5'), ('Tail5', 'Tail6'),
-            ('Tail6', 'Tail7'), ('Tail7', 'Tail8'), ('Tail8', 'Tail9'), ('Tail9', 'Tail10'), ('Tail10', 'Tail11'),
-            ('Tail11', 'Tail12'), ('Back2', 'ForepawAnkleL'), ('Back2', 'ForepawAnkleR'), ('Back8', 'HindpawAnkleL'),
-            ('Back8', 'HindpawAnkleR'), ('ForepawAnkleL', 'ForepawToeL'), ('ForepawAnkleR', 'ForepawToeR'),
-            ('HindpawAnkleR', 'HindpawToeR'), ('HindpawAnkleL', 'HindpawToeL'), ('Back8', 'HindpawToeL'),
-            ('Back8', 'HindpawToeR'), ('Back2', 'ForepawToeL'), ('Back2', 'ForepawToeR')
-        ]
-
         # Example setup
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -451,8 +837,8 @@ class GetSingleExpData:
         n_labels = len(labels['all'])
         colors = colormaps['viridis'](np.linspace(0, 1, n_labels))
         # Define belts (fixed in position, change visibility instead of adding/removing)
-        belt1_verts = [[(0, 0, 0), (470, 0, 0), (470, 52, 0), (0, 52, 0)]]
-        belt2_verts = [[(471, 0, 0), (600, 0, 0), (600, 52, 0), (471, 52, 0)]]
+        belt1_verts = [[(0, 0, 0), (470, 0, 0), (470, 53.5, 0), (0, 53.5, 0)]]
+        belt2_verts = [[(471, 0, 0), (600, 0, 0), (600, 53.5, 0), (471, 53.5, 0)]]
         belt1 = Poly3DCollection(belt1_verts, facecolors='blue', edgecolors='none', alpha=0.2)
         belt2 = Poly3DCollection(belt2_verts, facecolors='blue', edgecolors='none', alpha=0.2)
         ax.add_collection3d(belt1)
@@ -460,13 +846,13 @@ class GetSingleExpData:
         # Initialize lines for parts and skeleton lines
         lines = {part: ax.plot([], [], [], 'o-', ms=2, label=part, color=colors[i])[0] for i, part in
                  enumerate(labels['all'])}
-        skeleton_lines = {pair: ax.plot([], [], [], 'black', linewidth=0.5)[0] for pair in skeleton}
+        skeleton_lines = {pair: ax.plot([], [], [], 'black', linewidth=0.5)[0] for pair in micestuff['skeleton']}
 
         def init():
             ax.set_xlim(0, 600)
-            ax.set_ylim(0, 52)
-            ax.set_zlim(0, 52)
-            ax.set_box_aspect([600 / 52, 1, 1])
+            ax.set_ylim(0, 53.5)
+            ax.set_zlim(0, 53.5)
+            ax.set_box_aspect([600 / 53.5, 1, 1])
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
@@ -497,107 +883,10 @@ class GetSingleExpData:
             return [belt1, belt2] + list(lines.values()) + list(skeleton_lines.values())
 
         ani = FuncAnimation(fig, update, frames=n_frames, init_func=init, blit=False)
-        ani.save('walking_mouse.mp4', writer='ffmpeg', fps=30, dpi=300)
+        ani.save('walking_mouse_2.mp4', writer='ffmpeg', fps=30, dpi=300)
         plt.close(fig)  # Close the figure to avoid displaying it inline if running in a notebook
 
-    def map(self):
-        belt_coords = self.get_belt_coords()
-        snapshot_paths = self.save_video_frames()
 
-        mapping_obj = MapExperiment(self.DataframeCoor_side, self.DataframeCoor_front, self.DataframeCoor_overhead, belt_coords, snapshot_paths)
-        cameras_extrinsics = mapping_obj.estimate_pose()
-        #cameras_extrinsics = mapping_obj.estimate_pose_with_guess()
-        cameras_intrinsics = mapping_obj.cameras_intrinsics
-        cameras_specs = mapping_obj.cameras_specs
-
-
-        # plotting to check if the mapping is correct
-        ccs_fig, ccs_ax = mapping_obj.plot_CamCoorSys()
-        wcs_fig, wcs_ax = mapping_obj.plot_WorldCoorSys()
-        loc_and_pose_fig, lp_ax = mapping_obj.plot_cam_locations_and_pose(cameras_extrinsics)
-
-        triang = self.get_realworld_coords(cameras_extrinsics, cameras_intrinsics)
-
-        # Save the plots
-        path = '\\'.join(self.side_file.split("\\")[:-1])
-        if '_Pre_' in self.side_file:
-            file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:6])
-        else:
-            file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:5])
-
-        ccs_fig.savefig(os.path.join(path, f"{file_tag}_CCS.png"))
-        wcs_fig.savefig(os.path.join(path, f"{file_tag}_WCS.png"))
-        loc_and_pose_fig.savefig(os.path.join(path, f"{file_tag}_Loc_and_Pose.png"))
-
-
-
-
-    def get_belt_coords(self):
-        side_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
-        front_mask = np.all(self.DataframeCoor_front.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
-        overhead_mask = np.all(self.DataframeCoor_overhead.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], 'likelihood'] > 0.99, axis=1)
-
-        belt_coords_side = self.DataframeCoor_side.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][side_mask]
-        belt_coords_front = self.DataframeCoor_front.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][front_mask]
-        belt_coords_overhead = self.DataframeCoor_overhead.loc(axis=1)[['StartPlatR', 'StartPlatL', 'TransitionR', 'TransitionL'], ['x', 'y']][overhead_mask]
-
-        side_mean = belt_coords_side.mean(axis=0)
-        front_mean = belt_coords_front.mean(axis=0)
-        overhead_mean = belt_coords_overhead.mean(axis=0)
-
-        # concatenate the mean values of the belt coordinates from the 3 camera views with the camera names as columns
-        belt_coords = pd.concat([side_mean, front_mean, overhead_mean], axis=1)
-        belt_coords.columns = ['side', 'front', 'overhead']
-        belt_coords.reset_index(inplace=True, drop=False)
-
-        return belt_coords
-
-    def save_video_frames(self):
-        # save frame from side front and overhead camera views
-        exp_day = self.side_file.split("\\")[-2]
-        if '_Pre_' in self.side_file:
-            video_file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:6])
-        else:
-            video_file_tag = '_'.join(self.side_file.split("\\")[-1].split("_")[0:5])
-        video_dir = os.path.join(paths['video_folder'], exp_day)
-        # find files beginning with video_file_tag adn ending avi under video_dir
-        video_files = [f for f in os.listdir(video_dir) if
-                        f.startswith(video_file_tag) and f.endswith('.avi')]
-        if len(video_files) == 3:
-            # get frame where all corners are visible but mouse is not present
-            corner_front_mask = np.all(self.DataframeCoor_front.loc(axis=1)[['StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR'], 'likelihood'] > pcutoff, axis=1)
-            corner_side_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR'], 'likelihood'] > pcutoff, axis=1)
-            corner_mask = corner_front_mask & corner_side_mask
-            mouse_mask = np.all(self.DataframeCoor_side.loc(axis=1)[['Nose', 'EarR', 'Tail1', 'Tail12', 'Door'], 'likelihood'] < pcutoff, axis=1)
-            mask = corner_mask & mouse_mask
-            frame_num = self.DataframeCoor_side[mask].index[0]
-
-            # Open video files
-            cap_dict = {}
-            for video_file in video_files:
-                cap_dict[video_file] = cv2.VideoCapture(os.path.join(video_dir, video_file))
-
-            # Read and save frames
-            Path = {'side': None, 'front': None, 'overhead': None}
-            for video_file, cap in cap_dict.items():
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-                ret, frame = cap.read()
-                if ret:
-                    # find which of side, front and overhead is in the video_file name and save cam_name as that value
-                    cam_name = [cam for cam in ['side', 'front', 'overhead'] if cam in video_file][0]
-                    path = os.path.join(paths['data_folder'], exp_day, f"{video_file.split('.')[0]}_{frame_num}.jpg")
-                    cv2.imwrite(path, frame)
-                    Path[cam_name] = path
-                else:
-                    print(f"Error reading frame for {video_file}")
-
-            # Release video capture objects
-            for cap in cap_dict.values():
-                cap.release()
-
-            return Path
-        else:
-            raise ValueError(f"No video files found for {video_file_tag}")
 
 
 

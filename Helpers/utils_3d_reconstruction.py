@@ -11,10 +11,12 @@ class CameraData:
     TODO: probably a class per camera makes more sense.
     """
 
-    def __init__(self, snapshot_paths=[]):
-        self.view_paths = snapshot_paths
+    def __init__(self, snapshot_paths=[], basic=True):
+        if not basic:
+            self.view_paths = snapshot_paths
+            self.views = self.get_cameras_views()
+
         self.specs = self.get_cameras_specs()
-        self.views = self.get_cameras_views()
         self.intrinsic_matrices = self.get_cameras_intrinsics()
         self.extrinsics_ini_guess = self.get_cameras_extrinsics_guess()
         # todo might need to add conditions here so that only use views if necessary, ie if want more than just the intrinsic matrices

@@ -7,33 +7,82 @@ from matplotlib.widgets import Button as MplButton
 import os
 import mplcursors
 from matplotlib import cm
-from matplotlib.backend_tools import ToolZoom, ToolPan
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
 
-# Load video and deeplabcut coordinates
-video_path = r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230307\HM_20230307_APAChar_FAA-1035302_LR_side_1.avi"
-coord_path = r"X:\hmorley\Dual-belt_APAs\analysis\DLC_DualBelt\Misc\Testing_analysed_files\HM_20230307_APAChar_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_550000.h5"
+# Function to select video paths via file dialog
+def select_video_paths():
+    root = Tk()
+    root.withdraw()
+    chosen_video_path = askopenfilename(title="Select a Video (Side, Front, or Overhead)")
+    if not chosen_video_path:
+        raise ValueError("No video selected.")
 
-print(f"Video path: {video_path}")
+    if '_side_' in chosen_video_path:
+        chosen_cam = 'side'
+    elif '_front_' in chosen_video_path:
+        chosen_cam = 'front'
+    elif '_overhead_' in chosen_video_path:
+        chosen_cam = 'overhead'
+    else:
+        raise ValueError("Unknown camera view selected. Please select a side, front, or overhead video.")
 
-# Check if video file exists
-if not os.path.exists(video_path):
-    print(f"Error: Video file does not exist at path: {video_path}")
-    exit(1)
+    video_base = chosen_video_path.replace(f'_{chosen_cam}_1.avi', '')  # Base path without view-specific suffix
+    video_paths = {
+        'side': video_base + '_side_1.avi',
+        'front': video_base + '_front_1.avi',
+        'overhead': video_base + '_overhead_1.avi'
+    }
 
-# Check if coordinate file exists
-if not os.path.exists(coord_path):
-    print(f"Error: Coordinate file does not exist at path: {coord_path}")
-    exit(1)
+    # Find the corresponding coordinate files in the same directories as the videos
+    coord_paths = {
+        'side': find_matching_coord_file(video_paths['side'], 'side'),
+        'front': find_matching_coord_file(video_paths['front'], 'front'),
+        'overhead': find_matching_coord_file(video_paths['overhead'], 'overhead')
+    }
 
+    return chosen_cam, video_paths, coord_paths
 
-extracted_frames_dir = "extracted_frames"
-if not os.path.exists(extracted_frames_dir):
-    os.makedirs(extracted_frames_dir)
+def find_matching_coord_file(video_path, view):
+    video_dir = os.path.dirname(video_path)
+    video_core_name = os.path.basename(video_path).replace(f'_{view}_1.avi', '')  # Extract the core part of the name
+
+    # List all .h5 files in the directory
+    coord_files = [f for f in os.listdir(video_dir) if f.endswith('.h5') and view in f]
+
+    # Search for any .h5 file that contains the core video name and the specific view
+    matching_files = [f for f in coord_files if video_core_name in f and f'_{view}_' in f]
+
+    if not matching_files:
+        raise FileNotFoundError(f"No matching .h5 file found for {video_path} with view {view}")
+
+    # If multiple files match, choose the one with the longest common prefix
+    matching_files.sort(key=lambda f: len(os.path.commonprefix([video_core_name, f])), reverse=True)
+
+    return os.path.join(video_dir, matching_files[0])
+
+# Use the function to get video and coordinate paths
+chosen_cam, video_paths, coord_paths = select_video_paths()
+
+# Confirm the paths being used
+print(f"Using {chosen_cam} video path: {video_paths[chosen_cam]}")
+print(f"Using side coordinate path: {coord_paths['side']}")
+print(f"Using front coordinate path: {coord_paths['front']}")
+print(f"Using overhead coordinate path: {coord_paths['overhead']}")
+
+# Construct the extracted frames directory path
+video_base_name = os.path.basename(video_paths[chosen_cam]).replace(f'_{chosen_cam}_1.avi', '')
+extracted_frames_dir = f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{chosen_cam.capitalize()}/{video_base_name}"
+
+# Create the folder for extracted frames if it doesn't exist
+extracted_frames_dir_1 = extracted_frames_dir + '_1'
+if not os.path.exists(extracted_frames_dir_1):
+    os.makedirs(extracted_frames_dir_1)
 
 extracted_coords = pd.DataFrame()
 
 print("Reading coordinates...")
-coords = pd.read_hdf(coord_path)
+coords = pd.read_hdf(coord_paths[chosen_cam])
 print("Finished")
 
 # Flatten the multi-index columns and rename them
@@ -46,7 +95,7 @@ print(coords.head())
 print(coords.columns)
 
 print("Reading video...")
-cap = cv2.VideoCapture(video_path)
+cap = cv2.VideoCapture(video_paths[chosen_cam])
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 print("Finished")
 
@@ -71,7 +120,6 @@ for col in coords.columns:
 # Create the color map based on the original order
 cmap = cm.get_cmap('viridis', len(bodyparts))
 color_map = {bodypart: cmap(i) for i, bodypart in enumerate(bodyparts)}
-
 
 # Initial scatter point size
 scatter_size = 50
@@ -181,7 +229,8 @@ def home(event):
     fig.canvas.manager.toolbar.home()
 
 def restore_scorer_level(df):
-    df.columns = pd.MultiIndex.from_tuples([('scorer', *col.split('_')) for col in df.columns])
+    df.columns = pd.MultiIndex.from_tuples([('Holly', *col.split('_')) for col in df.columns])
+    # df.columns.names = ['scorer', 'bodyparts', 'coords']
     return df
 
 def extract_frame():
@@ -191,7 +240,8 @@ def extract_frame():
     cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
     ret, frame = cap.read()
     if ret:
-        img_filename = os.path.join(extracted_frames_dir, f"frame_{current_frame}.png")
+        extracted_frames_dir_1 = extracted_frames_dir + '_1'
+        img_filename = os.path.join(extracted_frames_dir_1, f"img{current_frame}.png")
         cv2.imwrite(img_filename, frame)
         print(f"Saved: {img_filename}")
 
@@ -201,18 +251,22 @@ def extract_frame():
     # Restore scorer level before saving
     frame_coords_with_scorer = restore_scorer_level(frame_coords)
 
+    # add multiindex
+    frames_dir = extracted_frames_dir_1.split('/')[-1]
+    frame_coords_with_scorer.index = pd.MultiIndex.from_tuples([('labeled_data', frames_dir, img_filename)])
+
     # Append to the extracted coordinates DataFrame
     extracted_coords = pd.concat([extracted_coords, frame_coords_with_scorer])
+    extracted_coords.columns.names = ['scorer', 'bodyparts', 'coords']
 
     # Save to CSV and HDF5
-    csv_filename = os.path.join(extracted_frames_dir, "extracted_coords.csv")
-    h5_filename = os.path.join(extracted_frames_dir, "extracted_coords.h5")
+    csv_filename = os.path.join(extracted_frames_dir, f"extracted_coords_{chosen_cam}.csv")
+    h5_filename = os.path.join(extracted_frames_dir, f"extracted_coords_{chosen_cam}.h5")
 
     extracted_coords.to_csv(csv_filename, index=False)
     extracted_coords.to_hdf(h5_filename, key='df', mode='w')
 
     print(f"Saved: {csv_filename} and {h5_filename}")
-
 
 # Create Matplotlib figure and axes
 fig, ax = plt.subplots()
@@ -254,7 +308,6 @@ btn_home.on_clicked(home)
 ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])  # Position the button appropriately
 btn_extract = MplButton(ax_extract, 'Extract Frame')
 btn_extract.on_clicked(lambda event: extract_frame())
-
 
 # Show the initial frame
 plot_frame(current_frame)

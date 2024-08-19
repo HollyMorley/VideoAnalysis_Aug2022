@@ -1,18 +1,18 @@
-# config.py
+# USER SETTINGS
+dir = "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling"
 
 # Paths
-DEFAULT_CALIBRATION_FILE_PATH = "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/CameraCalibration/default_calibration_labels.csv"
-CALIBRATION_SAVE_PATH_TEMPLATE = "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/CameraCalibration/{video_name}/calibration_labels.csv"
+DEFAULT_CALIBRATION_FILE_PATH = "%s/CameraCalibration/default_calibration_labels.csv" %(dir)
+CALIBRATION_SAVE_PATH_TEMPLATE = "%s/CameraCalibration/{video_name}/calibration_labels.csv" %(dir)
 FRAME_SAVE_PATH_TEMPLATE = {
-    "side": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Side/{video_name}",
-    "front": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Front/{video_name}",
-    "overhead": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Overhead/{video_name}"
+    "side": "%s/Side/{video_name}" %(dir),
+    "front": "%s/Front/{video_name}" %(dir),
+    "overhead": "%s/Overhead/{video_name}" %(dir),
 }
-
 LABEL_SAVE_PATH_TEMPLATE = {
-    "side": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Side/{video_name}",
-    "front": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Front/{video_name}",
-    "overhead": "H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/Overhead/{video_name}"
+    "side": "%s/Side/{video_name}" %(dir),
+    "front": "%s/Front/{video_name}" %(dir),
+    "overhead": "%s/Overhead/{video_name}" %(dir),
 }
 
 
@@ -26,15 +26,42 @@ BODY_PART_LABELS = ["StartPlatL", "StepL", "StartPlatR", "StepR", "Door", "Trans
                     "ForepawToeL", "ForepawKnuckleL", "ForepawAnkleL", "ForepawKneeL",
                     "HindpawToeR", "HindpawKnuckleR", "HindpawAnkleR", "HindpawKneeR",
                     "HindpawToeL", "HindpawKnuckleL", "HindpawAnkleL", "HindpawKneeL"]
-OPTIMIZATION_REFERENCE_LABELS = ['Nose', 'ForepawToeR', 'ForepawToeL', 'Back1', 'Back6', 'Tail12', 'StartPlatR']
+# OPTIMIZATION_REFERENCE_LABELS = ['Nose', 'HindpawToeR', 'HindpawToeL', 'HindpawAnkleR', 'HindpawAnkleL', 'Back1', 'Tail1', 'Tail12']
+# REFERENCE_LABEL_WEIGHTS = {
+#     'Nose': 1.0,
+#     'HindpawToeR': 1.0,
+#     'HindpawToeL': 1.0,
+#     'HindpawAnkleR': 1.0,
+#     'HindpawAnkleL': 1.0,
+#     'Back1': 1.0,
+#     'Tail1': 1.0,
+#     'Tail12': 1.0,
+# }
+OPTIMIZATION_REFERENCE_LABELS = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
+                                 'HindpawKnuckleR', 'Back1', 'Back3', 'Back6', 'Back9', 'Tail1', 'Tail6', 'Tail12',
+                                 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL', 'Door']
 REFERENCE_LABEL_WEIGHTS = {
     'Nose': 2.0,
+    'EarL': 0.5,
+    'EarR': 0.5,
     'ForepawToeR': 1.0,
     'ForepawToeL': 1.0,
-    'Back1': 1,
-    'Back6': 1,
-    'Tail12': 1,
+    'HindpawToeR': 1.0,
+    'HindpawKnuckleR': 1,
+    'Back1': 1.0,
+    'Back3': 1.0,
+    'Back6': 1.0,
+    'Back9': 1.0,
+    'Tail1': 5.0,
+    'Tail6': 1.0,
+    'Tail12': 5.0,
     'StartPlatR': 0.5,
+    'StepR': 0.5,
+    'StartPlatL': 0.5,
+    'StepL': 0.5,
+    'TransitionR': 0.5,
+    'TransitionL': 0.5,
+    'Door': 10.0,
 }
 
 # Marker Size

@@ -1,24 +1,24 @@
+import sys
+import os
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+sys.path.append(parent_dir)
+
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import cv2
-import os
-import bisect
 import pandas as pd
 import numpy as np
-import mpld3
-from mpld3 import plugins
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.backend_bases import MouseButton
 from PIL import Image, ImageTk, ImageEnhance
-import h5py
 from scipy.optimize import minimize
 from sklearn.linear_model import LinearRegression
-from tqdm import tqdm
 import time
 from functools import lru_cache
 from pycalib.calib import triangulate
-
 
 import Helpers.MultiCamLabelling_config as config
 from Helpers.CalibrateCams import BasicCalibration
@@ -67,6 +67,9 @@ class MainTool:
         label_button = tk.Button(main_frame, text="Label Frames", command=self.label_frames_menu)
         label_button.pack(pady=5)
 
+        replace_calib_button = tk.Button(main_frame, text="Replace Calibration", command=self.replace_calibration)
+        replace_calib_button.pack(pady=5)
+
     def clear_root(self):
         for widget in self.root.winfo_children():
             widget.destroy()
@@ -82,6 +85,10 @@ class MainTool:
     def label_frames_menu(self):
         self.clear_root()
         LabelFramesTool(self.root, self)
+
+    def replace_calibration(self):
+        self.clear_root()
+        ReplaceCalibrationLabels(self.root, self)
 
 
 class ExtractFramesTool:
@@ -1005,6 +1012,9 @@ class LabelFramesTool:
             for frame_idx in range(min_frame_count)
         }
 
+        # Initialize optimization checkboxes
+        self.optimization_checkboxes = [tk.BooleanVar(value=False) for _ in range(min_frame_count)]
+
         self.match_frames()  # Call match_frames here
 
         self.setup_labeling_ui()
@@ -1014,7 +1024,7 @@ class LabelFramesTool:
 
         for view in ['side', 'front', 'overhead']:
             label_file_path = os.path.join(config.LABEL_SAVE_PATH_TEMPLATE[view].format(video_name=video_names[view]),
-                                           "CollectedData_Holly.csv")
+                                           "CollectedData_Holly_init.csv")
             if os.path.exists(label_file_path):
                 self.load_existing_labels(label_file_path, view)
 
@@ -1069,6 +1079,16 @@ class LabelFramesTool:
 
         self.next_button = tk.Button(frame_control, text=">>", command=lambda: self.skip_labeling_frames(1))
         self.next_button.pack(side=tk.LEFT, padx=5)
+
+        # Add optimization checkbox
+        self.optimization_checkbox = tk.Checkbutton(
+            frame_control,
+            text="Optimization",
+            variable=self.optimization_checkboxes[self.current_frame_index],
+            onvalue=True,
+            offvalue=False
+        )
+        self.optimization_checkbox.pack(side=tk.LEFT, padx=5)
 
         button_frame = tk.Frame(control_frame)
         button_frame.pack(side=tk.LEFT, padx=20)
@@ -1149,7 +1169,7 @@ class LabelFramesTool:
             ax.tick_params(axis='both', which='major', labelsize=8)
             ax.xaxis.set_major_locator(plt.MultipleLocator(50))
             ax.yaxis.set_major_locator(plt.MultipleLocator(50))
-            #ax.grid(visible=True, linestyle='--', linewidth=0.5)
+            # ax.grid(visible=True, linestyle='--', linewidth=0.5)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=main_frame)
         self.canvas.draw()
@@ -1334,7 +1354,7 @@ class LabelFramesTool:
             if view == 'front':
                 far_edge_value += 140  # Add the length of the belt to the far edge
             if view == 'overhead':
-                far_edge_value = 60  # Set the far edge to fixed height for overhead view
+                far_edge_value = 40  # Set the far edge to fixed height for overhead view
             far_edge = line_at_t(self.find_t_for_coordinate(far_edge_value, coord_index, point_3d, camera_center))
 
             return near_edge, far_edge
@@ -1412,6 +1432,11 @@ class LabelFramesTool:
         self.current_label.set("Nose")
 
     def display_frame(self):
+        self.frame_label.config(text=f"Frame: {self.current_frame_index + 1}/{len(self.frames['side'])}")
+
+        self.optimization_checkbox.config(variable=self.optimization_checkboxes[self.current_frame_index])
+
+        # Other existing code to display frames...
         frame_side, frame_front, frame_overhead = self.matched_frames[self.current_frame_index]
 
         frame_side_img = self.frames['side'][frame_side]
@@ -1754,11 +1779,11 @@ class LabelFramesTool:
                        ['side', 'front', 'overhead']}
         save_paths = {
             'side': os.path.join(config.LABEL_SAVE_PATH_TEMPLATE['side'].format(video_name=video_names['side']),
-                                "CollectedData_Holly.csv"),
+                                "CollectedData_Holly_init.csv"),
             'front': os.path.join(config.LABEL_SAVE_PATH_TEMPLATE['front'].format(video_name=video_names['front']),
-                                "CollectedData_Holly.csv"),
+                                "CollectedData_Holly_init.csv"),
             'overhead': os.path.join(config.LABEL_SAVE_PATH_TEMPLATE['overhead'].format(video_name=video_names['overhead']),
-                                "CollectedData_Holly.csv")
+                                "CollectedData_Holly_init.csv")
         }
         for path in save_paths.values():
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1837,19 +1862,28 @@ class LabelFramesTool:
     def optimize_calibration(self):
         reference_points = config.OPTIMIZATION_REFERENCE_LABELS
 
-        # Print initial reprojection error
-        initial_total_error, initial_errors = self.compute_reprojection_error(reference_points)
-        print(f"Initial total reprojection error for {reference_points}: {initial_total_error}")
+        # Collect labels from frames with the optimization checkbox checked
+        checked_frames_indices = [i for i, var in enumerate(self.optimization_checkboxes) if var.get()]
+
+        print(f"Checked frames indices for optimization: {checked_frames_indices}")
+
+        if not checked_frames_indices:
+            messagebox.showwarning("Warning", "No frames selected for optimization.")
+            return
+
+        initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, checked_frames_indices)
+        print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
         for label, views in initial_errors.items():
             print(f"Initial reprojection error for {label}: {views}")
 
         initial_flat_points = self.flatten_calibration_points()
-        args = (reference_points,)
+        args = (reference_points, checked_frames_indices)
 
         bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
 
+        print("Optimizing calibration points...")
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 15000, 'ftol': 1e-8, 'gtol': 1e-5, 'disp': False})
+                          options={'maxiter': 100000, 'ftol': 1e-15, 'gtol': 1e-15, 'disp': False})
 
         optimized_points = self.reshape_calibration_points(result.x)
 
@@ -1859,57 +1893,56 @@ class LabelFramesTool:
 
         self.recalculate_camera_parameters()
 
-        # Print new reprojection error
-        new_total_error, new_errors = self.compute_reprojection_error(reference_points)
-        print(f"New total reprojection error for {reference_points}: {new_total_error}")
+        new_total_error, new_errors = self.compute_reprojection_error(reference_points, checked_frames_indices)
+        print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
         for label, views in new_errors.items():
             print(f"New reprojection error for {label}: {views}")
 
         self.save_optimized_calibration_points()
 
-        # Reload enhanced calibration points and update projection matrices
         self.update_calibration_labels_and_projection()
 
-    def compute_reprojection_error(self, labels, extrinsics=None, weighted=False):
+        self.display_frame()
+
+    def compute_reprojection_error(self, labels, frame_indices, extrinsics=None, weighted=False):
         errors = {label: {"side": 0, "front": 0, "overhead": 0} for label in labels}
         cams = ["side", "front", "overhead"]
         total_error = 0
 
-        for label in labels:
-            # Triangulate the 3D point
-            point_3d = self.triangulate(label, extrinsics)
+        for frame_index in frame_indices:
+            frame_index = int(frame_index)  # Ensure frame_index is an integer
+            side_frame, front_frame, overhead_frame = self.matched_frames[frame_index]
+            for label in labels:
+                point_3d = self.triangulate(label, extrinsics, side_frame, front_frame, overhead_frame)
+                if point_3d is not None:
+                    point_3d = point_3d[:3]
+                    projections = self.project_to_view(point_3d, extrinsics)
 
-            if point_3d is not None:
-                point_3d = point_3d[:3]  # Get the 3D coordinates
-
-                # Project the 3D point to the other views
-                projections = self.project_to_view(point_3d, extrinsics)
-
-                for view in cams:
-                    if self.body_part_points[self.current_frame_index][label][view] is not None:
-                        original_x, original_y = self.body_part_points[self.current_frame_index][label][view]
-                        if view in projections:
-                            projected_x, projected_y = projections[view]
-                            error = np.sqrt(
-                                (projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)  # Euclidean distance
-                            if weighted:
-                                weight = config.REFERENCE_LABEL_WEIGHTS.get(label,
-                                                                            1.0)  # Default weight is 1.0 if not specified
-                                error *= weight
-                            errors[label][view] = error
-                            total_error += error
+                    for view, frame in zip(cams, [side_frame, front_frame, overhead_frame]):
+                        if self.body_part_points[frame][label][view] is not None:
+                            original_x, original_y = self.body_part_points[frame][label][view]
+                            if view in projections:
+                                projected_x, projected_y = projections[view]
+                                error = np.sqrt(
+                                    (projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
+                                if weighted:
+                                    weight = config.REFERENCE_LABEL_WEIGHTS.get(label, 1.0)
+                                    error *= weight
+                                errors[label][view] = error
+                                total_error += error
         return total_error, errors
 
-    def triangulate(self, label, extrinsics=None):
+    def triangulate(self, label, extrinsics=None, side_frame=None, front_frame=None, overhead_frame=None):
         P = []
         coords = []
 
-        for view in ["side", "front", "overhead"]:
-            if self.body_part_points[self.current_frame_index][label][view] is not None:
+        frame_mapping = {'side': side_frame, 'front': front_frame, 'overhead': overhead_frame}
+        for view, frame in frame_mapping.items():
+            if self.body_part_points[frame][label][view] is not None:
                 P.append(self.get_p(view, extrinsics=extrinsics, return_value=True))
-                coords.append(self.body_part_points[self.current_frame_index][label][view])
+                coords.append(self.body_part_points[frame][label][view])
 
-        if len(P) < 2 or len(coords) < 2:  # Added this condition
+        if len(P) < 2 or len(coords) < 2:
             return None
 
         P = np.array(P)
@@ -1944,10 +1977,12 @@ class LabelFramesTool:
 
     def objective_function(self, flat_points, *args):
         reference_points = args[0]  # Extract reference points from args
+        frame_indices = args[1]  # Extract frame indices from args
         calibration_points = self.reshape_calibration_points(flat_points)
         temp_extrinsics = self.estimate_extrinsics(calibration_points)
 
-        total_error, _ = self.compute_reprojection_error(reference_points, temp_extrinsics, weighted=True)
+        total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
+                                                         weighted=True)
         return total_error
 
     def estimate_extrinsics(self, calibration_points):
@@ -2045,6 +2080,82 @@ class LabelFramesTool:
             if answer:  # Yes, save labels and exit
                 self.save_labels()
             self.root.quit()  # Exit without saving if No or after saving if Yes
+
+
+
+
+class ReplaceCalibrationLabels():
+    # button in MainTool to adjust all CollectedData_Holly_init.csv files under config.dir to replace the current calibration labels (excluding 'Door') with the original calibration labels
+    def __init__(self, root, main_tool):
+        self.root = root
+        self.root.title("Replace Calibration Labels")
+        self.root.geometry("300x100")
+        self.root.resizable(False, False)
+        self.main_tool = main_tool
+
+        self.dir = config.dir
+
+        self.replace_button = tk.Button(self.root, text="Replace Calibration Labels", command=self.replace_labels)
+        self.replace_button.pack(pady=20)
+
+        # add a Main Menu button to return to the main tool
+        self.main_menu_button = tk.Button(self.root, text="Main Menu", command=self.return_to_main_menu)
+        self.main_menu_button.pack(pady=20)
+
+
+    def replace_labels(self):
+        for view in ["Side", "Front", "Overhead"]:
+            view_dir = '/'.join([self.dir, view])
+            video_dirs = [f for f in os.listdir(view_dir) if os.path.isdir(os.path.join(view_dir, f))]
+            for video_name in video_dirs:
+                video_dir = '/'.join([view_dir, video_name])
+                for file in os.listdir(video_dir):
+                    if file.endswith("CollectedData_Holly_init.h5"):
+                        file_path = '/'.join([video_dir, file])
+                        #file_path = os.path.join(video_dir, file)
+                        df = pd.read_hdf(file_path)
+                        df = self.replace_calibration_labels(df, video_name)
+                        df = self.replace_labeled_data_hyphen(df)
+                        df.to_csv(file_path.replace("CollectedData_Holly_init.h5","CollectedData_Holly.csv"))
+                        df.to_hdf(file_path.replace("CollectedData_Holly_init.h5", "CollectedData_Holly.h5"), key='df_with_missing', mode='w', format='fixed')
+        messagebox.showinfo("Info", "Calibration labels replaced successfully")
+
+    def replace_calibration_labels(self, df, video_name):
+        # remove view name from video_name
+        video_name, date, view = self.parse_video_path(video_name)
+        # change uppercase view to lowercase
+        view = view.lower()
+
+        calibration_labels_path = config.CALIBRATION_SAVE_PATH_TEMPLATE.format(video_name=video_name)
+        calibration_labels = pd.read_csv(calibration_labels_path)
+        calibration_labels = calibration_labels[calibration_labels['bodyparts'] != 'Door']
+
+        for label in calibration_labels['bodyparts'].unique():
+            for coord in ['x', 'y']:
+                calibration = calibration_labels[(calibration_labels['bodyparts'] == label) & (calibration_labels['coords'] == coord)].loc(axis=1)[view]
+                # fill all rows with the same calibration value
+                df.loc(axis=1)['Holly', label, coord] = calibration.values[0]
+
+        return df
+
+    def replace_labeled_data_hyphen(self, df):
+        # replace 'labeled_data' in index level 0 with 'labeled-data'
+        df = df.rename(index={'labeled_data': 'labeled-data'}, level=0)
+        return df
+
+
+    def parse_video_path(self, video_path):
+        video_file = os.path.basename(video_path)
+        parts = video_file.split('_')
+        date = parts[1]
+        camera_view = [part for part in parts if part in ['side', 'front', 'overhead']][0]
+        name_parts = [part for part in parts if part not in ['side', 'front', 'overhead']]
+        name = '_'.join(name_parts).replace('.avi', '')  # Remove .avi extension if present
+        return name, date, camera_view
+
+    def return_to_main_menu(self):
+        self.root.destroy()
+        self.main_tool.root.deiconify()
 
 
 if __name__ == "__main__":

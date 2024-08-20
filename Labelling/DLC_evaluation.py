@@ -70,14 +70,17 @@ print(f"Using side coordinate path: {coord_paths['side']}")
 print(f"Using front coordinate path: {coord_paths['front']}")
 print(f"Using overhead coordinate path: {coord_paths['overhead']}")
 
-# Construct the extracted frames directory path
+# Function to construct the extracted frames directory path
+def construct_extracted_dir(chosen_cam, video_base_name):
+    return f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{chosen_cam.capitalize()}/{video_base_name}"
+
+# Construct extracted frames directory path for the selected camera
 video_base_name = os.path.basename(video_paths[chosen_cam]).replace(f'_{chosen_cam}_1.avi', '')
-extracted_frames_dir = f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{chosen_cam.capitalize()}/{video_base_name}"
+extracted_frames_dir = construct_extracted_dir(chosen_cam, video_base_name)
 
 # Create the folder for extracted frames if it doesn't exist
-extracted_frames_dir_1 = extracted_frames_dir + '_1'
-if not os.path.exists(extracted_frames_dir_1):
-    os.makedirs(extracted_frames_dir_1)
+if not os.path.exists(extracted_frames_dir):
+    os.makedirs(extracted_frames_dir)
 
 extracted_coords = pd.DataFrame()
 
@@ -234,39 +237,51 @@ def restore_scorer_level(df):
     return df
 
 def extract_frame():
-    global extracted_coords
+    def save_frame_and_coords(camera):
+        # Load video and coordinate data
+        video_cap = cv2.VideoCapture(video_paths[camera])
+        video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+        ret, frame = video_cap.read()
+        if ret:
+            vid_name = os.path.basename(video_paths[camera]).split('.')[0]
+            camera_dir = construct_extracted_dir(camera, vid_name)
+            if not os.path.exists(camera_dir):
+                os.makedirs(camera_dir)
+            img_filename = os.path.join(camera_dir, f"img{current_frame}.png")
+            cv2.imwrite(img_filename, frame)
+            print(f"Saved: {img_filename}")
 
-    # Extract and save the current frame as an image
-    cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
-    ret, frame = cap.read()
-    if ret:
-        extracted_frames_dir_1 = extracted_frames_dir + '_1'
-        img_filename = os.path.join(extracted_frames_dir_1, f"img{current_frame}.png")
-        cv2.imwrite(img_filename, frame)
-        print(f"Saved: {img_filename}")
+            # Extract and save the corresponding row from coords
+            frame_coords = pd.read_hdf(coord_paths[camera])
+            frame_coords = frame_coords.droplevel(0, axis=1)
+            frame_coords.columns = ['_'.join(col).strip() for col in frame_coords.columns.values]
+            frame_coords['frame'] = frame_coords.index
+            frame_coords = frame_coords[frame_coords['frame'] == current_frame]
 
-    # Extract and save the corresponding row from coords
-    frame_coords = coords[coords['frame'] == current_frame]
+            # Restore scorer level before saving
+            frame_coords_with_scorer = restore_scorer_level(frame_coords)
 
-    # Restore scorer level before saving
-    frame_coords_with_scorer = restore_scorer_level(frame_coords)
+            # Add an index with MultiIndex for 'labeled_data', video name, and image name
+            new_index = pd.MultiIndex.from_tuples(
+                [(f'labeled_data', vid_name, f"img{current_frame}.png")]
+            )
+            frame_coords_with_scorer.set_index(new_index, append=False, inplace=True)
 
-    # add multiindex
-    frames_dir = extracted_frames_dir_1.split('/')[-1]
-    frame_coords_with_scorer.index = pd.MultiIndex.from_tuples([('labeled_data', frames_dir, img_filename)])
+            # Save to CSV with MultiIndex preserved
+            csv_filename = os.path.join(camera_dir, "CollectedData_Holly_init.csv")
+            h5_filename = os.path.join(camera_dir, "CollectedData_Holly_init.h5")
 
-    # Append to the extracted coordinates DataFrame
-    extracted_coords = pd.concat([extracted_coords, frame_coords_with_scorer])
-    extracted_coords.columns.names = ['scorer', 'bodyparts', 'coords']
+            # Write each camera's data to its own file without concatenating
+            frame_coords_with_scorer.to_csv(csv_filename, index=True)  # Make sure to include index=True
+            frame_coords_with_scorer.to_hdf(h5_filename, key='df', mode='w')
 
-    # Save to CSV and HDF5
-    csv_filename = os.path.join(extracted_frames_dir, f"extracted_coords_{chosen_cam}.csv")
-    h5_filename = os.path.join(extracted_frames_dir, f"extracted_coords_{chosen_cam}.h5")
+            print(f"Saved: {csv_filename} and {h5_filename}")
 
-    extracted_coords.to_csv(csv_filename, index=False)
-    extracted_coords.to_hdf(h5_filename, key='df', mode='w')
-
-    print(f"Saved: {csv_filename} and {h5_filename}")
+    # Save for the selected camera and the other two views separately
+    save_frame_and_coords(chosen_cam)
+    other_views = {'side', 'front', 'overhead'} - {chosen_cam}
+    for view in other_views:
+        save_frame_and_coords(view)
 
 # Create Matplotlib figure and axes
 fig, ax = plt.subplots()

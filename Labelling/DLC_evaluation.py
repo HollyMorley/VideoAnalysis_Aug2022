@@ -1,14 +1,14 @@
-import cv2
+import os
 import pandas as pd
-import numpy as np
+import cv2
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from matplotlib.widgets import Button as MplButton
-import os
-import mplcursors
-from matplotlib import cm
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+from sklearn.linear_model import LinearRegression
+import numpy as np
+from matplotlib import cm
 
 # Function to select video paths via file dialog
 def select_video_paths():
@@ -27,11 +27,11 @@ def select_video_paths():
     else:
         raise ValueError("Unknown camera view selected. Please select a side, front, or overhead video.")
 
-    video_base = chosen_video_path.replace(f'_{chosen_cam}_1.avi', '')  # Base path without view-specific suffix
+    video_base = os.path.splitext(chosen_video_path)[0].replace(f'_{chosen_cam}_1', '')  # Base path without view-specific suffix
     video_paths = {
-        'side': video_base + '_side_1.avi',
-        'front': video_base + '_front_1.avi',
-        'overhead': video_base + '_overhead_1.avi'
+        'side': f"{video_base}_side_1.avi",
+        'front': f"{video_base}_front_1.avi",
+        'overhead': f"{video_base}_overhead_1.avi"
     }
 
     # Find the corresponding coordinate files in the same directories as the videos
@@ -61,6 +61,18 @@ def find_matching_coord_file(video_path, view):
 
     return os.path.join(video_dir, matching_files[0])
 
+def load_timestamps(video_path, view):
+    # Adjust the timestamp file to match the provided structure
+    timestamp_file = video_path.replace('.avi', '_Timestamps.csv')
+    if not os.path.exists(timestamp_file):
+        raise FileNotFoundError(f"Timestamp file not found at: {timestamp_file}")
+    timestamps = pd.read_csv(timestamp_file)
+    return timestamps
+
+def zero_timestamps(timestamps):
+    timestamps['Timestamp'] = timestamps['Timestamp'] - timestamps['Timestamp'][0]
+    return timestamps
+
 # Use the function to get video and coordinate paths
 chosen_cam, video_paths, coord_paths = select_video_paths()
 
@@ -70,49 +82,93 @@ print(f"Using side coordinate path: {coord_paths['side']}")
 print(f"Using front coordinate path: {coord_paths['front']}")
 print(f"Using overhead coordinate path: {coord_paths['overhead']}")
 
+# Load timestamps
+timestamps_side = zero_timestamps(load_timestamps(video_paths['side'], 'side'))
+timestamps_front = zero_timestamps(load_timestamps(video_paths['front'], 'front'))
+timestamps_overhead = zero_timestamps(load_timestamps(video_paths['overhead'], 'overhead'))
+
+def adjust_timestamps(side_timestamps, other_timestamps):
+    mask = other_timestamps['Timestamp'].diff() < 4.045e+6
+    other_timestamps_single_frame = other_timestamps[mask]
+    side_timestamps_single_frame = side_timestamps[mask]
+    diff = other_timestamps_single_frame['Timestamp'] - side_timestamps_single_frame['Timestamp']
+
+    # Find the best fit line for the lower half of the data by straightening the line
+    model = LinearRegression().fit(side_timestamps_single_frame['Timestamp'].values.reshape(-1, 1), diff.values)
+    slope = model.coef_[0]
+    intercept = model.intercept_
+    straightened_diff = diff - (slope * side_timestamps_single_frame['Timestamp'] + intercept)
+    correct_diff_idx = np.where(straightened_diff < straightened_diff.mean())
+
+    model_true = LinearRegression().fit(side_timestamps_single_frame['Timestamp'].values[correct_diff_idx].reshape(-1, 1), diff.values[correct_diff_idx])
+    slope_true = model_true.coef_[0]
+    intercept_true = model_true.intercept_
+    adjusted_timestamps = other_timestamps['Timestamp'] - (slope_true * other_timestamps['Timestamp'] + intercept_true)
+    return adjusted_timestamps
+
+timestamps_side_adj = timestamps_side['Timestamp']
+timestamps_front_adj = adjust_timestamps(timestamps_side, timestamps_front)
+timestamps_overhead_adj = adjust_timestamps(timestamps_side, timestamps_overhead)
+
+def match_frames(timestamps_side, timestamps_front, timestamps_overhead):
+    buffer_ns = int(4.04e+6)  # Frame duration in nanoseconds
+
+    # Ensure the timestamps are sorted
+    timestamps_side = timestamps_side.sort_values().reset_index(drop=True).astype('float64')
+    timestamps_front = timestamps_front.sort_values().reset_index(drop=True).astype('float64')
+    timestamps_overhead = timestamps_overhead.sort_values().reset_index(drop=True).astype('float64')
+
+    # Prepare the DataFrames with Frame Numbers
+    side_df = pd.DataFrame({'Timestamp': timestamps_side, 'Frame_number_side': range(len(timestamps_side))})
+    front_df = pd.DataFrame({'Timestamp': timestamps_front, 'Frame_number_front': range(len(timestamps_front))})
+    overhead_df = pd.DataFrame(
+        {'Timestamp': timestamps_overhead, 'Frame_number_overhead': range(len(timestamps_overhead))})
+
+    # Perform asof merge to find the closest matching frames within the buffer
+    matched_front = pd.merge_asof(
+        side_df,
+        front_df,
+        on='Timestamp',
+        direction='nearest',
+        tolerance=buffer_ns,
+        suffixes=('_side', '_front')
+    )
+
+    matched_all = pd.merge_asof(
+        matched_front,
+        overhead_df,
+        on='Timestamp',
+        direction='nearest',
+        tolerance=buffer_ns,
+        suffixes=('_side', '_overhead')
+    )
+
+    # Handle NaNs explicitly by setting unmatched frames to -1
+    matched_frames = matched_all[['Frame_number_side', 'Frame_number_front', 'Frame_number_overhead']].applymap(
+        lambda x: int(x) if pd.notnull(x) else -1
+    ).values.tolist()
+
+    return matched_frames
+
+matched_frames = match_frames(timestamps_side_adj, timestamps_front_adj, timestamps_overhead_adj)
+
 # Function to construct the extracted frames directory path
-def construct_extracted_dir(chosen_cam, video_base_name):
-    return f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{chosen_cam.capitalize()}/{video_base_name}"
+def construct_extracted_dir(camera, vid_name):
+    return f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{camera.capitalize()}/{vid_name}"
 
-# Construct extracted frames directory path for the selected camera
-video_base_name = os.path.basename(video_paths[chosen_cam]).replace(f'_{chosen_cam}_1.avi', '')
-extracted_frames_dir = construct_extracted_dir(chosen_cam, video_base_name)
+# Initialize Video Capture for the chosen camera
+cap = cv2.VideoCapture(video_paths[chosen_cam])
+frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+current_frame = 0
+pcutoff = 0.3  # initial cutoff value
 
-# Create the folder for extracted frames if it doesn't exist
-if not os.path.exists(extracted_frames_dir):
-    os.makedirs(extracted_frames_dir)
-
-extracted_coords = pd.DataFrame()
-
-print("Reading coordinates...")
+# Load the coordinates
 coords = pd.read_hdf(coord_paths[chosen_cam])
-print("Finished")
-
-# Flatten the multi-index columns and rename them
 coords = coords.droplevel(0, axis=1)
 coords.columns = ['_'.join(col).strip() for col in coords.columns.values]
 coords['frame'] = coords.index
 
-print("Coords DataFrame:")
-print(coords.head())
-print(coords.columns)
-
-print("Reading video...")
-cap = cv2.VideoCapture(video_paths[chosen_cam])
-frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-print("Finished")
-
-if not cap.isOpened():
-    print("Error: Could not open video.")
-    exit(1)
-else:
-    print(f"Total number of frames: {frame_count}")
-
-# Set initial values
-current_frame = 0
-pcutoff = 0.9  # initial cutoff value
-
-# Extract body parts in the order they appear in the DataFrame
+# Body parts extraction
 bodyparts = []
 for col in coords.columns:
     if '_x' in col:
@@ -120,12 +176,35 @@ for col in coords.columns:
         if bodypart not in bodyparts:
             bodyparts.append(bodypart)
 
-# Create the color map based on the original order
 cmap = cm.get_cmap('viridis', len(bodyparts))
 color_map = {bodypart: cmap(i) for i, bodypart in enumerate(bodyparts)}
 
-# Initial scatter point size
 scatter_size = 50
+
+# Skeleton links between body parts
+skeleton = [
+    ('Nose', 'EarR'), ('Nose', 'EarL'), ('Nose', 'Back1'), ('EarR', 'EarL'),
+    ('Back1', 'Back2'), ('Back2', 'Back3'), ('Back3', 'Back4'), ('Back4', 'Back5'),
+    ('Back5', 'Back6'), ('Back6', 'Back7'), ('Back7', 'Back8'), ('Back8', 'Back9'),
+    ('Back9', 'Back10'), ('Back10', 'Back11'), ('Back11', 'Back12'), ('Back12', 'Tail1'),
+    ('Tail1', 'Tail2'), ('Tail2', 'Tail3'), ('Tail3', 'Tail4'), ('Tail4', 'Tail5'),
+    ('Tail5', 'Tail6'), ('Tail6', 'Tail7'), ('Tail7', 'Tail8'), ('Tail8', 'Tail9'),
+    ('Tail9', 'Tail10'), ('Tail10', 'Tail11'), ('Tail11', 'Tail12'),
+    ('ForepawToeR', 'ForepawKnuckleR'), ('ForepawKnuckleR', 'ForepawAnkleR'),
+    ('ForepawAnkleR', 'ForepawKneeR'), ('ForepawToeL', 'ForepawKnuckleL'),
+    ('ForepawKnuckleL', 'ForepawAnkleL'), ('ForepawAnkleL', 'ForepawKneeL'),
+    ('HindpawToeR', 'HindpawKnuckleR'), ('HindpawKnuckleR', 'HindpawAnkleR'),
+    ('HindpawAnkleR', 'HindpawKneeR'), ('HindpawToeL', 'HindpawKnuckleL'),
+    ('HindpawKnuckleL', 'HindpawAnkleL'), ('HindpawAnkleL', 'HindpawKneeL'),
+    ('Back3', 'ForepawKneeR'), ('Back3', 'ForepawKneeL'),
+    ('Back10', 'HindpawKneeR'), ('Back10', 'HindpawKneeL'),
+    ('StartPlatL', 'StepL'), ('StartPlatR', 'StepR'),
+    ('StartPlatL', 'StartPlatR'), ('StepL', 'StepR'),
+    ('StartPlatL', 'TransitionL'), ('StartPlatR', 'TransitionR'),
+    ('TransitionL', 'TransitionR')
+]
+
+show_skeleton = False  # Flag to show/hide skeleton
 
 def plot_frame(frame_idx):
     global current_frame, scatter_points
@@ -142,7 +221,6 @@ def plot_frame(frame_idx):
 
     scatter_points = []  # Clear scatter points list for each frame
 
-    # Create a new annotation object to handle hovering labels
     annot = ax.annotate("", xy=(0, 0), xytext=(10, 10),
                         textcoords="offset points", bbox=dict(boxstyle="round", fc="w"),
                         arrowprops=dict(arrowstyle="->"))
@@ -169,50 +247,45 @@ def plot_frame(frame_idx):
             annot.set_visible(False)
             fig.canvas.draw_idle()
 
+    # Draw skeleton if show_skeleton is True
+    if show_skeleton:
+        for link in skeleton:
+            part1, part2 = link
+            if all(f'{part}_likelihood' in frame_coords.columns for part in link):
+                if frame_coords[f'{part1}_likelihood'].values[0] > pcutoff and frame_coords[f'{part2}_likelihood'].values[0] > pcutoff:
+                    x1, y1 = frame_coords[f'{part1}_x'].values[0], frame_coords[f'{part1}_y'].values[0]
+                    x2, y2 = frame_coords[f'{part2}_x'].values[0], frame_coords[f'{part2}_y'].values[0]
+                    ax.plot([x1, x2], [y1, y2], 'r-', lw=1)
+
+    # Draw body parts
     for col in frame_coords.columns:
         if 'likelihood' in col:
             bodypart = col.split('_likelihood')[0]
             likelihood = frame_coords[f'{bodypart}_likelihood'].values[0]
             x = frame_coords[f'{bodypart}_x'].values[0]
             y = frame_coords[f'{bodypart}_y'].values[0]
-            color = color_map[bodypart]  # Get the color for this bodypart
+            color = color_map[bodypart]
 
             if likelihood > pcutoff:
-                scatter = ax.scatter(
-                    x, y,
-                    s=scatter_size,
-                    color=color,
-                    edgecolors='k',
-                    marker='o'
-                )
+                scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='o')
             else:
-                scatter = ax.scatter(
-                    x, y,
-                    s=scatter_size,
-                    color=color,
-                    edgecolors='k',
-                    marker='x'
-                )
+                scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='x')
 
             scatter_points.append((bodypart, scatter))
 
     ax.set_title(f'Frame {frame_idx}')
     fig.canvas.draw_idle()
-
     fig.canvas.mpl_connect("motion_notify_event", hover)
 
-# Update function for scatter size slider
 def update_scatter_size(val):
     global scatter_size
     scatter_size = val
     plot_frame(current_frame)
 
-# Scrollbar update function
 def update(val):
     frame_idx = int(slider.val)
     plot_frame(frame_idx)
 
-# Function to skip frames
 def skip_frames(skip):
     new_frame = current_frame + skip
     if new_frame < 0:
@@ -221,7 +294,6 @@ def skip_frames(skip):
         new_frame = frame_count - 1
     slider.set_val(new_frame)
 
-# Zoom, pan, and home button functions
 def zoom(event):
     fig.canvas.manager.toolbar.zoom()
 
@@ -233,12 +305,11 @@ def home(event):
 
 def restore_scorer_level(df):
     df.columns = pd.MultiIndex.from_tuples([('Holly', *col.split('_')) for col in df.columns])
-    # df.columns.names = ['scorer', 'bodyparts', 'coords']
     return df
+
 
 def extract_frame():
     def save_frame_and_coords(camera):
-        # Load video and coordinate data
         video_cap = cv2.VideoCapture(video_paths[camera])
         video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
         ret, frame = video_cap.read()
@@ -251,37 +322,57 @@ def extract_frame():
             cv2.imwrite(img_filename, frame)
             print(f"Saved: {img_filename}")
 
-            # Extract and save the corresponding row from coords
+            # Load the coordinate data
             frame_coords = pd.read_hdf(coord_paths[camera])
             frame_coords = frame_coords.droplevel(0, axis=1)
             frame_coords.columns = ['_'.join(col).strip() for col in frame_coords.columns.values]
             frame_coords['frame'] = frame_coords.index
             frame_coords = frame_coords[frame_coords['frame'] == current_frame]
 
-            # Restore scorer level before saving
-            frame_coords_with_scorer = restore_scorer_level(frame_coords)
+            # Apply the pcutoff filter and remove likelihood columns
+            for col in frame_coords.columns:
+                if '_likelihood' in col:
+                    bodypart = col.split('_likelihood')[0]
+                    mask = frame_coords[col] < pcutoff
+                    x_col = f'{bodypart}_x'
+                    y_col = f'{bodypart}_y'
+                    # Set x and y to NaN where likelihood is below pcutoff
+                    frame_coords.loc[mask, [x_col, y_col]] = np.nan
 
-            # Add an index with MultiIndex for 'labeled_data', video name, and image name
-            new_index = pd.MultiIndex.from_tuples(
-                [(f'labeled_data', vid_name, f"img{current_frame}.png")]
-            )
+            # Drop the likelihood columns
+            filtered_coords = frame_coords.drop(columns=[col for col in frame_coords.columns if 'likelihood' in col])
+
+            frame_coords_with_scorer = restore_scorer_level(filtered_coords)
+
+            new_index = pd.MultiIndex.from_tuples([(f'labeled_data', vid_name, f"img{current_frame}.png")])
             frame_coords_with_scorer.set_index(new_index, append=False, inplace=True)
 
-            # Save to CSV with MultiIndex preserved
             csv_filename = os.path.join(camera_dir, "CollectedData_Holly_init.csv")
             h5_filename = os.path.join(camera_dir, "CollectedData_Holly_init.h5")
 
-            # Write each camera's data to its own file without concatenating
-            frame_coords_with_scorer.to_csv(csv_filename, index=True)  # Make sure to include index=True
-            frame_coords_with_scorer.to_hdf(h5_filename, key='df', mode='w')
+            # Check if the HDF5 file exists and load existing data
+            if os.path.exists(h5_filename):
+                existing_data = pd.read_hdf(h5_filename, key='df')
+                combined_data = pd.concat([existing_data, frame_coords_with_scorer], axis=0)
+            else:
+                combined_data = frame_coords_with_scorer
 
-            print(f"Saved: {csv_filename} and {h5_filename}")
+            # Save the combined data to both CSV and HDF5 formats
+            combined_data.to_csv(csv_filename, index=True)
+            combined_data.to_hdf(h5_filename, key='df', mode='w')
 
-    # Save for the selected camera and the other two views separately
+            print(f"Appended data and saved to: {csv_filename} and {h5_filename}")
+
     save_frame_and_coords(chosen_cam)
     other_views = {'side', 'front', 'overhead'} - {chosen_cam}
     for view in other_views:
         save_frame_and_coords(view)
+
+
+def toggle_skeleton(event):
+    global show_skeleton
+    show_skeleton = not show_skeleton
+    plot_frame(current_frame)
 
 # Create Matplotlib figure and axes
 fig, ax = plt.subplots()
@@ -292,12 +383,10 @@ ax_slider = plt.axes([0.1, 0.25, 0.8, 0.03])
 slider = Slider(ax_slider, 'Frame', 0, frame_count - 1, valinit=current_frame, valfmt='%0.0f')
 slider.on_changed(update)
 
-# Scatter size slider next to skip buttons
 ax_scatter_slider = plt.axes([0.8, 0.1, 0.15, 0.03])
 scatter_slider = Slider(ax_scatter_slider, 'Size', 5, 100, valinit=scatter_size, valfmt='%0.0f')
 scatter_slider.on_changed(update_scatter_size)
 
-# Create skip buttons, zoom, pan, and home buttons
 button_positions = [0.1, 0.18, 0.26, 0.34, 0.42, 0.5, 0.58, 0.66]
 skip_values = [-1000, -100, -10, -1, 1, 10, 100, 1000]
 
@@ -320,9 +409,13 @@ ax_home = plt.axes([0.9, 0.05, 0.08, 0.03])
 btn_home = MplButton(ax_home, 'Home')
 btn_home.on_clicked(home)
 
-ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])  # Position the button appropriately
+ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])
 btn_extract = MplButton(ax_extract, 'Extract Frame')
 btn_extract.on_clicked(lambda event: extract_frame())
+
+ax_skeleton = plt.axes([0.56, 0.05, 0.12, 0.04])
+btn_skeleton = MplButton(ax_skeleton, 'Toggle Skeleton')
+btn_skeleton.on_clicked(toggle_skeleton)
 
 # Show the initial frame
 plot_frame(current_frame)

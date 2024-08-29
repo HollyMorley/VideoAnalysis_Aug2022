@@ -1,4 +1,3 @@
-
 import Helpers.MultiCamLabelling_config as opt_config
 from Helpers.Config_23 import *
 from Helpers.CalibrateCams import BasicCalibration
@@ -11,7 +10,8 @@ import matplotlib.pyplot as plt
 from pycalib.calib import triangulate
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
-import cupy as cp
+
+
 
 class optimize:
     def __init__(self, calibration_coords, extrinsics, intrinsics, parent_instance):
@@ -24,7 +24,7 @@ class optimize:
 
     def optimise_calibration(self):
         reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
-                            'HindpawKnuckleR', 'Back1', 'Back3', 'Back6', 'Back9', 'Tail1', 'Tail6', 'Tail12',
+                            'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
         reference_data = self.get_data_for_optimisation(reference_points)
 
@@ -36,9 +36,20 @@ class optimize:
 
         bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
 
-        print("Optimizing calibration points...")
-        result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 10000, 'ftol': 1e-5, 'gtol': 1e-5, 'disp': False}) # 100000, 1e-15, 1e-15
+        print("Optimizing calibration points (initial rough estimate)...")
+
+        # Step 1: Use a fast, rough optimization method (Powell or Nelder-Mead)
+        initial_result = minimize(self.objective_function, initial_flat_points, args=args, method='Powell',
+                                  options={'maxiter': 1000, 'disp': False})  # Adjust options as needed
+
+        # Use the result of the first optimization as the starting point for the second
+        refined_initial_points = initial_result.x
+
+        print("Refining calibration points with a more accurate method...")
+
+        # Step 2: Refine the solution using a more accurate optimization method (L-BFGS-B)
+        result = minimize(self.objective_function, refined_initial_points, args=args, method='L-BFGS-B',
+                          bounds=bounds, options={'maxiter': 100000, 'ftol': 1e-15, 'gtol': 1e-15, 'disp': True})
 
         optimized_points = self.reshape_calibration_points(result.x)
 
@@ -250,13 +261,13 @@ class optimize:
         indexes = []
         indexes.append(
             self.get_index_snapshots(data_visible['side'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
-                                     [0.1, 0.5, 0.7, 0.99, 0.999]))
+                                     [0.1, 0.5, 0.99, 0.999]))
         indexes.append(
             self.get_index_snapshots(data_visible['side'].loc(axis=1)['Nose', 'y'][nose_mask].sort_values().index,
-                                     [0.1, 0.5, 0.7, 0.9, 0.99]))
+                                     [0.1, 0.5, 0.9, 0.99]))
         indexes.append(
             self.get_index_snapshots(data_visible['side'].loc(axis=1)['Tail12', 'y'][tail12_mask].sort_values().index,
-                                     [0.1, 0.2, 0.7, 0.75, 0.8, 0.85, 0.95, 0.99]))
+                                     [0.1, 0.2, 0.85, 0.95, 0.99]))
         indexes.append(
             self.get_index_snapshots(data_visible['front'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
                                      [0.01, 0.3, 0.5, 0.7, 0.99]))
@@ -265,20 +276,20 @@ class optimize:
                                      [0.01, 0.3, 0.99]))
         indexes.append(self.get_index_snapshots(
             data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
-            [0.01, 0.3, 0.7, 0.99]))
+            [0.01, 0.99]))
         indexes.append(self.get_index_snapshots(
             data_visible['front'].loc(axis=1)['HindpawToeR', 'y'][hindpaw_toeR_mask].sort_values().index,
-            [0.01, 0.3, 0.7, 0.99]))
-        indexes.append(
-            self.get_index_snapshots(data_visible['side'].loc(axis=1)['EarR', 'y'][earR_mask].sort_values().index,
-                                     [0.2, 0.7, 0.9]))
+            [0.01, 0.99]))
+        # indexes.append(
+        #     self.get_index_snapshots(data_visible['side'].loc(axis=1)['EarR', 'y'][earR_mask].sort_values().index,
+        #                              [0.2, 0.7, 0.9]))
 
         # check for door positions too
         door_mask = np.logical_and.reduce((data['side'].loc(axis=1)['Door', 'likelihood'] > pcutoff,
                                            data['front'].loc(axis=1)['Door', 'likelihood'] > pcutoff,
                                            data['overhead'].loc(axis=1)['Door', 'likelihood'] > pcutoff))
         indexes.append(self.get_index_snapshots(data['side'].loc(axis=1)['Door', 'y'][door_mask].sort_values().index,
-                                                [0.001, 0.005, 0.01, 0.05, 0.9, 0.95]))
+                                                [0.001, 0.005, 0.01, 0.9, 0.95]))
 
         # remove any duplicates
         flattened_list = [item for sublist in indexes for item in sublist]

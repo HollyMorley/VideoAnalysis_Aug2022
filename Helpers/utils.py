@@ -122,9 +122,7 @@ class Utils:
         if directory is not None and files is None:
             if filtered is None and suffix is None:
                 datafiles_side = glob("%s\\*%s*.h5" % (directory, 'side')) # !!!!!!!!!!!!GOT RID OF scorer_side!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # datafiles_front = glob("%s\\*%s*%s.h5" % (directory, 'front', scorer_front))
-                # datafiles_overhead = glob("%s\\*%s*%s.h5" % (directory, 'overhead', scorer_overhead))
-                datafiles_front = glob("%s\\new\\*%s*.h5" % (directory, 'front'))
+                datafiles_front = glob("%s\\*%s*.h5" % (directory, 'front'))
                 datafiles_overhead = glob("%s\\*%s*.h5" % (directory, 'overhead'))
             elif filtered is True and suffix is None:
                 datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', vidstuff['scorers']['side']))

@@ -10,6 +10,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 from matplotlib import cm
 
+
 # Function to select video paths via file dialog
 def select_video_paths():
     root = Tk()
@@ -27,7 +28,8 @@ def select_video_paths():
     else:
         raise ValueError("Unknown camera view selected. Please select a side, front, or overhead video.")
 
-    video_base = os.path.splitext(chosen_video_path)[0].replace(f'_{chosen_cam}_1', '')  # Base path without view-specific suffix
+    video_base = os.path.splitext(chosen_video_path)[0].replace(f'_{chosen_cam}_1',
+                                                                '')  # Base path without view-specific suffix
     video_paths = {
         'side': f"{video_base}_side_1.avi",
         'front': f"{video_base}_front_1.avi",
@@ -42,6 +44,7 @@ def select_video_paths():
     }
 
     return chosen_cam, video_paths, coord_paths
+
 
 def find_matching_coord_file(video_path, view):
     video_dir = os.path.dirname(video_path)
@@ -61,6 +64,7 @@ def find_matching_coord_file(video_path, view):
 
     return os.path.join(video_dir, matching_files[0])
 
+
 def load_timestamps(video_path, view):
     # Adjust the timestamp file to match the provided structure
     timestamp_file = video_path.replace('.avi', '_Timestamps.csv')
@@ -69,9 +73,11 @@ def load_timestamps(video_path, view):
     timestamps = pd.read_csv(timestamp_file)
     return timestamps
 
+
 def zero_timestamps(timestamps):
     timestamps['Timestamp'] = timestamps['Timestamp'] - timestamps['Timestamp'][0]
     return timestamps
+
 
 # Use the function to get video and coordinate paths
 chosen_cam, video_paths, coord_paths = select_video_paths()
@@ -87,6 +93,7 @@ timestamps_side = zero_timestamps(load_timestamps(video_paths['side'], 'side'))
 timestamps_front = zero_timestamps(load_timestamps(video_paths['front'], 'front'))
 timestamps_overhead = zero_timestamps(load_timestamps(video_paths['overhead'], 'overhead'))
 
+
 def adjust_timestamps(side_timestamps, other_timestamps):
     mask = other_timestamps['Timestamp'].diff() < 4.045e+6
     other_timestamps_single_frame = other_timestamps[mask]
@@ -100,15 +107,19 @@ def adjust_timestamps(side_timestamps, other_timestamps):
     straightened_diff = diff - (slope * side_timestamps_single_frame['Timestamp'] + intercept)
     correct_diff_idx = np.where(straightened_diff < straightened_diff.mean())
 
-    model_true = LinearRegression().fit(side_timestamps_single_frame['Timestamp'].values[correct_diff_idx].reshape(-1, 1), diff.values[correct_diff_idx])
+    model_true = LinearRegression().fit(
+        side_timestamps_single_frame['Timestamp'].values[correct_diff_idx].reshape(-1, 1),
+        diff.values[correct_diff_idx])
     slope_true = model_true.coef_[0]
     intercept_true = model_true.intercept_
     adjusted_timestamps = other_timestamps['Timestamp'] - (slope_true * other_timestamps['Timestamp'] + intercept_true)
     return adjusted_timestamps
 
+
 timestamps_side_adj = timestamps_side['Timestamp']
 timestamps_front_adj = adjust_timestamps(timestamps_side, timestamps_front)
 timestamps_overhead_adj = adjust_timestamps(timestamps_side, timestamps_overhead)
+
 
 def match_frames(timestamps_side, timestamps_front, timestamps_overhead):
     buffer_ns = int(4.04e+6)  # Frame duration in nanoseconds
@@ -150,17 +161,17 @@ def match_frames(timestamps_side, timestamps_front, timestamps_overhead):
 
     return matched_frames
 
+
 matched_frames = match_frames(timestamps_side_adj, timestamps_front_adj, timestamps_overhead_adj)
 
-# Function to construct the extracted frames directory path
-def construct_extracted_dir(camera, vid_name):
-    return f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{camera.capitalize()}/{vid_name}"
+# The rest of the original code follows here, but now the frames will be synchronized using the matched_frames list.
+# Further processing code...
 
 # Initialize Video Capture for the chosen camera
 cap = cv2.VideoCapture(video_paths[chosen_cam])
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 current_frame = 0
-pcutoff = 0.3  # initial cutoff value
+pcutoff = 0.9  # initial cutoff value
 
 # Load the coordinates
 coords = pd.read_hdf(coord_paths[chosen_cam])
@@ -181,30 +192,22 @@ color_map = {bodypart: cmap(i) for i, bodypart in enumerate(bodyparts)}
 
 scatter_size = 50
 
-# Skeleton links between body parts
-skeleton = [
-    ('Nose', 'EarR'), ('Nose', 'EarL'), ('Nose', 'Back1'), ('EarR', 'EarL'),
-    ('Back1', 'Back2'), ('Back2', 'Back3'), ('Back3', 'Back4'), ('Back4', 'Back5'),
-    ('Back5', 'Back6'), ('Back6', 'Back7'), ('Back7', 'Back8'), ('Back8', 'Back9'),
-    ('Back9', 'Back10'), ('Back10', 'Back11'), ('Back11', 'Back12'), ('Back12', 'Tail1'),
-    ('Tail1', 'Tail2'), ('Tail2', 'Tail3'), ('Tail3', 'Tail4'), ('Tail4', 'Tail5'),
-    ('Tail5', 'Tail6'), ('Tail6', 'Tail7'), ('Tail7', 'Tail8'), ('Tail8', 'Tail9'),
-    ('Tail9', 'Tail10'), ('Tail10', 'Tail11'), ('Tail11', 'Tail12'),
-    ('ForepawToeR', 'ForepawKnuckleR'), ('ForepawKnuckleR', 'ForepawAnkleR'),
-    ('ForepawAnkleR', 'ForepawKneeR'), ('ForepawToeL', 'ForepawKnuckleL'),
-    ('ForepawKnuckleL', 'ForepawAnkleL'), ('ForepawAnkleL', 'ForepawKneeL'),
-    ('HindpawToeR', 'HindpawKnuckleR'), ('HindpawKnuckleR', 'HindpawAnkleR'),
-    ('HindpawAnkleR', 'HindpawKneeR'), ('HindpawToeL', 'HindpawKnuckleL'),
-    ('HindpawKnuckleL', 'HindpawAnkleL'), ('HindpawAnkleL', 'HindpawKneeL'),
-    ('Back3', 'ForepawKneeR'), ('Back3', 'ForepawKneeL'),
-    ('Back10', 'HindpawKneeR'), ('Back10', 'HindpawKneeL'),
-    ('StartPlatL', 'StepL'), ('StartPlatR', 'StepR'),
-    ('StartPlatL', 'StartPlatR'), ('StepL', 'StepR'),
-    ('StartPlatL', 'TransitionL'), ('StartPlatR', 'TransitionR'),
-    ('TransitionL', 'TransitionR')
-]
 
-show_skeleton = False  # Flag to show/hide skeleton
+# Function to remove duplicates based on image names
+def remove_duplicates(h5_filename):
+    if os.path.exists(h5_filename):
+        data = pd.read_hdf(h5_filename, key='df')
+        data = data[~data.index.duplicated(keep='last')]
+        data.to_hdf(h5_filename, key='df', mode='w')
+        print(f"Removed duplicates from {h5_filename}")
+
+
+remove_duplicates("CollectedData_Holly_init.h5")  # Initial cleanup of duplicates
+
+
+def construct_extracted_dir(chosen_cam, video_base_name):
+    return f"H:/Dual-belt_APAs/analysis/DLC_DualBelt/Manual_Labelling/{chosen_cam.capitalize()}/{video_base_name}"
+
 
 def plot_frame(frame_idx):
     global current_frame, scatter_points
@@ -247,17 +250,6 @@ def plot_frame(frame_idx):
             annot.set_visible(False)
             fig.canvas.draw_idle()
 
-    # Draw skeleton if show_skeleton is True
-    if show_skeleton:
-        for link in skeleton:
-            part1, part2 = link
-            if all(f'{part}_likelihood' in frame_coords.columns for part in link):
-                if frame_coords[f'{part1}_likelihood'].values[0] > pcutoff and frame_coords[f'{part2}_likelihood'].values[0] > pcutoff:
-                    x1, y1 = frame_coords[f'{part1}_x'].values[0], frame_coords[f'{part1}_y'].values[0]
-                    x2, y2 = frame_coords[f'{part2}_x'].values[0], frame_coords[f'{part2}_y'].values[0]
-                    ax.plot([x1, x2], [y1, y2], 'r-', lw=1)
-
-    # Draw body parts
     for col in frame_coords.columns:
         if 'likelihood' in col:
             bodypart = col.split('_likelihood')[0]
@@ -268,8 +260,8 @@ def plot_frame(frame_idx):
 
             if likelihood > pcutoff:
                 scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='o')
-            else:
-                scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='x')
+            # else:
+            #     scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='x')
 
             scatter_points.append((bodypart, scatter))
 
@@ -277,14 +269,17 @@ def plot_frame(frame_idx):
     fig.canvas.draw_idle()
     fig.canvas.mpl_connect("motion_notify_event", hover)
 
+
 def update_scatter_size(val):
     global scatter_size
     scatter_size = val
     plot_frame(current_frame)
 
+
 def update(val):
     frame_idx = int(slider.val)
     plot_frame(frame_idx)
+
 
 def skip_frames(skip):
     new_frame = current_frame + skip
@@ -294,14 +289,18 @@ def skip_frames(skip):
         new_frame = frame_count - 1
     slider.set_val(new_frame)
 
+
 def zoom(event):
     fig.canvas.manager.toolbar.zoom()
+
 
 def pan(event):
     fig.canvas.manager.toolbar.pan()
 
+
 def home(event):
     fig.canvas.manager.toolbar.home()
+
 
 def restore_scorer_level(df):
     df.columns = pd.MultiIndex.from_tuples([('Holly', *col.split('_')) for col in df.columns])
@@ -353,9 +352,15 @@ def extract_frame():
             # Check if the HDF5 file exists and load existing data
             if os.path.exists(h5_filename):
                 existing_data = pd.read_hdf(h5_filename, key='df')
+                # Remove any previous entry for the same image
+                existing_data = existing_data[
+                    ~existing_data.index.get_level_values(2).isin([f"img{current_frame}.png"])]
                 combined_data = pd.concat([existing_data, frame_coords_with_scorer], axis=0)
             else:
                 combined_data = frame_coords_with_scorer
+
+            # Ensure that the combined data is deduplicated by index
+            combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
 
             # Save the combined data to both CSV and HDF5 formats
             combined_data.to_csv(csv_filename, index=True)
@@ -368,11 +373,6 @@ def extract_frame():
     for view in other_views:
         save_frame_and_coords(view)
 
-
-def toggle_skeleton(event):
-    global show_skeleton
-    show_skeleton = not show_skeleton
-    plot_frame(current_frame)
 
 # Create Matplotlib figure and axes
 fig, ax = plt.subplots()
@@ -412,10 +412,6 @@ btn_home.on_clicked(home)
 ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])
 btn_extract = MplButton(ax_extract, 'Extract Frame')
 btn_extract.on_clicked(lambda event: extract_frame())
-
-ax_skeleton = plt.axes([0.56, 0.05, 0.12, 0.04])
-btn_skeleton = MplButton(ax_skeleton, 'Toggle Skeleton')
-btn_skeleton.on_clicked(toggle_skeleton)
 
 # Show the initial frame
 plot_frame(current_frame)

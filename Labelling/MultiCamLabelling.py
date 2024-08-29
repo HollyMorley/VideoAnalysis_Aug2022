@@ -23,6 +23,12 @@ from pycalib.calib import triangulate
 import Helpers.MultiCamLabelling_config as config
 from Helpers.CalibrateCams import BasicCalibration
 
+import ctypes
+
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception as e:
+    pass  # In case you're not on Windows or it fails for another reason.
 
 def get_video_name_with_view(video_name, view):
     split_video_name = video_name.split('_')
@@ -1137,13 +1143,13 @@ class LabelFramesTool:
         self.label_colors = self.generate_label_colors(self.labels)
         self.current_label = tk.StringVar(value=self.labels[0])
 
-        self.label_canvas = tk.Canvas(control_frame_labels, width=100)  # Set a fixed width for the label canvas
+        self.label_canvas = tk.Canvas(control_frame_labels, width=250)  # Set a fixed width for the label canvas
         self.label_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)  # Do not expand to use only necessary space
         self.label_scrollbar = tk.Scrollbar(control_frame_labels, orient=tk.VERTICAL, command=self.label_canvas.yview)
         self.label_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.label_canvas.configure(yscrollcommand=self.label_scrollbar.set)
 
-        self.label_frame = tk.Frame(self.label_canvas)
+        self.label_frame = tk.Frame(self.label_canvas, width=600)
         self.label_canvas.create_window((0, 0), window=self.label_frame, anchor="nw")
         self.label_frame.bind("<Configure>",
                               lambda e: self.label_canvas.configure(scrollregion=self.label_canvas.bbox("all")))
@@ -1153,7 +1159,7 @@ class LabelFramesTool:
             if label != 'Door' and label in config.CALIBRATION_LABELS:
                 continue  # Skip adding button for static calibration labels except 'Door'
             label_button = tk.Radiobutton(self.label_frame, text=label, variable=self.current_label, value=label,
-                                          indicatoron=0, width=15, bg=color, font=("Helvetica", 7),
+                                          indicatoron=0, width=25, bg=color, font=("Helvetica", 7),
                                           command=lambda l=label: self.on_label_select(l))
             label_button.pack(fill=tk.X, pady=1)
             self.label_buttons.append(label_button)
@@ -2111,13 +2117,16 @@ class ReplaceCalibrationLabels():
                 video_dir = '/'.join([view_dir, video_name])
                 for file in os.listdir(video_dir):
                     if file.endswith("CollectedData_Holly_init.h5"):
-                        file_path = '/'.join([video_dir, file])
-                        #file_path = os.path.join(video_dir, file)
-                        df = pd.read_hdf(file_path)
-                        df = self.replace_calibration_labels(df, video_name)
-                        df = self.replace_labeled_data_hyphen(df)
-                        df.to_csv(file_path.replace("CollectedData_Holly_init.h5","CollectedData_Holly.csv"))
-                        df.to_hdf(file_path.replace("CollectedData_Holly_init.h5", "CollectedData_Holly.h5"), key='df_with_missing', mode='w', format='fixed')
+                        try:
+                            file_path = '/'.join([video_dir, file])
+                            #file_path = os.path.join(video_dir, file)
+                            df = pd.read_hdf(file_path)
+                            df = self.replace_calibration_labels(df, video_name)
+                            df = self.replace_labeled_data_hyphen(df)
+                            df.to_csv(file_path.replace("CollectedData_Holly_init.h5","CollectedData_Holly.csv"))
+                            df.to_hdf(file_path.replace("CollectedData_Holly_init.h5", "CollectedData_Holly.h5"), key='df_with_missing', mode='w', format='fixed')
+                        except:
+                            print(f"Error replacing calibration labels for {file_path}")
         messagebox.showinfo("Info", "Calibration labels replaced successfully")
 
     def replace_calibration_labels(self, df, video_name):

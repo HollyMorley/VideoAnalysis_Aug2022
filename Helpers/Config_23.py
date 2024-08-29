@@ -6,12 +6,21 @@ import numpy as np
 vidstuff = {
     'cams': ['side','front','overhead'],
     'scorers': {
-        'side': "DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000",
-        'side_new': "DLC_resnet50_DLC_DualBeltJul25shuffle1_1020000",
-        'overhead': "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000",
-        'front': "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
+        'side': "DLC_resnet50_DLC_DualBeltAug2shuffle1_600000",
+        'overhead': "DLC_resnet50_DLC_DualBeltAug3shuffle1_600000",
+        'front': "DLC_resnet50_DLC_DualBeltAug3shuffle1_600000"
     }
 }
+
+# vidstuff = {
+#     'cams': ['side','front','overhead'],
+#     'scorers': {
+#         'side': "DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000",
+#         'side_new': "DLC_resnet50_DLC_DualBeltJul25shuffle1_1020000",
+#         'overhead': "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000",
+#         'front': "DLC_resnet50_DLC_DualBeltAug10shuffle1_1030000"
+#     }
+# }
 pcutoff = 0.9
 fps = 247
 expstuff = {

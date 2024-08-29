@@ -10,7 +10,8 @@ import os
 import matplotlib.pyplot as plt
 from pycalib.calib import triangulate
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-
+from concurrent.futures import ThreadPoolExecutor
+import cupy as cp
 
 class optimize:
     def __init__(self, calibration_coords, extrinsics, intrinsics, parent_instance):
@@ -115,6 +116,9 @@ class optimize:
         frame_total_error = 0
         frame_errors = {label: {"side": 0, "front": 0, "overhead": 0} for label in labels}
 
+        # Cache frame data
+        frame_data = {view: reference_data[view].loc[frame_index] for view in cams}
+
         for label in labels:
             point_3d = self.triangulate(reference_data, label, extrinsics, frame_index)
             if point_3d is not None:
@@ -122,8 +126,8 @@ class optimize:
                 projections = self.project_to_view(point_3d, extrinsics)
 
                 for view in cams:
-                    if ~reference_data[view].loc[frame_index, label].isna().any():
-                        original_x, original_y = reference_data[view].loc[frame_index, label].values
+                    if ~frame_data[view][label].isna().any():
+                        original_x, original_y = frame_data[view][label]
                         if view in projections:
                             projected_x, projected_y = projections[view]
                             error = np.sqrt((projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
@@ -136,29 +140,19 @@ class optimize:
 
     def compute_reprojection_error(self, labels, reference_data, extrinsics=None, weighted=False):
         errors = {label: {"side": 0, "front": 0, "overhead": 0} for label in labels}
-        cams = ["side", "front", "overhead"]
         total_error = 0
 
-        for frame_index in reference_data['side'].index:
-            for label in labels:
-                point_3d = self.triangulate(reference_data, label, extrinsics,
-                                            frame_index)  # todo test formatting of x and y
-                if point_3d is not None:
-                    point_3d = point_3d[:3]
-                    projections = self.project_to_view(point_3d, extrinsics)
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.compute_frame_error, frame_index, labels, reference_data, extrinsics, weighted)
+                       for frame_index in reference_data['side'].index]
 
-                    for view, frame in zip(cams, [frame_index]):
-                        if ~reference_data[view].loc[frame, label].isna().any():
-                            original_x, original_y = reference_data[view].loc[frame, label].values
-                            if view in projections:
-                                projected_x, projected_y = projections[view]
-                                error = np.sqrt(
-                                    (projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
-                                if weighted:
-                                    weight = opt_config.REFERENCE_LABEL_WEIGHTS.get(label, 1.0)
-                                    error *= weight
-                                errors[label][view] = error
-                                total_error += error
+            for future in futures:
+                frame_total_error, frame_errors = future.result()
+                total_error += frame_total_error
+                for label in labels:
+                    for view in ["side", "front", "overhead"]:
+                        errors[label][view] += frame_errors[label][view]
+
         return total_error, errors
 
     def project_to_view(self, point_3d, extrinsics=None):

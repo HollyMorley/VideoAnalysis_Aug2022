@@ -10,8 +10,9 @@ from matplotlib import cm
 from matplotlib.backend_tools import ToolZoom, ToolPan
 
 # Load video and deeplabcut coordinates
-video_path = r"H:\Dual-belt_APAs\videos\Round_3\20230412\HM_20230412_APACharExt_FAA-1035302_LR_side_1.avi"
-coord_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Misc\Testing_analysed_files\Round4\HM_20230412_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_600000.h5"
+video_path = r"H:\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
+#coord_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round1\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltJul25shuffle1_1030000.h5"
+coord_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_600000.h5"
 print(f"Video path: {video_path}")
 
 # Check if video file exists
@@ -133,14 +134,15 @@ def plot_frame(frame_idx):
                     edgecolors='k',
                     marker='o'
                 )
-            # else:
-            #     scatter = ax.scatter(
-            #         x, y,
-            #         s=scatter_size,
-            #         color=color,
-            #         edgecolors='k',
-            #         marker='x'
-            #     )
+            else:
+                scatter = ax.scatter(
+                    x, y,
+                    s=scatter_size,
+                    color=color,
+                    edgecolors='k',
+                    marker='x',
+                    alpha=0.2
+                )
 
             scatter_points.append((bodypart, scatter))
 

@@ -10,8 +10,10 @@ import matplotlib.pyplot as plt
 from pycalib.calib import triangulate
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
-
-
+from skopt import gp_minimize
+from skopt.space import Real
+from itertools import product
+import time
 
 class optimize:
     def __init__(self, calibration_coords, extrinsics, intrinsics, parent_instance):
@@ -27,6 +29,7 @@ class optimize:
                             'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
         reference_data = self.get_data_for_optimisation(reference_points)
+        self.plot_selected_frames(reference_data)
 
         initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_data)
         print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
@@ -36,20 +39,17 @@ class optimize:
 
         bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
 
-        print("Optimizing calibration points (initial rough estimate)...")
+        print("Optimizing calibration points...")
+        # Start the timer
+        start_time = time.time()
 
-        # Step 1: Use a fast, rough optimization method (Powell or Nelder-Mead)
-        initial_result = minimize(self.objective_function, initial_flat_points, args=args, method='Powell',
-                                  options={'maxiter': 1000, 'disp': False})  # Adjust options as needed
+        result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
+                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':True, 'iprint':1}) # 100000, 1e-15, 1e-15
 
-        # Use the result of the first optimization as the starting point for the second
-        refined_initial_points = initial_result.x
-
-        print("Refining calibration points with a more accurate method...")
-
-        # Step 2: Refine the solution using a more accurate optimization method (L-BFGS-B)
-        result = minimize(self.objective_function, refined_initial_points, args=args, method='L-BFGS-B',
-                          bounds=bounds, options={'maxiter': 100000, 'ftol': 1e-15, 'gtol': 1e-15, 'disp': True})
+        # End the timer
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Bayesian Optimization completed in {elapsed_time:.2f} seconds.")
 
         optimized_points = self.reshape_calibration_points(result.x)
 
@@ -63,6 +63,108 @@ class optimize:
         print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
 
         return calibration_data
+
+    def plot_selected_frames(self, reference_data):
+        """
+        Plots the selected frames for each camera view with the respective reference data coordinates
+        as scatter points.
+        """
+        day =os.path.basename(self.parent.side_file).split('_')[1]
+        video_path = "\\".join([paths['video_folder'], day])
+        video_paths = {
+            "side": os.path.join(video_path, os.path.basename(self.parent.side_file).replace(vidstuff['scorers']['side'],'').replace('.h5', '.avi')),
+            "front": os.path.join(video_path, os.path.basename(self.parent.front_file).replace(vidstuff['scorers']['front'],'').replace('.h5', '.avi')),
+            "overhead": os.path.join(video_path, os.path.basename(self.parent.overhead_file).replace(vidstuff['scorers']['overhead'],'').replace('.h5', '.avi'))
+        }
+
+        # Check if the video files exist
+        for view, video_path in video_paths.items():
+            if not os.path.exists(video_path):
+                print(f"Video file not found for {view} view at {video_path}")
+                return
+
+        # Initialize video capture for each view
+        caps = {view: cv2.VideoCapture(video_path) for view, video_path in video_paths.items()}
+
+        for frame_number in reference_data['side'].index:
+            fig, axs = plt.subplots(3, 1, figsize=(20, 15))
+
+            for i, (view, cap) in enumerate(caps.items()):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                ret, frame = cap.read()
+
+                if not ret:
+                    print(f"Error: Could not read frame {frame_number} from the video for {view} view.")
+                    continue
+
+                reference_row = reference_data[view].loc[frame_number]
+
+                axs[i].imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+                for label in reference_row.index.get_level_values('bodyparts').unique():
+                    axs[i].scatter(reference_row.loc[label, 'x'], reference_row.loc[label, 'y'], c='r', s=10)
+
+                axs[i].set_title(f'{view.capitalize()} View - Frame {frame_number}')
+                axs[i].axis('off')
+
+            plt.tight_layout()
+            plt.show()
+
+        # Release the video capture objects
+        for cap in caps.values():
+            cap.release()
+
+    # def optimise_calibration(self):
+    #     reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
+    #                         'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
+    #                         'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
+    #     reference_data = self.get_data_for_optimisation(reference_points)
+    #
+    #     initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_data)
+    #     print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
+    #
+    #     initial_flat_points = self.flatten_calibration_points()
+    #     args = (reference_points, reference_data)
+    #
+    #     # Define the bounds for Bayesian optimization
+    #     bounds = [(initial_flat_points[i] - 5.0, initial_flat_points[i] + 5.0) for i in range(len(initial_flat_points))]
+    #     dimensions = [Real(bound[0], bound[1]) for bound in bounds]
+    #
+    #     # Ensure x0 matches the dimensions of the bounds
+    #     x0 = [initial_flat_points.tolist()]
+    #
+    #     print("Optimizing calibration points using Bayesian Optimization...")
+    #
+    #     # Start the timer
+    #     start_time = time.time()
+    #
+    #     # Bayesian Optimization with initial points
+    #     result = gp_minimize(
+    #         func=lambda x: self.objective_function(x, *args),
+    #         dimensions=dimensions,
+    #         x0=x0,  # Provide initial points here as a list of lists
+    #         n_calls=200,  # Number of function calls to find minimum
+    #         n_initial_points=50,  # Number of random points before fitting model
+    #         random_state=0
+    #     )
+    #
+    #     # End the timer
+    #     end_time = time.time()
+    #     elapsed_time = end_time - start_time
+    #     print(f"Bayesian Optimization completed in {elapsed_time:.2f} seconds.")
+    #
+    #     optimized_points = self.reshape_calibration_points(result.x)
+    #
+    #     for label, views in optimized_points.items():
+    #         for view, point in views.items():
+    #             self.calibration_coords[label][view] = point
+    #
+    #     calibration_data = self.recalculate_camera_parameters()
+    #
+    #     new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_data)
+    #     print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
+    #
+    #     return calibration_data
 
     def flatten_calibration_points(self):
         """
@@ -79,7 +181,7 @@ class optimize:
 
         total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
                                                          weighted=True)
-        print("Total error: %s" %total_error)
+        #print("Total error: %s" %total_error)
         return total_error
 
     def estimate_extrinsics(self, calibration_points):
@@ -268,15 +370,15 @@ class optimize:
         indexes.append(
             self.get_index_snapshots(data_visible['side'].loc(axis=1)['Tail12', 'y'][tail12_mask].sort_values().index,
                                      [0.1, 0.2, 0.85, 0.95, 0.99]))
-        indexes.append(
-            self.get_index_snapshots(data_visible['front'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
-                                     [0.01, 0.3, 0.5, 0.7, 0.99]))
-        indexes.append(
-            self.get_index_snapshots(data_visible['front'].loc(axis=1)['Tail12', 'x'][tail12_mask].sort_values().index,
-                                     [0.01, 0.3, 0.99]))
-        indexes.append(self.get_index_snapshots(
-            data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
-            [0.01, 0.99]))
+        # indexes.append(
+        #     self.get_index_snapshots(data_visible['front'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
+        #                              [0.01, 0.3, 0.5, 0.7, 0.99]))
+        # indexes.append(
+        #     self.get_index_snapshots(data_visible['front'].loc(axis=1)['Tail12', 'x'][tail12_mask].sort_values().index,
+        #                              [0.01, 0.3, 0.99]))
+        # indexes.append(self.get_index_snapshots(
+        #     data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
+        #     [0.01, 0.99]))
         indexes.append(self.get_index_snapshots(
             data_visible['front'].loc(axis=1)['HindpawToeR', 'y'][hindpaw_toeR_mask].sort_values().index,
             [0.01, 0.99]))
@@ -305,10 +407,11 @@ class optimize:
 
         return reference_data
 
-    def show_side_view_frames(self, frames):
+    def show_side_view_frames(self, frames, reference_data):
         """
         Displays all frames extracted for the side view.
         """
+
         # frames = reference_data['side'].index
         video_path = r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi"
         # Check if the video file exists
@@ -320,6 +423,10 @@ class optimize:
 
             # Iterate over the frames
             for frame_number in frames:
+                reference_row = reference_data['side'].loc(axis=0)[frame_number]
+                mask = reference_row['likelihood'] > 0.95
+                reference_row = reference_row[mask]
+
                 # Set the frame position
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
                 ret, frame = cap.read()
@@ -332,6 +439,7 @@ class optimize:
                 # Display the frame using Matplotlib
                 plt.figure(figsize=(10, 6))
                 plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                plt.scatter(reference_row['x'], reference_row['y'], c='r', s=1)
                 plt.title(f'Side View - Frame {frame_number}')
                 plt.axis('off')
                 plt.show()

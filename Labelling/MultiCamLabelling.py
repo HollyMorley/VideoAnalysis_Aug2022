@@ -922,6 +922,13 @@ class LabelFramesTool:
         self.spacer_lines_points = []
         self.spacer_lines = []
 
+        # Add bindings for key press and release
+        self.root.bind_all('<KeyPress-Tab>', self.on_tab_press)
+        self.root.bind_all('<KeyRelease-Tab>', self.on_tab_release)
+
+        # Initialize flag for Tab key state
+        self.tab_pressed = False
+
         self.last_update_time = 0
 
         self.label_frames_menu()
@@ -1158,11 +1165,23 @@ class LabelFramesTool:
             color = self.label_colors[label]
             if label != 'Door' and label in config.CALIBRATION_LABELS:
                 continue  # Skip adding button for static calibration labels except 'Door'
-            label_button = tk.Radiobutton(self.label_frame, text=label, variable=self.current_label, value=label,
-                                          indicatoron=0, width=25, bg=color, font=("Helvetica", 7),
-                                          command=lambda l=label: self.on_label_select(l))
+
+            label_button = tk.Radiobutton(
+                self.label_frame,
+                text=label,
+                variable=self.current_label,
+                value=label,
+                indicatoron=0,
+                width=25,
+                bg=color,
+                font=("Helvetica", 7),
+                command=lambda l=label: self.on_label_click(l)
+            )
             label_button.pack(fill=tk.X, pady=1)
             self.label_buttons.append(label_button)
+
+            # Bind the left mouse click event to show the popup with debug print
+            label_button.bind("<Button-1>", lambda event, l=label: self.show_label_popup(l, event))
 
         # Ensure "Nose" is selected by default
         self.current_label.set("Nose")
@@ -1192,7 +1211,7 @@ class LabelFramesTool:
         self.canvas.mpl_connect("button_release_event", self.on_mouse_release)
         self.canvas.mpl_connect("motion_notify_event", self.on_mouse_move)
         self.canvas.mpl_connect("scroll_event", self.on_scroll)
-        self.canvas.mpl_connect("motion_notify_event", self.show_tooltip)
+        #self.canvas.mpl_connect("motion_notify_event", self.show_tooltip)
 
         self.display_frame()
 
@@ -1200,6 +1219,8 @@ class LabelFramesTool:
         for button in self.label_buttons:
             if button.cget('text') == self.current_label.get():
                 button.select()
+            else:
+                button.deselect()
 
     def load_existing_labels(self, label_file_path, view):
         # Replace filepath with h5 file
@@ -1216,38 +1237,81 @@ class LabelFramesTool:
                 else:
                     print(f"Label '{label}' not found in the DataFrame for frame {frame_idx}.")
 
-    def show_tooltip(self, event):
-        if event.inaxes in self.axs:
-            marker_size = self.marker_size_var.get() * 10  # Assuming marker size is scaled
-            for label, views in self.body_part_points[self.current_frame_index].items():
-                for view, coords in views.items():
-                    if view == self.current_view.get() and coords is not None:
-                        x, y = coords
-                        if np.hypot(x - event.xdata, y - event.ydata) < marker_size:
-                            widget = self.canvas.get_tk_widget()
-                            self.show_custom_tooltip(widget, label)
-                            return
-        self.hide_custom_tooltip()
+    # def show_tooltip(self, event):
+    #     if event.inaxes in self.axs:
+    #         marker_size = self.marker_size_var.get() * 10  # Assuming marker size is scaled
+    #         for label, views in self.body_part_points[self.current_frame_index].items():
+    #             for view, coords in views.items():
+    #                 if view == self.current_view.get() and coords is not None:
+    #                     x, y = coords
+    #                     if np.hypot(x - event.xdata, y - event.ydata) < marker_size:
+    #                         widget = self.canvas.get_tk_widget()
+    #                         self.show_custom_tooltip(widget, label)
+    #                         return
+    #     self.hide_custom_tooltip()
+    #
+    # def show_custom_tooltip(self, wdgt, text):
+    #     if self.tooltip_window:
+    #         self.tooltip_window.destroy()
+    #     self.tooltip_window = tk.Toplevel(wdgt)
+    #     self.tooltip_window.overrideredirect(True)
+    #
+    #     tk.Label(self.tooltip_window, text=text, background='yellow').pack()
+    #     self.tooltip_window.update_idletasks()
+    #
+    #     x_center = wdgt.winfo_pointerx() + 20
+    #     y_center = wdgt.winfo_pointery() + 20
+    #     self.tooltip_window.geometry(f"+{x_center}+{y_center}")
+    #
+    #     wdgt.bind('<Leave>', self.hide_custom_tooltip)
+    #
+    # def hide_custom_tooltip(self, event=None):
+    #     if self.tooltip_window:
+    #         self.tooltip_window.destroy()
+    #         self.tooltip_window = None
 
-    def show_custom_tooltip(self, wdgt, text):
-        if self.tooltip_window:
-            self.tooltip_window.destroy()
-        self.tooltip_window = tk.Toplevel(wdgt)
-        self.tooltip_window.overrideredirect(True)
+    def show_label_popup(self, label, event):
+        # Get the Matplotlib canvas widget
+        widget = self.canvas.get_tk_widget()
 
-        tk.Label(self.tooltip_window, text=text, background='yellow').pack()
-        self.tooltip_window.update_idletasks()
+        # Calculate the position of the Matplotlib canvas on the screen
+        widget_x = widget.winfo_rootx()
+        widget_y = widget.winfo_rooty()
 
-        x_center = wdgt.winfo_pointerx() + 20
-        y_center = wdgt.winfo_pointery() + 20
-        self.tooltip_window.geometry(f"+{x_center}+{y_center}")
+        # Determine the subplot (Axes) where the click occurred
+        ax = event.inaxes
+        if ax is None:
+            return
 
-        wdgt.bind('<Leave>', self.hide_custom_tooltip)
+        # Convert the data coordinates (event.xdata, event.ydata) to display coordinates (pixels)
+        display_coords = ax.transData.transform((event.xdata, event.ydata))
 
-    def hide_custom_tooltip(self, event=None):
-        if self.tooltip_window:
-            self.tooltip_window.destroy()
-            self.tooltip_window = None
+        # Invert the y-coordinate for the Tkinter coordinate system
+        # Calculate the height of the canvas
+        canvas_height = widget.winfo_height()
+        display_x, display_y = display_coords
+
+        # Adjust the y position by subtracting it from the canvas height
+        display_y = canvas_height - display_y
+
+        # Calculate popup coordinates relative to the root window
+        popup_x = int(widget_x + display_x)
+        popup_y = int(widget_y + display_y)
+
+        # Create a small popup window
+        popup = tk.Toplevel(self.root)
+        popup.wm_overrideredirect(True)  # Remove window decorations
+        popup.attributes('-topmost', True)  # Keep popup on top
+        popup.lift()  # Ensure it appears above all other windows
+
+        # Position the popup near the scatter point
+        popup.geometry(f"+{popup_x + 10}+{popup_y + 10}")
+
+        # Add label text to the popup
+        tk.Label(popup, text=label, background='yellow', font=("Helvetica", 12)).pack()
+
+        # Close the popup after 2 seconds
+        self.root.after(2000, popup.destroy)
 
     def get_p(self, view, extrinsics=None, return_value=False):
         if extrinsics is None:
@@ -1430,6 +1494,12 @@ class LabelFramesTool:
         self.current_label.set(label)
         self.draw_reprojected_points()
 
+    def on_label_click(self, label):
+        print(f"Label clicked: {label}")
+        self.current_label.set(label)
+        self.update_label_button_selection()
+        self.draw_reprojected_points()
+
     def skip_labeling_frames(self, step):
         self.current_frame_index += step
         self.current_frame_index = max(0, min(self.current_frame_index, len(self.frames['side']) - 1))
@@ -1522,6 +1592,16 @@ class LabelFramesTool:
 
         self.canvas.draw_idle()
 
+    def on_tab_press(self, event):
+        """Set flag when Tab key is pressed."""
+        print("Tab key pressed")  # Debug statement
+        self.tab_pressed = True
+
+    def on_tab_release(self, event):
+        """Reset flag when Tab key is released."""
+        print("Tab key released")  # Debug statement
+        self.tab_pressed = False
+
     def on_click(self, event):
         if event.inaxes not in self.axs:
             return
@@ -1535,15 +1615,10 @@ class LabelFramesTool:
         frame_points = self.body_part_points[self.current_frame_index]
 
         if event.button == MouseButton.RIGHT:
-            if self.spacer_lines_active:
-                if len(self.spacer_lines_points) < 2:
-                    self.spacer_lines_points.append((event.xdata, event.ydata))
-                    if len(self.spacer_lines_points) == 2:
-                        self.draw_spacer_lines(ax, self.spacer_lines_points[0], self.spacer_lines_points[1])
-                return
             if event.key == 'shift':
                 self.delete_closest_point(ax, event, frame_points)
             else:
+                # Check if the label is 'Door' or not a calibration label, then place a new label
                 if label == 'Door' or label not in config.CALIBRATION_LABELS:
                     if frame_points[label][view] is not None:
                         frame_points[label][view] = None
@@ -1555,6 +1630,19 @@ class LabelFramesTool:
         elif event.button == MouseButton.LEFT:
             if label == 'Door' or label not in config.CALIBRATION_LABELS:
                 self.dragging_point = self.find_closest_point(ax, event, frame_points)
+
+    def find_label_near_click(self, event):
+        """Check if a click is near any scatter point."""
+        click_threshold = 10  # This value defines the clickable area around the scatter points
+        for label, views in self.body_part_points[self.current_frame_index].items():
+            for view, coords in views.items():
+                if view == self.current_view.get() and coords is not None:
+                    x, y = coords
+                    # Check if the click is within the area of a scatter point
+                    if np.hypot(x - event.xdata, y - event.ydata) <= click_threshold:
+                        print(f"Click near label: {label}")  # Debug statement
+                        return label
+        return None
 
     def on_drag(self, event):
         if self.dragging_point is None or event.inaxes not in self.axs:

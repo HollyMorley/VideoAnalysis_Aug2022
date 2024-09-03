@@ -29,7 +29,9 @@ class optimize:
                             'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
         reference_data = self.get_data_for_optimisation(reference_points)
-        self.plot_selected_frames(reference_data)
+        reference_indexes = np.array(reference_data['side'].index)
+
+        #self.plot_selected_frames(reference_data)
 
         initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_data)
         print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
@@ -44,12 +46,12 @@ class optimize:
         start_time = time.time()
 
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':True, 'iprint':1}) # 100000, 1e-15, 1e-15
+                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':False}) # 100000, 1e-15, 1e-15
 
         # End the timer
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(f"Bayesian Optimization completed in {elapsed_time:.2f} seconds.")
+        print(f"Optimization completed in {elapsed_time:.2f} seconds.")
 
         optimized_points = self.reshape_calibration_points(result.x)
 
@@ -69,12 +71,12 @@ class optimize:
         Plots the selected frames for each camera view with the respective reference data coordinates
         as scatter points.
         """
-        day =os.path.basename(self.parent.side_file).split('_')[1]
+        day =os.path.basename(self.parent.files['side']).split('_')[1]
         video_path = "\\".join([paths['video_folder'], day])
         video_paths = {
-            "side": os.path.join(video_path, os.path.basename(self.parent.side_file).replace(vidstuff['scorers']['side'],'').replace('.h5', '.avi')),
-            "front": os.path.join(video_path, os.path.basename(self.parent.front_file).replace(vidstuff['scorers']['front'],'').replace('.h5', '.avi')),
-            "overhead": os.path.join(video_path, os.path.basename(self.parent.overhead_file).replace(vidstuff['scorers']['overhead'],'').replace('.h5', '.avi'))
+            "side": os.path.join(video_path, os.path.basename(self.parent.files['side']).replace(vidstuff['scorers']['side'],'').replace('.h5', '.avi')),
+            "front": os.path.join(video_path, os.path.basename(self.parent.files['front']).replace(vidstuff['scorers']['front'],'').replace('.h5', '.avi')),
+            "overhead": os.path.join(video_path, os.path.basename(self.parent.files['overhead']).replace(vidstuff['scorers']['overhead'],'').replace('.h5', '.avi'))
         }
 
         # Check if the video files exist
@@ -86,15 +88,17 @@ class optimize:
         # Initialize video capture for each view
         caps = {view: cv2.VideoCapture(video_path) for view, video_path in video_paths.items()}
 
-        for frame_number in reference_data['side'].index:
+        for pos, frame_number in enumerate(reference_data['side'].index):
+            real_frame_number = reference_data['side'].iloc(axis=0)[pos].loc['original_index'].values[0].astype(int)
+
             fig, axs = plt.subplots(3, 1, figsize=(20, 15))
 
             for i, (view, cap) in enumerate(caps.items()):
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, real_frame_number)
                 ret, frame = cap.read()
 
                 if not ret:
-                    print(f"Error: Could not read frame {frame_number} from the video for {view} view.")
+                    print(f"Error: Could not read frame {real_frame_number} from the video for {view} view.")
                     continue
 
                 reference_row = reference_data[view].loc[frame_number]
@@ -102,7 +106,8 @@ class optimize:
                 axs[i].imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
                 for label in reference_row.index.get_level_values('bodyparts').unique():
-                    axs[i].scatter(reference_row.loc[label, 'x'], reference_row.loc[label, 'y'], c='r', s=10)
+                    if label != 'original_index':
+                        axs[i].scatter(reference_row.loc[label, 'x'], reference_row.loc[label, 'y'], c='r', s=10)
 
                 axs[i].set_title(f'{view.capitalize()} View - Frame {frame_number}')
                 axs[i].axis('off')
@@ -181,7 +186,7 @@ class optimize:
 
         total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
                                                          weighted=True)
-        #print("Total error: %s" %total_error)
+        print("Total error: %s" %total_error)
         return total_error
 
     def estimate_extrinsics(self, calibration_points):
@@ -327,14 +332,12 @@ class optimize:
             self.P = P
 
     def get_data_for_optimisation(self, reference_points):
-        self.DataframeCoor_side = self.parent.DataframeCoor_side
-        self.DataframeCoor_front = self.parent.DataframeCoor_front
-        self.DataframeCoor_overhead = self.parent.DataframeCoor_overhead
+        self.DataframeCoors = self.parent.DataframeCoors
 
         visibility_mask = {
-            'side': self.DataframeCoor_side.loc(axis=1)[reference_points, 'likelihood'] > pcutoff,
-            'front': self.DataframeCoor_front.loc(axis=1)[reference_points, 'likelihood'] > pcutoff,
-            'overhead': self.DataframeCoor_overhead.loc(axis=1)[reference_points, 'likelihood'] > pcutoff
+            'side': self.DataframeCoors['side'].loc(axis=1)[reference_points, 'likelihood'] > pcutoff,
+            'front': self.DataframeCoors['front'].loc(axis=1)[reference_points, 'likelihood'] > pcutoff,
+            'overhead': self.DataframeCoors['overhead'].loc(axis=1)[reference_points, 'likelihood'] > pcutoff
         }
         # Initialize combined visibility DataFrame with all True
         combined_visibility = pd.DataFrame(True, index=visibility_mask[next(iter(visibility_mask))].index,
@@ -344,8 +347,7 @@ class optimize:
         for view_mask in visibility_mask.values():
             combined_visibility = combined_visibility & view_mask
 
-        data = {'side': self.DataframeCoor_side, 'front': self.DataframeCoor_front,
-                'overhead': self.DataframeCoor_overhead}
+        data = self.DataframeCoors
 
         visible_counts = combined_visibility.sum(axis=1)
         ordered_frames = visible_counts.sort_values(ascending=False)
@@ -404,6 +406,7 @@ class optimize:
             mask = reference_data[view].xs(axis=1, level=1, key='likelihood') > 0.95
             reference_data[view] = reference_data[view][mask]
             reference_data[view].drop('likelihood', axis=1, level=1, inplace=True)
+            reference_data[view].loc(axis=1)['original_index'] = self.DataframeCoors[view].loc(axis=0)[unique_list].loc(axis=1)['original_index'].values
 
         return reference_data
 

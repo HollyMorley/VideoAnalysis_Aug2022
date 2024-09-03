@@ -437,20 +437,20 @@ class CalibrateCamerasTool:
         settings_frame = tk.Frame(control_frame)
         settings_frame.pack(side=tk.LEFT, padx=10)
 
-        tk.Label(settings_frame, text="Marker Size").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Marker Size", font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_MARKER_SIZE, to=config.MAX_MARKER_SIZE, orient=tk.HORIZONTAL,
                  resolution=config.MARKER_SIZE_STEP, variable=self.marker_size_var,
-                 command=self.update_marker_size).pack(side=tk.LEFT, padx=5)
+                 command=self.update_marker_size, length=200, font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
 
-        tk.Label(settings_frame, text="Contrast").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Contrast", font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_CONTRAST, to=config.MAX_CONTRAST, orient=tk.HORIZONTAL,
                  resolution=config.CONTRAST_STEP, variable=self.contrast_var,
-                 command=self.update_contrast_brightness).pack(side=tk.LEFT, padx=5)
+                 command=self.update_contrast_brightness, length=200, font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
 
-        tk.Label(settings_frame, text="Brightness").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Brightness", font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_BRIGHTNESS, to=config.MAX_BRIGHTNESS, orient=tk.HORIZONTAL,
                  resolution=config.BRIGHTNESS_STEP, variable=self.brightness_var,
-                 command=self.update_contrast_brightness).pack(side=tk.LEFT, padx=5)
+                 command=self.update_contrast_brightness, length=200, font=("Helvetica", 10)).pack(side=tk.LEFT, padx=5)
 
         frame_control = tk.Frame(control_frame)
         frame_control.pack(side=tk.LEFT, padx=20)
@@ -1065,20 +1065,20 @@ class LabelFramesTool:
         settings_frame = tk.Frame(control_frame)
         settings_frame.pack(side=tk.LEFT, padx=10)
 
-        tk.Label(settings_frame, text="Marker Size").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Marker Size", font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_MARKER_SIZE, to=config.MAX_MARKER_SIZE, orient=tk.HORIZONTAL,
                  resolution=config.MARKER_SIZE_STEP, variable=self.marker_size_var,
-                 command=self.update_marker_size).pack(side=tk.LEFT, padx=5)
+                 command=self.update_marker_size, length=250, font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
 
-        tk.Label(settings_frame, text="Contrast").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Contrast", font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_CONTRAST, to=config.MAX_CONTRAST, orient=tk.HORIZONTAL,
                  resolution=config.CONTRAST_STEP, variable=self.contrast_var,
-                 command=self.update_contrast_brightness).pack(side=tk.LEFT, padx=5)
+                 command=self.update_contrast_brightness, length=250, font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
 
-        tk.Label(settings_frame, text="Brightness").pack(side=tk.LEFT, padx=5)
+        tk.Label(settings_frame, text="Brightness", font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
         tk.Scale(settings_frame, from_=config.MIN_BRIGHTNESS, to=config.MAX_BRIGHTNESS, orient=tk.HORIZONTAL,
                  resolution=config.BRIGHTNESS_STEP, variable=self.brightness_var,
-                 command=self.update_contrast_brightness).pack(side=tk.LEFT, padx=5)
+                 command=self.update_contrast_brightness, length=250, font=("Helvetica", 8)).pack(side=tk.LEFT, padx=5)
 
         frame_control = tk.Frame(control_frame)
         frame_control.pack(side=tk.LEFT, padx=20)
@@ -1150,33 +1150,28 @@ class LabelFramesTool:
         self.label_colors = self.generate_label_colors(self.labels)
         self.current_label = tk.StringVar(value=self.labels[0])
 
-        self.label_canvas = tk.Canvas(control_frame_labels, width=250)  # Set a fixed width for the label canvas
-        self.label_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)  # Do not expand to use only necessary space
+        # Modify the label frame and scrollbar creation
+        # Modify the label frame and scrollbar creation
+        self.label_canvas = tk.Canvas(control_frame_labels, width=220)  # Set a fixed width for the label canvas
+        self.label_canvas.pack(side=tk.LEFT, fill=tk.Y,
+                               expand=False)  # Set to expand in Y direction only for vertical scrolling
         self.label_scrollbar = tk.Scrollbar(control_frame_labels, orient=tk.VERTICAL, command=self.label_canvas.yview)
         self.label_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.label_canvas.configure(yscrollcommand=self.label_scrollbar.set)
 
-        self.label_frame = tk.Frame(self.label_canvas, width=600)
+        self.label_frame = tk.Frame(self.label_canvas, width=220)
         self.label_canvas.create_window((0, 0), window=self.label_frame, anchor="nw")
         self.label_frame.bind("<Configure>",
                               lambda e: self.label_canvas.configure(scrollregion=self.label_canvas.bbox("all")))
 
+        # Adjust label button settings
         for label in self.labels:
-            color = self.label_colors[label]
             if label != 'Door' and label in config.CALIBRATION_LABELS:
                 continue  # Skip adding button for static calibration labels except 'Door'
-
-            label_button = tk.Radiobutton(
-                self.label_frame,
-                text=label,
-                variable=self.current_label,
-                value=label,
-                indicatoron=0,
-                width=25,
-                bg=color,
-                font=("Helvetica", 7),
-                command=lambda l=label: self.on_label_click(l)
-            )
+            color = self.label_colors[label]
+            label_button = tk.Radiobutton(self.label_frame, text=label, variable=self.current_label, value=label,
+                                          indicatoron=0, width=15, bg=color, font=("Helvetica", 8),
+                                          command=lambda l=label: self.on_label_select(l))
             label_button.pack(fill=tk.X, pady=1)
             self.label_buttons.append(label_button)
 
@@ -1547,22 +1542,38 @@ class LabelFramesTool:
         self.update_label_button_selection()
 
     def show_body_part_points(self, draw=True):
-        for ax in self.axs:
-            for collection in ax.collections:
-                collection.remove()
+        # Store references to previous scatter collections to avoid removing all collections
+        if not hasattr(self, 'scatter_refs'):
+            self.scatter_refs = {view: {} for view in ['side', 'front', 'overhead']}
 
         current_points = self.body_part_points[self.current_frame_index]
-        for label, views in current_points.items():
-            for view, coords in views.items():
-                if coords is not None:
-                    x, y = coords
-                    ax = self.axs[["side", "front", "overhead"].index(view)]
-                    color = self.label_colors[label]
+
+        for ax, view in zip(self.axs, ['side', 'front', 'overhead']):
+            # Only remove existing scatters if they are going to be replaced
+            if view in self.scatter_refs:
+                for label, scatter in self.scatter_refs[view].items():
+                    if scatter is not None:
+                        scatter.remove()
+                self.scatter_refs[view].clear()
+
+            for label, coords in current_points.items():
+                if coords[view] is not None:
+                    x, y = coords[view]
                     if label in config.CALIBRATION_LABELS:
-                        ax.scatter(x, y, c=color, s=self.marker_size_var.get() * 10, label=label, edgecolors='red',
-                                   linewidths=1)
+                        # Calibration labels: white with red outlines
+                        scatter = ax.scatter(
+                            x, y, c='white', edgecolors='red', linewidths=1.5,
+                            s=self.marker_size_var.get() * 10, label=label
+                        )
                     else:
-                        ax.scatter(x, y, c=color, s=self.marker_size_var.get() * 10, label=label)
+                        # Normal labels
+                        color = self.label_colors[label]
+                        scatter = ax.scatter(
+                            x, y, c=color, s=self.marker_size_var.get() * 10, label=label
+                        )
+                    self.scatter_refs[view][label] = scatter  # Store reference for later removal
+                else:
+                    self.scatter_refs[view][label] = None
 
         if draw:
             self.canvas.draw_idle()
@@ -1594,12 +1605,10 @@ class LabelFramesTool:
 
     def on_tab_press(self, event):
         """Set flag when Tab key is pressed."""
-        print("Tab key pressed")  # Debug statement
         self.tab_pressed = True
 
     def on_tab_release(self, event):
         """Reset flag when Tab key is released."""
-        print("Tab key released")  # Debug statement
         self.tab_pressed = False
 
     def on_click(self, event):
@@ -1615,21 +1624,35 @@ class LabelFramesTool:
         frame_points = self.body_part_points[self.current_frame_index]
 
         if event.button == MouseButton.RIGHT:
+            if self.spacer_lines_active:
+                if len(self.spacer_lines_points) < 2:
+                    self.spacer_lines_points.append((event.xdata, event.ydata))
+                    if len(self.spacer_lines_points) == 2:
+                        self.draw_spacer_lines(ax, self.spacer_lines_points[0], self.spacer_lines_points[1])
+                return
             if event.key == 'shift':
                 self.delete_closest_point(ax, event, frame_points)
             else:
-                # Check if the label is 'Door' or not a calibration label, then place a new label
-                if label == 'Door' or label not in config.CALIBRATION_LABELS:
-                    if frame_points[label][view] is not None:
-                        frame_points[label][view] = None
-                    frame_points[label][view] = (event.xdata, event.ydata)
-                    ax.scatter(event.xdata, event.ydata, c=color, s=marker_size * 10, label=label)
-                    self.canvas.draw_idle()
-                    self.advance_label()
-                    self.draw_reprojected_points()
+                # Remove existing label point if present
+                if frame_points[label][view] is not None:
+                    frame_points[label][view] = None  # Remove the old placement
+                    self.show_body_part_points(draw=False)  # Clear old points without redrawing yet
+
+                # Add the new point
+                frame_points[label][view] = (event.xdata, event.ydata)
+                ax.scatter(event.xdata, event.ydata, c=color, s=marker_size * 10, label=label)
+
+                self.canvas.draw_idle()  # Redraw the canvas to update the display
+                self.advance_label()
+                self.draw_reprojected_points()
         elif event.button == MouseButton.LEFT:
             if label == 'Door' or label not in config.CALIBRATION_LABELS:
                 self.dragging_point = self.find_closest_point(ax, event, frame_points)
+            if self.tab_pressed:
+                # Display label name popup
+                label_near_click = self.find_label_near_click(event)
+                if label_near_click:
+                    self.show_label_popup(label_near_click, event)
 
     def find_label_near_click(self, event):
         """Check if a click is near any scatter point."""
@@ -1644,6 +1667,7 @@ class LabelFramesTool:
                         return label
         return None
 
+    @debounce(0.1)
     def on_drag(self, event):
         if self.dragging_point is None or event.inaxes not in self.axs:
             return
@@ -1652,9 +1676,12 @@ class LabelFramesTool:
         ax = self.axs[["side", "front", "overhead"].index(view)]
 
         if event.button == MouseButton.LEFT:
-            self.body_part_points[self.current_frame_index][label][view] = (event.xdata, event.ydata)
-            self.show_body_part_points()
-            self.draw_reprojected_points()  # Call to update reprojected points
+            # Check for "Door" or non-calibration labels
+            if label == 'Door' or label not in config.CALIBRATION_LABELS:
+                self.body_part_points[self.current_frame_index][label][view] = (event.xdata, event.ydata)
+                self.show_body_part_points(draw=False)
+                self.draw_reprojected_points()
+                self.canvas.draw_idle()
 
     def find_closest_point(self, ax, event, frame_points):
         min_dist = float('inf')
@@ -1976,8 +2003,16 @@ class LabelFramesTool:
         bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
 
         print("Optimizing calibration points...")
+        # Start the timer
+        start_time = time.time()
+
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
                           options={'maxiter': 100000, 'ftol': 1e-15, 'gtol': 1e-15, 'disp': False})
+
+        # End the timer
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Optimization completed in {elapsed_time:.2f} seconds.")
 
         optimized_points = self.reshape_calibration_points(result.x)
 
@@ -2077,6 +2112,7 @@ class LabelFramesTool:
 
         total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
                                                          weighted=True)
+        print("Total error: %s" %total_error)
         return total_error
 
     def estimate_extrinsics(self, calibration_points):

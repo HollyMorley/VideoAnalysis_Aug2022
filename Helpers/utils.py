@@ -82,6 +82,21 @@ class Utils:
                 }
         return data
 
+    def Get_vid_loc_from_analysed_file(self, file, view):
+        day = os.path.basename(file).split('_')[1]
+        video_base_path = "\\".join([paths['video_folder'], day])
+        new_filename =  os.path.basename(file).replace(vidstuff['scorers'][view],'').replace('.h5', '.avi')
+        video_path = os.path.join(video_base_path, new_filename)
+        return video_path
+
+    def Get_timestamps_from_analyse_file(self, file, view):
+        day = os.path.basename(file).split('_')[1]
+        video_base_path = "\\".join([paths['video_folder'], day])
+        new_filename =  os.path.basename(file).replace(vidstuff['scorers'][view],'').replace('.h5', '_Timestamps.csv')
+        video_path = os.path.join(video_base_path, new_filename)
+        return video_path
+
+
     def Get_processed_data_locations(self, con):
         splitcon = con.split('_')
         conname = "_".join(splitcon[0:2])

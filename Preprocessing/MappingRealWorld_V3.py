@@ -4,7 +4,6 @@ from Helpers import utils
 from Helpers.Config_23 import *
 from Helpers import MultiCamLabelling_config as opt_config
 from Helpers import OptimizeCalibration
-
 import os, cv2
 import pandas as pd
 import numpy as np
@@ -14,14 +13,11 @@ from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from pycalib.calib import triangulate
 from scipy.optimize import minimize
-
-
+from sklearn.linear_model import LinearRegression
 
 class MapExperiment:
     def __init__(self, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, belt_coords, snapshot_paths):
-        self.DataframeCoor_side = DataframeCoor_side
-        self.DataframeCoor_front = DataframeCoor_front
-        self.DataframeCoor_overhead = DataframeCoor_overhead
+        self.DataframeCoors = {'side': DataframeCoor_side, 'front': DataframeCoor_front, 'overhead': DataframeCoor_overhead}
 
         self.cameras = CameraData(snapshot_paths)
         self.cameras_specs = self.cameras.specs
@@ -84,20 +80,107 @@ class MapExperiment:
 
 class GetSingleExpData:
     def __init__(self, side_file, front_file, overhead_file):
-        self.side_file = side_file
-        self.front_file = front_file
-        self.overhead_file = overhead_file
+        self.files = {'side': side_file, 'front': front_file, 'overhead': overhead_file}
 
-        self.DataframeCoor_side = self.load_and_clean_data(side_file, 'side')
-        self.DataframeCoor_front = self.load_and_clean_data(front_file, 'front')
-        self.DataframeCoor_overhead = self.load_and_clean_data(overhead_file, 'overhead')
+        # retrieve raw data, format, and match frames across the 3 camera views
+        self.DataframeCoors = self.load_and_clean_all_data()
 
-    def load_and_clean_data(self, file, view):
+    def load_and_clean_all_data(self):
+        dataframes = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            dataframes[view] = self.get_and_format_data(self.files[view], view)
+
+        aligned_videos = self.align_dfs(dataframes)
+        return aligned_videos
+
+    def get_and_format_data(self, file, view):
         df = pd.read_hdf(file)
         try:
-            return df.loc(axis=1)[vidstuff['scorers'][view]].copy()
+            df = df.loc(axis=1)[vidstuff['scorers'][view]].copy()
         except:
-            return df.loc(axis=1)[vidstuff['scorers'][f'{view}_new']].copy()
+            df = df.loc(axis=1)[vidstuff['scorers'][f'{view}_new']].copy()
+        return df
+
+    def load_timestamps(self, view):
+        timestamp_path = utils.Utils().Get_timestamps_from_analyse_file(self.files[view], view)
+        timestamps = pd.read_csv(timestamp_path)
+        return timestamps
+
+    def zero_timestamps(self, timestamps):
+        timestamps['Timestamp'] = timestamps['Timestamp'] - timestamps['Timestamp'][0]
+        return timestamps
+
+    def adjust_timestamps(self, side_timestamps, other_timestamps):
+        mask = other_timestamps['Timestamp'].diff() < 4.045e+6
+        other_timestamps_single_frame = other_timestamps[mask]
+        side_timestamps_single_frame = side_timestamps[mask]
+        diff = other_timestamps_single_frame['Timestamp'] - side_timestamps_single_frame['Timestamp']
+
+        # find the best fit line for the lower half of the data by straightning the line
+        model = LinearRegression().fit(side_timestamps_single_frame['Timestamp'].values.reshape(-1, 1), diff.values)
+        slope = model.coef_[0]
+        intercept = model.intercept_
+        straightened_diff = diff - (slope * side_timestamps_single_frame['Timestamp'] + intercept)
+        correct_diff_idx = np.where(straightened_diff < straightened_diff.mean())
+
+        model_true = LinearRegression().fit(side_timestamps_single_frame['Timestamp'].values[correct_diff_idx].reshape(-1, 1), diff.values[correct_diff_idx])
+        slope_true = model_true.coef_[0]
+        intercept_true = model_true.intercept_
+        adjusted_timestamps = other_timestamps['Timestamp'] - (slope_true * other_timestamps['Timestamp'] + intercept_true)
+        return adjusted_timestamps
+
+    def adjust_frames(self):
+        timestamps = {'side': [], 'front': [], 'overhead': []}
+        timestamps_adj = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            timestamps[view] = self.zero_timestamps(self.load_timestamps(view))
+            if view != 'side':
+                timestamps_adj[view] = self.adjust_timestamps(timestamps['side'], timestamps[view])
+        timestamps_adj['side'] = timestamps['side']['Timestamp'].astype(float)
+        return timestamps_adj
+
+    def match_frames(self):
+        timestamps = self.adjust_frames()
+
+        buffer_ns = int(4.04e+6)  # Frame duration in nanoseconds
+
+        # Ensure the timestamps are sorted
+        dfs = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            timestamps[view] = timestamps[view].sort_values().reset_index(drop=True)
+            dfs[view] = pd.DataFrame({'Timestamp': timestamps[view], 'Frame_number_%s' %view: range(len(timestamps[view]))})
+
+        # Perform asof merge to find the closest matching frames within the buffer
+        matched_front = pd.merge_asof(dfs['side'], dfs['front'], on='Timestamp', direction='nearest', tolerance=buffer_ns,
+                                      suffixes=('_side', '_front'))
+        matched_all = pd.merge_asof(matched_front, dfs['overhead'], on='Timestamp', direction='nearest',
+                                    tolerance=buffer_ns, suffixes=('_side', '_overhead'))
+
+        # Handle NaNs explicitly by setting unmatched frames to -1
+        matched_frames = matched_all[['Frame_number_side', 'Frame_number_front', 'Frame_number_overhead']].applymap(
+            lambda x: int(x) if pd.notnull(x) else -1).values.tolist()
+
+        return matched_frames
+
+    def align_dfs(self, dfs):
+        matched_frames = self.match_frames()
+
+        # find first index row where all frames are in positive time
+        start = None
+        for idx, it in enumerate(matched_frames):
+            if np.all(np.array(it) > 0):
+                start = idx
+                break
+        matched_frames = matched_frames[start:]
+
+        frames = {'side': [], 'front': [], 'overhead': []}
+        aligned_dfs = {'side': [], 'front': [], 'overhead': []}
+        for vidx, view in enumerate(vidstuff['cams']):
+            frames[view] = [frame[vidx] for frame in matched_frames]
+            aligned_dfs[view] = dfs[view].iloc[frames[view]].reset_index(drop=False).rename(columns={'index': 'original_index'})
+
+        return aligned_dfs
+
 
     ###################################################################################################################
     # Map the camera views to the real world coordinates for each video file
@@ -120,30 +203,20 @@ class GetSingleExpData:
 
 
     def get_belt_coords(self):
-        side_mask = np.all(self.DataframeCoor_side.loc(axis=1)[
-                               ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
-                                'TransitionL'], 'likelihood'] > 0.99, axis=1)
-        front_mask = np.all(self.DataframeCoor_front.loc(axis=1)[
-                                ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
-                                 'TransitionL'], 'likelihood'] > 0.99, axis=1)
-        overhead_mask = np.all(self.DataframeCoor_overhead.loc(axis=1)[
-                                   ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
-                                    'TransitionL'], 'likelihood'] > 0.99, axis=1)
-
-        belt_coords_side = self.DataframeCoor_side.loc(axis=1)[
-            ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][side_mask]
-        belt_coords_front = self.DataframeCoor_front.loc(axis=1)[
-            ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][front_mask]
-        belt_coords_overhead = self.DataframeCoor_overhead.loc(axis=1)[
-            ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][overhead_mask]
-
-        side_mean = belt_coords_side.mean(axis=0)
-        front_mean = belt_coords_front.mean(axis=0)
-        overhead_mean = belt_coords_overhead.mean(axis=0)
+        masks = {'side': [], 'front': [], 'overhead': []}
+        belt_coords = {'side': [], 'front': [], 'overhead': []}
+        means = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            masks[view] = np.all(self.DataframeCoors[view].loc(axis=1)[
+                                        ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
+                                            'TransitionL'], 'likelihood'] > 0.99, axis=1)
+            belt_coords[view] = self.DataframeCoors[view].loc(axis=1)[
+                ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][masks[view]]
+            means[view] = belt_coords[view].mean(axis=0)
 
         # concatenate the mean values of the belt coordinates from the 3 camera views with the camera names as columns
-        belt_coords = pd.concat([side_mean, front_mean, overhead_mean], axis=1)
-        belt_coords.columns = ['side', 'front', 'overhead']
+        belt_coords = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
+        belt_coords.columns = vidstuff['cams']
 
         # add door coordinates
         door_coords = self.get_door_coords()
@@ -153,34 +226,29 @@ class GetSingleExpData:
         return coords
 
     def get_door_coords(self):
-        side_mask = self.DataframeCoor_side.loc(axis=1)['Door', 'likelihood'] > pcutoff
-        front_mask = self.DataframeCoor_front.loc(axis=1)['Door', 'likelihood'] > pcutoff
-        overhead_mask = self.DataframeCoor_overhead.loc(axis=1)['Door', 'likelihood'] > pcutoff
-        mask = side_mask & front_mask & overhead_mask
+        masks = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            masks[view] = self.DataframeCoors[view].loc(axis=1)['Door', 'likelihood'] > pcutoff
 
-        # change masks so that door is also in closed position
-        side = self.DataframeCoor_side.loc(axis=1)['Door', ['x', 'y']][mask]
-        front = self.DataframeCoor_front.loc(axis=1)['Door', ['x', 'y']][mask]
-        overhead = self.DataframeCoor_overhead.loc(axis=1)['Door', ['x', 'y']][mask]
+        mask = masks['side'] & masks['front'] & masks['overhead']
 
         sem_factor = 100
-        side_closed_mask = np.logical_and(
-            side['Door', 'y'] < side['Door', 'y'].mean() + side['Door', 'y'].sem() * sem_factor,
-            side['Door', 'y'] > side['Door', 'y'].mean() - side['Door', 'y'].sem() * sem_factor)
-        front_closed_mask = np.logical_and(
-            front['Door', 'y'] < front['Door', 'y'].mean() + front['Door', 'y'].sem() * sem_factor,
-            front['Door', 'y'] > front['Door', 'y'].mean() - front['Door', 'y'].sem() * sem_factor)
-        overhead_closed_mask = np.logical_and(
-            overhead['Door', 'x'] < overhead['Door', 'x'].mean() + overhead['Door', 'x'].sem() * sem_factor,
-            overhead['Door', 'x'] > overhead['Door', 'x'].mean() - overhead['Door', 'x'].sem() * sem_factor)
-        closed_mask = side_closed_mask & front_closed_mask & overhead_closed_mask
+        door_present = {'side': [], 'front': [], 'overhead': []}
+        door_closed_masks = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            door_present[view] = self.DataframeCoors[view].loc(axis=1)['Door', ['x', 'y']][mask]
+            door_closed_masks[view] = np.logical_and(
+                door_present[view]['Door', 'y'] < door_present[view]['Door', 'y'].mean() + door_present[view]['Door', 'y'].sem() * sem_factor,
+                door_present[view]['Door', 'y'] > door_present[view]['Door', 'y'].mean() - door_present[view]['Door', 'y'].sem() * sem_factor)
 
-        side_mean = side[closed_mask].mean(axis=0)
-        front_mean = front[closed_mask].mean(axis=0)
-        overhead_mean = overhead[closed_mask].mean(axis=0)
+        closed_mask = door_closed_masks['side'] & door_closed_masks['front'] & door_closed_masks['overhead']
+
+        means = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            means[view] = door_present[view][closed_mask].mean(axis=0)
 
         # concatenate the mean values of the door coordinates from the 3 camera views with the camera names as columns
-        door_coords = pd.concat([side_mean, front_mean, overhead_mean], axis=1)
+        door_coords = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
         door_coords.columns = ['side', 'front', 'overhead']
         door_coords.reset_index(inplace=True, drop=False)
 
@@ -219,18 +287,16 @@ class GetSingleExpData:
         return labels, side_coords, front_coords, overhead_coords
 
     def find_common_bodyparts(self):
-        side_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_side)
-        front_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_front)
-        overhead_bodyparts = self.get_unique_bodyparts(self.DataframeCoor_overhead)
+        bodyparts = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            bodyparts[view] = self.get_unique_bodyparts(self.DataframeCoors[view])
+
         common_bodyparts = self.get_intersected_bodyparts(
-            side_bodyparts, front_bodyparts, overhead_bodyparts
-        )
+            bodyparts['side'], bodyparts['front'], bodyparts['overhead'])
         all_bodyparts = self.get_all_bodyparts(
-            side_bodyparts, front_bodyparts, overhead_bodyparts, common_bodyparts
-        )
+            bodyparts['side'], bodyparts['front'], bodyparts['overhead'], common_bodyparts)
         labels = self.create_labels_dict(
-            side_bodyparts, front_bodyparts, overhead_bodyparts, all_bodyparts, common_bodyparts
-        )
+            bodyparts['side'], bodyparts['front'], bodyparts['overhead'], all_bodyparts, common_bodyparts)
         return labels
 
     def get_unique_bodyparts(self, dataframe):
@@ -267,50 +333,33 @@ class GetSingleExpData:
         :param labels: dictionary of lists of common body parts for each camera view
         :return: 3 numpy arrays with shape (num_rows, num_labels, 3) for side, front and overhead camera views
         """
-        side = self.DataframeCoor_side.to_numpy()
-        front = self.DataframeCoor_front.to_numpy()
-        overhead = self.DataframeCoor_overhead.to_numpy()
+        data = {'side': [], 'front': [], 'overhead': []}
+        for view in vidstuff['cams']:
+            data[view] = self.DataframeCoors[view].to_numpy()
 
-        num_rows = self.DataframeCoor_side.shape[0]
+        num_rows = self.DataframeCoors['side'].shape[0]
 
         # Mapping of current labels to their column indices in the common label list
-        label_to_index_side = {}
-        label_to_index_front = {}
-        label_to_index_overhead = {}
-        for idx, label in enumerate(labels['side']):
-            pos = labels['all'].index(label)
-            label_to_index_side[label] = pos
-        for idx, label in enumerate(labels['front']):
-            pos = labels['all'].index(label)
-            label_to_index_front[label] = pos
-        for idx, label in enumerate(labels['overhead']):
-            pos = labels['all'].index(label)
-            label_to_index_overhead[label] = pos
+        label_to_index = {'side': {}, 'front': {}, 'overhead': {}}
+        coords = {'side': [], 'front': [], 'overhead': []}
 
-        # create empty array with shape (3, num_labels, num_rows) filled with NaNs
-        side_coords = np.full((num_rows, len(labels['all']), 3), np.nan, dtype=side.dtype)
-        front_coords = np.full((num_rows, len(labels['all']), 3), np.nan, dtype=front.dtype)
-        overhead_coords = np.full((num_rows, len(labels['all']), 3), np.nan, dtype=overhead.dtype)
+        for view in vidstuff['cams']:
+            for idx, label in enumerate(labels[view]):
+                pos = labels['all'].index(label)
+                label_to_index[view][label] = pos
+            # create empty array with shape (3, num_labels, num_rows) filled with NaNs
+            coords[view] = np.full((num_rows, len(labels['all']), 3), np.nan, dtype=data[view].dtype)
 
         # Fill in the data for existing labels in their new positions for each camera view
         for idx, label in enumerate(labels['all']):
-            if label in labels['side']:
-                pos = label_to_index_side[label]
-                original_pos_mask = self.DataframeCoor_side.columns.get_loc(label)
-                original_pos = np.where(original_pos_mask)[0]
-                side_coords[:, pos, :] = side[:, original_pos]
-            if label in labels['front']:
-                pos = label_to_index_front[label]
-                original_pos_mask = self.DataframeCoor_front.columns.get_loc(label)
-                original_pos = np.where(original_pos_mask)[0]
-                front_coords[:, pos, :] = front[:, original_pos]
-            if label in labels['overhead']:
-                pos = label_to_index_overhead[label]
-                original_pos_mask = self.DataframeCoor_overhead.columns.get_loc(label)
-                original_pos = np.where(original_pos_mask)[0]
-                overhead_coords[:, pos, :] = overhead[:, original_pos]
+            for view in vidstuff['cams']:
+                if label in labels[view]:
+                    pos = label_to_index[view][label]
+                    original_pos_mask = self.DataframeCoors[view].columns.get_loc(label)
+                    original_pos = np.where(original_pos_mask)[0]
+                    coords[view][:, pos, :] = data[view][:, original_pos]
 
-        return side_coords, front_coords, overhead_coords
+        return coords['side'], coords['front'], coords['overhead']
 
     def get_camera_params(self, cameras_extrinsics, cameras_intrinsics):
         # Camera intrinsics
@@ -526,8 +575,7 @@ class GetSingleExpData:
         # plot the video frame
         frame = self.plot_2d_prep_frame(view, frame_number)
 
-        # get the relevant df from self.DataframeCoor_side, *front or *overhead
-        data_file = self.DataframeCoor_side if view == 'side' else self.DataframeCoor_front if view == 'front' else self.DataframeCoor_overhead
+        data_file = self.DataframeCoors[view]
 
         # # minus 10 from the y of overhead view
         # if view == 'overhead':

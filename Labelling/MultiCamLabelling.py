@@ -2055,7 +2055,7 @@ class LabelFramesTool:
                                 error = np.sqrt(
                                     (projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
                                 if weighted:
-                                    weight = config.REFERENCE_LABEL_WEIGHTS.get(label, 1.0)
+                                    weight = opt_config.REFERENCE_LABEL_WEIGHTS.get(view, {}).get(label, 1.0)
                                     error *= weight
                                 errors[label][view] = error
                                 total_error += error

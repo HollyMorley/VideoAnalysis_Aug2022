@@ -6,9 +6,9 @@ import numpy as np
 vidstuff = {
     'cams': ['side','front','overhead'],
     'scorers': {
-        'side': "DLC_resnet50_DLC_DualBeltAug2shuffle1_600000",
-        'overhead': "DLC_resnet50_DLC_DualBeltAug3shuffle1_600000",
-        'front': "DLC_resnet50_DLC_DualBeltAug3shuffle1_600000"
+        'side': "DLC_resnet50_DLC_DualBeltAug2shuffle1_1000000",
+        'overhead': "DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000",
+        'front': "DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000"
     }
 }
 

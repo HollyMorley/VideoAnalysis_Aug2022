@@ -196,11 +196,60 @@ class GetSingleExpData:
         belt_points_CCS = calib_obj.belt_coords_CCS
 
         # optimise the cameras extrinsics
+        #self.plot_belt_coords()
+
         optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, self)
         new_calibration_data = optimise.optimise_calibration()
 
         coords, repr_err = self.get_realworld_coords(new_calibration_data['extrinsics'], new_calibration_data['intrinsics'])
 
+    def plot_belt_coords(self):
+        """
+        For 243 on 20230306, test to check dlc coords vs my enhanced manual coords
+        :return:
+        """
+        reference_belt_coords = pd.read_csv(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Manual_Labelling\CameraCalibration\HM_20230306_APACharRepeat_FAA-1035243_None_1\calibration_labels_enhanced - copy.csv")
+        current_belt_coords = self.get_belt_coords()
+
+        video_paths = [
+            r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_side_1.avi",
+            r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_front_1.avi",
+            r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035243_None_overhead_1.avi"
+        ]
+        frame_number = 16977
+        frames = [self.read_frame_from_video(path, frame_number) for path in video_paths]
+
+        for i, (frame, camera_view) in enumerate(zip(frames, vidstuff['cams'])):
+            plt.figure(figsize=(10, 8))
+            # Plot df_new coordinates in blue
+            self.plot_coordinates_on_image(frame, current_belt_coords, camera_view, color='blue', label='current')
+            # Overlay df_enhanced coordinates in red
+            self.plot_coordinates_on_image(frame, reference_belt_coords, camera_view, color='red', label='enhanced')
+            plt.title(f'Camera {camera_view.capitalize()} - Blue: current, Red: enhanced')
+            plt.axis('off')
+            plt.show()
+
+    def read_frame_from_video(self, video_path, frame_number):
+        cap = cv2.VideoCapture(video_path)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        cap.release()
+        if ret:
+            return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert to RGB for plotting
+        else:
+            raise ValueError(f"Could not read frame {frame_number} from video {video_path}")
+
+    def plot_coordinates_on_image(self, image, df, camera_view, color, label):
+        plt.imshow(image)
+        # Filter the dataframe for the current camera view and group by body parts
+        df_camera = df[['bodyparts', 'coords', camera_view]].pivot(index='bodyparts', columns='coords',
+                                                                   values=camera_view)
+
+        # Plot points only relevant to the specific camera view
+        for bodypart, row in df_camera.iterrows():
+            x, y = row['x'], row['y']  # Get x and y coordinates for the body part
+            plt.scatter(x, y, color=color, alpha=0.8, s=4)
+            plt.text(x, y, bodypart, fontsize=9, color=color)
 
     def get_belt_coords(self):
         masks = {'side': [], 'front': [], 'overhead': []}

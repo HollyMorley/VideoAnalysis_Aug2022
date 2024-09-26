@@ -23,21 +23,26 @@ class optimize:
         self.extrinsics = extrinsics
         self.parent = parent_instance
         self.iteration_count = 0
+        #self.reference_data = []
+        self.body_part_points = {}
+        self.error_history = []  # Store error values during optimization
 
     def optimise_calibration(self):
         reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
                             'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
-        reference_data = self.get_data_for_optimisation(reference_points)
-        reference_indexes = np.array(reference_data['side'].index)
+        #self.reference_data = self.get_data_for_optimisation(reference_points)
+        self.body_part_points, door_index = self.convert_df_to_dict(reference_points)
 
-        #self.plot_selected_frames(reference_data)
+        reference_indexes = list(self.body_part_points.keys())
 
-        initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_data)
+        #self.plot_selected_frames(reference_points)
+
+        initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_indexes, weighted=True)
         print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
 
         initial_flat_points = self.flatten_calibration_points()
-        args = (reference_points, reference_data)
+        args = (reference_points, reference_indexes)
 
         bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
 
@@ -46,7 +51,7 @@ class optimize:
         start_time = time.time()
 
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':False}) # 100000, 1e-15, 1e-15
+                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':True}) # 100000, 1e-15, 1e-15
 
         # End the timer
         end_time = time.time()
@@ -55,22 +60,141 @@ class optimize:
 
         optimized_points = self.reshape_calibration_points(result.x)
 
+        self.plot_original_vs_optimized(reference_points, door_index, optimized_points, self.calibration_coords)
+
         for label, views in optimized_points.items():
             for view, point in views.items():
                 self.calibration_coords[label][view] = point
 
         calibration_data = self.recalculate_camera_parameters()
 
-        new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_data)
+        new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_indexes, weighted=True)
         print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
 
         return calibration_data
 
-    def plot_selected_frames(self, reference_data):
+    def convert_df_to_dict(self, reference_points):
+        reference_data = self.get_data_for_optimisation(reference_points)
+
+        door_present_mask = np.logical_and.reduce((np.any(reference_data['side']['Door'], axis=1),
+                                                   np.any(reference_data['front']['Door'], axis=1),
+                                                   np.any(reference_data['overhead']['Door'], axis=1)))
+        door_index = np.where(door_present_mask)[0]
+
+        reference_data_dict = {}
+        for view, df in reference_data.items():
+            # Iterate through each row in the dataframe
+            for index, row in df.iterrows():
+                # Initialize body part entry in the output dictionary if not present
+                if index not in reference_data_dict:
+                    reference_data_dict[index] = {}
+
+                # Iterate through each body part (columns except 'original_index')
+                for bodypart in df.columns.get_level_values('bodyparts').unique():
+                    # Skip 'original_index' and any columns that don't have x, y coords
+                    if bodypart == 'original_index':
+                        continue
+
+                    x_coord = row[bodypart]['x']
+                    y_coord = row[bodypart]['y']
+
+                    # Initialize body part dictionary if not present
+                    if bodypart not in reference_data_dict[index]:
+                        reference_data_dict[index][bodypart] = {}
+
+                    # Set the coordinate tuple
+                    reference_data_dict[index][bodypart][view] = (x_coord, y_coord) if pd.notnull(x_coord) and pd.notnull(
+                        y_coord) else None
+        return reference_data_dict, door_index
+
+    def plot_original_vs_optimized(self, reference_points, frame_number, optimized_points, original_points):
+        """
+        Plots the original and optimized calibration labels for each view (side, front, overhead),
+        and the error curve during optimization as a fourth subplot.
+        """
+        reference_data = self.get_data_for_optimisation(reference_points)
+        real_frame_number = reference_data['side'].iloc(axis=0)[frame_number].loc['original_index'].values[0].astype(
+            int)
+
+        # Get video paths
+        day = os.path.basename(self.parent.files['side']).split('_')[1]
+        video_path = "\\".join([paths['video_folder'], day])
+        video_paths = {
+            "side": os.path.join(video_path, os.path.basename(self.parent.files['side']).replace(vidstuff['scorers']['side'],'').replace('.h5', '.avi')),
+            "front": os.path.join(video_path, os.path.basename(self.parent.files['front']).replace(vidstuff['scorers']['front'],'').replace('.h5', '.avi')),
+            "overhead": os.path.join(video_path, os.path.basename(self.parent.files['overhead']).replace(vidstuff['scorers']['overhead'], '').replace('.h5', '.avi'))
+        }
+
+        # Check if the video files exist
+        for view, video_path in video_paths.items():
+            if not os.path.exists(video_path):
+                print(f"Video file not found for {view} view at {video_path}")
+                return
+
+        # Initialize video capture for each view
+        caps = {view: cv2.VideoCapture(video_path) for view, video_path in video_paths.items()}
+
+        # Plot original vs optimized points for each view and error curve
+        fig, axs = plt.subplots(4, 1, figsize=(20, 20))
+        cams = ["side", "front", "overhead"]
+
+        # Flags for controlling the legend labels
+        original_plotted = False
+        optimized_plotted = False
+
+        for i, (view, cap) in enumerate(caps.items()):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, real_frame_number)
+            ret, frame = cap.read()
+
+            if not ret:
+                print(f"Error: Could not read frame {real_frame_number} from the video for {view} view.")
+                continue
+
+            reference_row = reference_data[view].iloc[frame_number]
+
+            axs[i].imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+            # Plot original points in red
+            for label in original_points.loc(axis=1)['bodyparts'].unique():
+                orig_x = original_points[np.logical_and(original_points['bodyparts'] == label, original_points['coords'] == 'x')][view]
+                orig_y = original_points[np.logical_and(original_points['bodyparts'] == label, original_points['coords'] == 'y')][view]
+                axs[i].scatter(orig_x, orig_y, c='r', marker='+', s=20, label='Original' if not original_plotted else "")  # Only label once
+                original_plotted = True  # Set flag to True
+
+            # Plot optimized points in blue
+            for label in optimized_points.loc(axis=1)['bodyparts'].unique():
+                opt_x = optimized_points[np.logical_and(optimized_points['bodyparts'] == label, optimized_points['coords'] == 'x')][view]
+                opt_y = optimized_points[np.logical_and(optimized_points['bodyparts'] == label, optimized_points['coords'] == 'y')][view]
+                axs[i].scatter(opt_x, opt_y, c='b', marker='+', s=20, label='Optimized' if not optimized_plotted else "")  # Only label once
+                optimized_plotted = True
+
+            axs[i].set_title(f'{view.capitalize()} View - Frame {frame_number}')
+            axs[i].axis('off')
+
+        # Add a legend for color coding in the first subplot
+        axs[0].legend(loc='upper right')
+
+        # Plot the error curve in the fourth subplot
+        axs[3].plot(self.error_history, color='g', label='Total Error')
+        axs[3].set_title("Optimization Error Curve")
+        axs[3].set_xlabel("Iteration")
+        axs[3].set_ylabel("Total Error")
+        axs[3].legend()
+
+        #plt.tight_layout()
+        plt.show()
+
+        # Release the video capture objects
+        for cap in caps.values():
+            cap.release()
+
+    def plot_selected_frames(self, reference_points):
         """
         Plots the selected frames for each camera view with the respective reference data coordinates
         as scatter points.
         """
+        reference_data = self.get_data_for_optimisation(reference_points)
+
         day =os.path.basename(self.parent.files['side']).split('_')[1]
         video_path = "\\".join([paths['video_folder'], day])
         video_paths = {
@@ -119,58 +243,6 @@ class optimize:
         for cap in caps.values():
             cap.release()
 
-    # def optimise_calibration(self):
-    #     reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
-    #                         'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
-    #                         'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
-    #     reference_data = self.get_data_for_optimisation(reference_points)
-    #
-    #     initial_total_error, initial_errors = self.compute_reprojection_error(reference_points, reference_data)
-    #     print(f"Initial total reprojection error for {reference_points}: \n{initial_total_error}")
-    #
-    #     initial_flat_points = self.flatten_calibration_points()
-    #     args = (reference_points, reference_data)
-    #
-    #     # Define the bounds for Bayesian optimization
-    #     bounds = [(initial_flat_points[i] - 5.0, initial_flat_points[i] + 5.0) for i in range(len(initial_flat_points))]
-    #     dimensions = [Real(bound[0], bound[1]) for bound in bounds]
-    #
-    #     # Ensure x0 matches the dimensions of the bounds
-    #     x0 = [initial_flat_points.tolist()]
-    #
-    #     print("Optimizing calibration points using Bayesian Optimization...")
-    #
-    #     # Start the timer
-    #     start_time = time.time()
-    #
-    #     # Bayesian Optimization with initial points
-    #     result = gp_minimize(
-    #         func=lambda x: self.objective_function(x, *args),
-    #         dimensions=dimensions,
-    #         x0=x0,  # Provide initial points here as a list of lists
-    #         n_calls=200,  # Number of function calls to find minimum
-    #         n_initial_points=50,  # Number of random points before fitting model
-    #         random_state=0
-    #     )
-    #
-    #     # End the timer
-    #     end_time = time.time()
-    #     elapsed_time = end_time - start_time
-    #     print(f"Bayesian Optimization completed in {elapsed_time:.2f} seconds.")
-    #
-    #     optimized_points = self.reshape_calibration_points(result.x)
-    #
-    #     for label, views in optimized_points.items():
-    #         for view, point in views.items():
-    #             self.calibration_coords[label][view] = point
-    #
-    #     calibration_data = self.recalculate_camera_parameters()
-    #
-    #     new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_data)
-    #     print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
-    #
-    #     return calibration_data
-
     def flatten_calibration_points(self):
         """
         Flattens the calibration coordinates into a 1D numpy array for optimization.
@@ -186,7 +258,11 @@ class optimize:
 
         total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
                                                          weighted=True)
-        print("Total error: %s" %total_error)
+
+        # Store the error value for plotting later
+        self.error_history.append(total_error)
+
+        # print("Total error: %s" %total_error)
         return total_error
 
     def estimate_extrinsics(self, calibration_points):
@@ -229,49 +305,33 @@ class optimize:
         }
         return calibration_data
 
-    def compute_frame_error(self, frame_index, labels, reference_data, extrinsics, weighted):
-        cams = ["side", "front", "overhead"]
-        frame_total_error = 0
-        frame_errors = {label: {"side": 0, "front": 0, "overhead": 0} for label in labels}
-
-        # Cache frame data
-        frame_data = {view: reference_data[view].loc[frame_index] for view in cams}
-
-        for label in labels:
-            point_3d = self.triangulate(reference_data, label, extrinsics, frame_index)
-            if point_3d is not None:
-                point_3d = point_3d[:3]
-                projections = self.project_to_view(point_3d, extrinsics)
-
-                for view in cams:
-                    if ~frame_data[view][label].isna().any():
-                        original_x, original_y = frame_data[view][label]
-                        if view in projections:
-                            projected_x, projected_y = projections[view]
-                            error = np.sqrt((projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
-                            if weighted:
-                                weight = opt_config.REFERENCE_LABEL_WEIGHTS.get(label, 1.0)
-                                error *= weight
-                            frame_errors[label][view] = error
-                            frame_total_error += error
-        return frame_total_error, frame_errors
-
-    def compute_reprojection_error(self, labels, reference_data, extrinsics=None, weighted=False):
+    def compute_reprojection_error(self, labels, frame_indices, extrinsics=None, weighted=False):
         errors = {label: {"side": 0, "front": 0, "overhead": 0} for label in labels}
+        cams = ["side", "front", "overhead"]
         total_error = 0
 
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.compute_frame_error, frame_index, labels, reference_data, extrinsics, weighted)
-                       for frame_index in reference_data['side'].index]
+        for frame_index in frame_indices:
+            frame_index = int(frame_index)  # Ensure frame_index is an integer
+            for label in labels:
+                point_3d = self.triangulate(label, extrinsics, frame_index)
+                if point_3d is not None:
+                    point_3d = point_3d[:3]
+                    projections = self.project_to_view(point_3d, extrinsics)
 
-            for future in futures:
-                frame_total_error, frame_errors = future.result()
-                total_error += frame_total_error
-                for label in labels:
-                    for view in ["side", "front", "overhead"]:
-                        errors[label][view] += frame_errors[label][view]
-
+                    for view, frame in zip(cams, [frame_index, frame_index, frame_index]):
+                        if self.body_part_points[frame][label][view] is not None:
+                            original_x, original_y = self.body_part_points[frame][label][view]
+                            if view in projections:
+                                projected_x, projected_y = projections[view]
+                                error = np.sqrt(
+                                    (projected_x - original_x) ** 2 + (projected_y - original_y) ** 2)
+                                if weighted:
+                                    weight = opt_config.REFERENCE_LABEL_WEIGHTS[view].get(label, 1.0)
+                                    error *= weight
+                                errors[label][view] = error
+                                total_error += error
         return total_error, errors
+
 
     def project_to_view(self, point_3d, extrinsics=None):
         projections = {}
@@ -289,15 +349,15 @@ class optimize:
                 projections[view] = CCS_repr[0].flatten()
         return projections
 
-    def triangulate(self, reference_data, label, extrinsics=None, frame=None):
+    def triangulate(self, label, extrinsics=None, frame_index=None):
         P = []
         coords = []
 
-        frame_mapping = {'side': frame, 'front': frame, 'overhead': frame}
+        frame_mapping = {'side': frame_index, 'front': frame_index, 'overhead': frame_index}
         for view, frame in frame_mapping.items():
-            if ~reference_data[view].loc[frame, label].isna().any():
+            if self.body_part_points[frame][label][view] is not None:
                 P.append(self.get_p(view, extrinsics=extrinsics, return_value=True))
-                coords.append(reference_data[view].loc[frame, label].values)
+                coords.append(self.body_part_points[frame][label][view])
 
         if len(P) < 2 or len(coords) < 2:
             return None
@@ -357,10 +417,10 @@ class optimize:
         data_visible = {view: data[view].loc(axis=0)[visible_index] for view in data.keys()}
 
         # order dfs by side's x, select random 10 frames, then order by side's y, select random 10 frames
-        nose_mask = self.create_combined_visibility_mask(data_visible, 'Nose', 0.95)
-        tail12_mask = self.create_combined_visibility_mask(data_visible, 'Tail12', 0.95)
-        hindpaw_toeR_mask = self.create_combined_visibility_mask(data_visible, 'HindpawToeR', 0.95)
-        earR_mask = self.create_combined_visibility_mask(data_visible, 'EarR', 0.95)
+        nose_mask = self.create_combined_visibility_mask(data_visible, 'Nose', pcutoff) #0.95
+        tail12_mask = self.create_combined_visibility_mask(data_visible, 'Tail12', pcutoff) #0.95
+        hindpaw_toeR_mask = self.create_combined_visibility_mask(data_visible, 'HindpawToeR', pcutoff) #0.95
+        earR_mask = self.create_combined_visibility_mask(data_visible, 'EarR', pcutoff) #0.95
 
         indexes = []
         indexes.append(
@@ -372,12 +432,12 @@ class optimize:
         indexes.append(
             self.get_index_snapshots(data_visible['side'].loc(axis=1)['Tail12', 'y'][tail12_mask].sort_values().index,
                                      [0.1, 0.2, 0.85, 0.95, 0.99]))
-        # indexes.append(
-        #     self.get_index_snapshots(data_visible['front'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
-        #                              [0.01, 0.3, 0.5, 0.7, 0.99]))
-        # indexes.append(
-        #     self.get_index_snapshots(data_visible['front'].loc(axis=1)['Tail12', 'x'][tail12_mask].sort_values().index,
-        #                              [0.01, 0.3, 0.99]))
+        indexes.append(
+            self.get_index_snapshots(data_visible['front'].loc(axis=1)['Nose', 'x'][nose_mask].sort_values().index,
+                                     [0.01, 0.3, 0.5, 0.7, 0.99]))
+        indexes.append(
+            self.get_index_snapshots(data_visible['front'].loc(axis=1)['Tail12', 'x'][tail12_mask].sort_values().index,
+                                     [0.01, 0.3, 0.99]))
         # indexes.append(self.get_index_snapshots(
         #     data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
         #     [0.01, 0.99]))
@@ -403,7 +463,7 @@ class optimize:
         reference_data = {view: data[view].loc(axis=0)[unique_list].loc(axis=1)[reference_points + ['Door']] for view in
                           data.keys()}
         for view in reference_data.keys():
-            mask = reference_data[view].xs(axis=1, level=1, key='likelihood') > 0.95
+            mask = reference_data[view].xs(axis=1, level=1, key='likelihood') > pcutoff #0.99
             reference_data[view] = reference_data[view][mask]
             reference_data[view].drop('likelihood', axis=1, level=1, inplace=True)
             reference_data[view].loc(axis=1)['original_index'] = self.DataframeCoors[view].loc(axis=0)[unique_list].loc(axis=1)['original_index'].values

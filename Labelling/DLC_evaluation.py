@@ -250,6 +250,7 @@ def plot_frame(frame_idx):
             annot.set_visible(False)
             fig.canvas.draw_idle()
 
+    # Plot each body part
     for col in frame_coords.columns:
         if 'likelihood' in col:
             bodypart = col.split('_likelihood')[0]
@@ -260,14 +261,42 @@ def plot_frame(frame_idx):
 
             if likelihood > pcutoff:
                 scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='o')
-            # else:
-            #     scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='x')
+            else:
+                scatter = ax.scatter(x, y, s=scatter_size, color=color, edgecolors='k', marker='x', alpha=0.2)
 
             scatter_points.append((bodypart, scatter))
+
+    # Full list of skeleton pairs
+    skeleton_pairs = [
+        ("Nose", "EarR"), ("Nose", "EarL"), ("Nose", "Back1"), ("EarR", "EarL"), ("Back1", "Back2"), ("Back2", "Back3"),
+        ("Back3", "Back4"), ("Back4", "Back5"), ("Back5", "Back6"), ("Back6", "Back7"), ("Back7", "Back8"), ("Back8", "Back9"),
+        ("Back9", "Back10"), ("Back10", "Back11"), ("Back11", "Back12"), ("Back12", "Tail1"), ("Tail1", "Tail2"), ("Tail2", "Tail3"),
+        ("Tail3", "Tail4"), ("Tail4", "Tail5"), ("Tail5", "Tail6"), ("Tail6", "Tail7"), ("Tail7", "Tail8"), ("Tail8", "Tail9"),
+        ("Tail9", "Tail10"), ("Tail10", "Tail11"), ("Tail11", "Tail12"), ("ForepawToeR", "ForepawKnuckleR"), ("ForepawKnuckleR", "ForepawAnkleR"),
+        ("ForepawAnkleR", "ForepawKneeR"), ("ForepawToeL", "ForepawKnuckleL"), ("ForepawKnuckleL", "ForepawAnkleL"), ("ForepawAnkleL", "ForepawKneeL"),
+        ("HindpawToeR", "HindpawKnuckleR"), ("HindpawKnuckleR", "HindpawAnkleR"), ("HindpawAnkleR", "HindpawKneeR"), ("HindpawToeL", "HindpawKnuckleL"),
+        ("HindpawKnuckleL", "HindpawAnkleL"), ("HindpawAnkleL", "HindpawKneeL"), ("Back3", "ForepawKneeR"), ("Back3", "ForepawKneeL"),
+        ("Back10", "HindpawKneeR"), ("Back10", "HindpawKneeL")
+    ]
+
+    # Draw the skeleton if the toggle is on
+    if skeleton_visible:
+        for part1, part2 in skeleton_pairs:
+            if f'{part1}_x' in frame_coords.columns and f'{part2}_x' in frame_coords.columns:
+                x1, y1 = frame_coords[f'{part1}_x'].values[0], frame_coords[f'{part1}_y'].values[0]
+                x2, y2 = frame_coords[f'{part2}_x'].values[0], frame_coords[f'{part2}_y'].values[0]
+                likelihood1 = frame_coords[f'{part1}_likelihood'].values[0]
+                likelihood2 = frame_coords[f'{part2}_likelihood'].values[0]
+
+                # Draw the line only if both points have high enough likelihoods
+                if likelihood1 > pcutoff and likelihood2 > pcutoff:
+                    line_color = color_map[part1]  # Color based on the first label in the pair
+                    ax.plot([x1, x2], [y1, y2], color=line_color, linewidth=1)
 
     ax.set_title(f'Frame {frame_idx}')
     fig.canvas.draw_idle()
     fig.canvas.mpl_connect("motion_notify_event", hover)
+
 
 
 def update_scatter_size(val):
@@ -301,6 +330,10 @@ def pan(event):
 def home(event):
     fig.canvas.manager.toolbar.home()
 
+def toggle_skeleton():
+    global skeleton_visible
+    skeleton_visible = not skeleton_visible
+    plot_frame(current_frame)
 
 def restore_scorer_level(df):
     df.columns = pd.MultiIndex.from_tuples([('Holly', *col.split('_')) for col in df.columns])
@@ -408,6 +441,13 @@ btn_pan.on_clicked(pan)
 ax_home = plt.axes([0.9, 0.05, 0.08, 0.03])
 btn_home = MplButton(ax_home, 'Home')
 btn_home.on_clicked(home)
+
+ax_skeleton = plt.axes([0.55, 0.05, 0.12, 0.04])
+btn_skeleton = MplButton(ax_skeleton, 'Toggle Skeleton')
+skeleton_visible = False  # Initial state
+
+btn_skeleton.on_clicked(lambda event: toggle_skeleton())
+
 
 ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])
 btn_extract = MplButton(ax_extract, 'Extract Frame')

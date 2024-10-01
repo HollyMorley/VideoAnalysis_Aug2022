@@ -7,6 +7,7 @@ from Helpers import OptimizeCalibration
 import os, cv2
 import pandas as pd
 import numpy as np
+import time
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 # from matplotlib import colormaps
@@ -84,6 +85,10 @@ class GetSingleExpData:
 
         # retrieve raw data, format, and match frames across the 3 camera views
         self.DataframeCoors = self.load_and_clean_all_data()
+
+        self.extrinsics = None
+        self.intrinsics = None
+        self.belt_coords_CCS = None
 
     def load_and_clean_all_data(self):
         dataframes = {'side': [], 'front': [], 'overhead': []}
@@ -199,9 +204,13 @@ class GetSingleExpData:
         #self.plot_belt_coords()
 
         optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, self)
-        new_calibration_data = optimise.optimise_calibration()
+        new_calibration_data = optimise.optimise_calibration(debugging=True) #todo remove debugging
 
-        coords, repr_err = self.get_realworld_coords(new_calibration_data['extrinsics'], new_calibration_data['intrinsics'])
+        self.extrinsics = new_calibration_data['extrinsics']
+        self.intrinsics = new_calibration_data['intrinsics']
+        self.belt_coords_CCS = new_calibration_data['belt points CCS']
+
+        coords, repr_err = self.get_realworld_coords()
 
     def plot_belt_coords(self):
         """
@@ -307,27 +316,40 @@ class GetSingleExpData:
     # Triangulate the 3D coordinates of the common body parts in the same order for all 3 camera views
     ####################################################################################################################
 
-    def get_realworld_coords(self, cameras_extrinsics, cameras_intrinsics):
+    def get_realworld_coords(self):
         # Initial setup and data preparation
         labels, side_coords, front_coords, overhead_coords = self.prepare_data()
 
         # Get camera parameters
-        K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(cameras_extrinsics, cameras_intrinsics)
+        K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(self.extrinsics, self.intrinsics)
 
         # Set up dataframes for results
-        real_world_coords_allparts, repr_error_allparts, repr_allparts = self.setup_dataframes(labels)
+        real_world_coords_allparts, repr_error_allparts, repr_allparts = self.setup_dataframes(labels, side_coords.shape[0])
 
         # Process each body part
+        print('Starting triangulation...')
+        start_time_total = time.time()  # Start timer for total triangulation
         for bidx, body_part in enumerate(labels['all']):
-            print(f"Triangulating {body_part}...")
+            #print(f"Triangulating {body_part}...")
+            start_time_label = time.time()  # Start timer for the current label
             self.process_body_part(
                 bidx, body_part,
                 side_coords, front_coords, overhead_coords,
-                cameras_extrinsics, cameras_intrinsics,
+                self.extrinsics, self.intrinsics,
                 P_gt, Nc, real_world_coords_allparts,
                 repr_error_allparts, repr_allparts
             )
-        print('done')
+            label_time = time.time() - start_time_label  # End timer for the current label
+            print(f"Triangulation finished for {body_part} --> {label_time:.2f} seconds")
+        total_time = time.time() - start_time_total  # End timer for total triangulation
+        print(f"Total triangulation time: {total_time:.2f} seconds")
+
+        print('temp')
+        #self.plot_3d_mouse(real_world_coords_allparts, labels, 150)
+        #self.plot_3d_video(real_world_coords_allparts, labels, 10, 'walking_mouse_2_slow')
+        # self.plot_2d_skeleton_overlay_on_frame_fromOriginal_allViews(165850, labels)
+        # self.plot_2d_skeleton_overlay_on_frame_fromReprojection_allViews(repr_allparts, 165850, labels)
+
         return real_world_coords_allparts, repr_error_allparts
 
     def prepare_data(self):
@@ -344,6 +366,8 @@ class GetSingleExpData:
             bodyparts['side'], bodyparts['front'], bodyparts['overhead'])
         all_bodyparts = self.get_all_bodyparts(
             bodyparts['side'], bodyparts['front'], bodyparts['overhead'], common_bodyparts)
+        # remove 'original_index' from all_bodyparts
+        all_bodyparts.remove('original_index')
         labels = self.create_labels_dict(
             bodyparts['side'], bodyparts['front'], bodyparts['overhead'], all_bodyparts, common_bodyparts)
         return labels
@@ -422,12 +446,14 @@ class GetSingleExpData:
 
         return K, R_gt, t_gt, P_gt, Nc
 
-    def setup_dataframes(self, labels):
+    def setup_dataframes(self, labels, length):
         multi_column = pd.MultiIndex.from_product([labels['all'], ['x', 'y', 'z']])
         real_world_coords_allparts = pd.DataFrame(columns=multi_column)
         multi_column_err = pd.MultiIndex.from_product([labels['all'], ['side', 'front', 'overhead'], ['x', 'y']])
-        repr_error_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err)  # todo remove hardcoding
-        repr_allparts = pd.DataFrame(index=range(7170, 7900), columns=multi_column_err)  # todo remove hardcoding
+        repr_error_allparts = pd.DataFrame(index=range(0, length), columns=multi_column_err)
+        repr_allparts = pd.DataFrame(index=range(0, length), columns=multi_column_err)
+        # repr_error_allparts = pd.DataFrame(index=range(165690, 165970), columns=multi_column_err)  # todo remove hardcoding #7170, 7900
+        # repr_allparts = pd.DataFrame(index=range(165690, 165970), columns=multi_column_err)  # todo remove hardcoding
         return real_world_coords_allparts, repr_error_allparts, repr_allparts
 
     def process_body_part(self, bidx, body_part, side_coords, front_coords, overhead_coords, cameras_extrinsics,
@@ -461,8 +487,8 @@ class GetSingleExpData:
         coords_2d_all = np.array([side_coords[:, bidx, :2], front_coords[:, bidx, :2], overhead_coords[:, bidx, :2]])
         likelihoods = np.array([side_coords[:, bidx, 2], front_coords[:, bidx, 2], overhead_coords[:, bidx, 2]])
 
-        coords_2d_all = coords_2d_all[:, 7170:7900, :]  # todo remove hardcoding
-        likelihoods = likelihoods[:, 7170:7900]  # todo remove hardcoding
+        # coords_2d_all = coords_2d_all[:, 165690:165970, :]  # todo remove hardcoding
+        # likelihoods = likelihoods[:, 165690:165970]  # todo remove hardcoding
 
         return coords_2d_all, likelihoods
 
@@ -516,8 +542,6 @@ class GetSingleExpData:
     def project_back_to_cameras(self, wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
                                 front_err, overhead_err, side_repr, front_repr, overhead_repr):
         if np.all(wcs != np.nan):
-            # if np.all(~np.isnan(wcs)):
-            wcs[2] = wcs[2]  # + 30 # TODO REMOVE!!!!!!!!
             for c, cam in enumerate(['side', 'front', 'overhead']):
                 CCS_repr, _ = cv2.projectPoints(
                     wcs[:3],
@@ -583,17 +607,21 @@ class GetSingleExpData:
         repr_error_allparts[body_part, 'overhead', 'y'] = overhead_err[1, :][0]
 
     def plot_2d_prep_frame(self, view, frame_number):
+        # get video paths
+        day = os.path.basename(self.files['side']).split('_')[1]
+        video_path = "\\".join([paths['video_folder'], day])
+
         # Determine the correct video file based on the view
         if view == 'side':
-            video_file = self.side_file
+            video_file = os.path.join(video_path, os.path.basename(self.files['side']).replace(vidstuff['scorers']['side'],'').replace('.h5', '.avi'))
         elif view == 'front':
-            video_file = self.front_file
+            video_file = os.path.join(video_path, os.path.basename(self.files['front']).replace(vidstuff['scorers']['front'],'').replace('.h5', '.avi'))
         elif view == 'overhead':
-            video_file = self.overhead_file
+            video_file = os.path.join(video_path, os.path.basename(self.files['overhead']).replace(vidstuff['scorers']['overhead'], '').replace('.h5', '.avi'))
         else:
             raise ValueError('Invalid view')
 
-        exp_day = video_file.split("\\")[-2] if view != 'front' else video_file.split("\\")[-3]
+        exp_day = video_file.split("\\")[-2] #if view != 'front' else video_file.split("\\")[-3]
         if '_Pre_' in video_file:
             video_file_tag = '_'.join(video_file.split("\\")[-1].split("_")[0:6])
         else:
@@ -609,14 +637,17 @@ class GetSingleExpData:
 
         video_path = os.path.join(video_dir, video_file)
 
+        # get the original frame number
+        original_frame_number = self.DataframeCoors[view].loc[frame_number, 'original_index'].values.astype(int)[0]
+
         # Capture the specific frame from the video
         cap = cv2.VideoCapture(video_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, original_frame_number)
         ret, frame = cap.read()
         cap.release()
 
         if not ret:
-            raise ValueError(f"Error reading frame {frame_number} from {video_path}")
+            raise ValueError(f"Error reading frame {original_frame_number} from {video_path}")
 
         return frame
 
@@ -679,13 +710,12 @@ class GetSingleExpData:
                 if np.isfinite(x) and np.isfinite(y):
                     ax.scatter(x, y, color=cmap(i / len(labels['all'])), s=6, label=body_part, zorder=100)
                     # ax.text(x, y, body_part, fontsize=8, color='r')
-        belt_coords_hardcoded = self.TEMP_belt_coords()
-        belt_coords_hardcoded = belt_coords_hardcoded.set_index(['bodyparts', 'coords'])
-        for belt_part in belt_coords_hardcoded.index.get_level_values('bodyparts').unique():
-            x = belt_coords_hardcoded.loc(axis=0)[belt_part, 'x'][view]
-            y = belt_coords_hardcoded.loc(axis=0)[belt_part, 'y'][view]
-            # make scatter with cross marker
-            ax.scatter(x, y, color='red', marker='x', s=6, label=belt_part, zorder=100)
+        #belt_coords_hardcoded = self.TEMP_belt_coords()
+        belt_coords = self.belt_coords_CCS[view]
+
+        for belt_coord in belt_coords:
+            ax.scatter(belt_coord[0], belt_coord[1], color='red', marker='x', s=6, zorder=100) # taken out labels, but if want the relative positions check self.points_str2int from utils_3d_reconstruction.py
+
         # draw lines for skeleton connections underneath the scatter points
         for start, end in micestuff['skeleton']:
             sx, sy = repr.loc[frame_number, (start, 'x')], repr.loc[frame_number, (start, 'y')]
@@ -718,15 +748,35 @@ class GetSingleExpData:
             ex, ey, ez = coords[(end, 'x')], coords[(end, 'y')], coords[(end, 'z')]
             ax.plot([sx, ex], [sy, ey], [sz, ez], 'gray')  # Draw line in gray
         ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=6)
-        # set axes as equal scales so each tick on each axis represents the same space
-        ax.axis('equal')
-        # ax.set_box_aspect([1, 1, 1])  # Aspect ratio is 1:1:1 for x:y:z
+
+        ## set axes as equal scales so each tick on each axis represents the same space
+        #ax.axis('equal')
+        #ax.set_box_aspect([1, 1, 1])  # Aspect ratio is 1:1:1 for x:y:z
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
 
-    def plot_3d_video(self, real_world_coords_allparts, labels):
-        temp = real_world_coords_allparts.loc[400:]
+        # Set the limits for each axis to simulate equal aspect ratio
+        x_limits = [coords.xs('x', level=1).min(), coords.xs('x', level=1).max()]
+        y_limits = [coords.xs('y', level=1).min(), coords.xs('y', level=1).max()]
+        z_limits = [coords.xs('z', level=1).min(), coords.xs('z', level=1).max()]
+
+        # Calculate the range for each axis
+        x_range = x_limits[1] - x_limits[0]
+        y_range = y_limits[1] - y_limits[0]
+        z_range = z_limits[1] - z_limits[0]
+
+        # Set the maximum range for all axes
+        max_range = max(x_range, y_range, z_range)
+
+        # Center the limits around the mean to make axes "equal"
+        ax.set_xlim([x_limits[0] - (max_range - x_range) / 2, x_limits[1] + (max_range - x_range) / 2])
+        ax.set_ylim([y_limits[0] - (max_range - y_range) / 2, y_limits[1] + (max_range - y_range) / 2])
+        ax.set_zlim([z_limits[0] - (max_range - z_range) / 2, z_limits[1] + (max_range - z_range) / 2])
+
+
+    def plot_3d_video(self, real_world_coords_allparts, labels, fps, video_name):
+        temp = real_world_coords_allparts# .loc[100:] #.loc[400:]
         temp = temp.reset_index(drop=True)
         n_frames = len(temp)  # number of frames
 
@@ -768,25 +818,25 @@ class GetSingleExpData:
             belt1.set_visible(True)
             belt2.set_visible(True)
             for part, line in lines.items():
-                x = [temp.loc[frame, (part, 'x')]]
-                y = [temp.loc[frame, (part, 'y')]]
-                z = [temp.loc[frame, (part, 'z')]]
+                x = np.array([temp.loc[frame, (part, 'x')]])
+                y = np.array([temp.loc[frame, (part, 'y')]])
+                z = np.array([temp.loc[frame, (part, 'z')]])
                 line.set_data(x, y)
                 line.set_3d_properties(z)
             for (start, end), s_line in skeleton_lines.items():
-                xs = [temp.loc[frame, (start, 'x')],
-                      temp.loc[frame, (end, 'x')]]
-                ys = [temp.loc[frame, (start, 'y')],
-                      temp.loc[frame, (end, 'y')]]
-                zs = [temp.loc[frame, (start, 'z')],
-                      temp.loc[frame, (end, 'z')]]
+                xs = np.array([temp.loc[frame, (start, 'x')],
+                      temp.loc[frame, (end, 'x')]])
+                ys = np.array([temp.loc[frame, (start, 'y')],
+                      temp.loc[frame, (end, 'y')]])
+                zs = np.array([temp.loc[frame, (start, 'z')],
+                      temp.loc[frame, (end, 'z')]])
                 s_line.set_data(xs, ys)
                 s_line.set_3d_properties(zs)
             ax.view_init(elev=10, azim=frame * 360 / n_frames)
             return [belt1, belt2] + list(lines.values()) + list(skeleton_lines.values())
 
         ani = FuncAnimation(fig, update, frames=n_frames, init_func=init, blit=False)
-        ani.save('walking_mouse_2.mp4', writer='ffmpeg', fps=30, dpi=300)
+        ani.save('%s.mp4'%video_name, writer='ffmpeg', fps=fps, dpi=300) #30fps
         plt.close(fig)  # Close the figure to avoid displaying it inline if running in a notebook
 
 

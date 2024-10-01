@@ -8,6 +8,7 @@ import cv2
 import os
 import matplotlib.pyplot as plt
 from pycalib.calib import triangulate
+import pickle
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
 from skopt import gp_minimize
@@ -27,7 +28,32 @@ class optimize:
         self.body_part_points = {}
         self.error_history = []  # Store error values during optimization
 
-    def optimise_calibration(self):
+    def optimise_calibration(self, debugging):
+        dir = os.path.dirname(self.parent.files['side'])
+        pos = np.where(np.array(os.path.basename(self.parent.files['side']).split('_')) == 'side')[0][0]
+        filename_base = '_'.join(os.path.basename(self.parent.files['side']).split('_')[:pos])
+        filename = filename_base + '_calibration_data.pkl'
+
+        if debugging:
+            # retrieve saved calibration data if present, otherwise calculate and save it
+            if filename in os.listdir(dir): # look for calibration data in dir
+                with open(os.path.join(dir, filename), 'rb') as f:
+                    calibration_data = pickle.load(f)
+            else:
+                calibration_data, _ = self.optimise()
+                with open(os.path.join(dir, filename), 'wb') as f:
+                    pickle.dump(calibration_data, f)
+
+        else:
+            # calculate calibration data and save it
+            calibration_data, _ = self.optimise()
+            with open(os.path.join(dir, filename), 'wb') as f:
+                pickle.dump(calibration_data, f)
+
+        return calibration_data
+
+    def optimise(self):
+        archive_calibration_coords = self.calibration_coords.copy()
         reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
                             'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
@@ -44,7 +70,7 @@ class optimize:
         initial_flat_points = self.flatten_calibration_points()
         args = (reference_points, reference_indexes)
 
-        bounds = [(initial_flat_points[i] - 3.0, initial_flat_points[i] + 3.0) for i in range(len(initial_flat_points))]
+        bounds = [(initial_flat_points[i] - 5.0, initial_flat_points[i] + 5.0) for i in range(len(initial_flat_points))]
 
         print("Optimizing calibration points...")
         # Start the timer
@@ -60,18 +86,20 @@ class optimize:
 
         optimized_points = self.reshape_calibration_points(result.x)
 
-        self.plot_original_vs_optimized(reference_points, door_index, optimized_points, self.calibration_coords)
+        #self.plot_original_vs_optimized(reference_points, door_index[2], optimized_points, self.calibration_coords)
 
-        for label, views in optimized_points.items():
-            for view, point in views.items():
-                self.calibration_coords[label][view] = point
+        # for label, views in optimized_points.items():
+        #     for view, point in views.items():
+        #         self.calibration_coords[label][view] = point
+        self.calibration_coords = optimized_points
 
         calibration_data = self.recalculate_camera_parameters()
+        self.extrinsics = calibration_data['extrinsics']
 
         new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_indexes, weighted=True)
         print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
 
-        return calibration_data
+        return calibration_data, new_total_error
 
     def convert_df_to_dict(self, reference_points):
         reference_data = self.get_data_for_optimisation(reference_points)
@@ -247,13 +275,18 @@ class optimize:
         """
         Flattens the calibration coordinates into a 1D numpy array for optimization.
         """
-        flat_points = self.calibration_coords[['side', 'front', 'overhead']].values.flatten()
+        #flat_points = self.calibration_coords[['side', 'front', 'overhead']].values.flatten()
+        flat_points = self.calibration_coords[['front', 'overhead']].values.flatten()
         return np.array(flat_points, dtype=float)
 
     def objective_function(self, flat_points, *args):
         reference_points = args[0]  # Extract reference points from args
         frame_indices = args[1]  # Extract frame indices from args
+
+        # Reshape the flat_points (front + overhead) back into the calibration coordinates
         calibration_points = self.reshape_calibration_points(flat_points)
+
+        # Estimate extrinsics using all points, including the fixed side points
         temp_extrinsics = self.estimate_extrinsics(calibration_points)
 
         total_error, _ = self.compute_reprojection_error(reference_points, frame_indices, temp_extrinsics,
@@ -280,9 +313,16 @@ class optimize:
         Reshapes a 1D numpy array back into the calibration coordinates DataFrame format.
         """
         reshaped_coords = self.calibration_coords.copy()
-        reshaped_coords['side'] = flat_points[0::3]
-        reshaped_coords['front'] = flat_points[1::3]
-        reshaped_coords['overhead'] = flat_points[2::3]
+        # reshaped_coords['side'] = flat_points[0::3]
+        # reshaped_coords['front'] = flat_points[1::3]
+        # reshaped_coords['overhead'] = flat_points[2::3]
+
+        # Restore the original side calibration points
+        reshaped_coords['side'] = self.calibration_coords['side']
+
+        # Use the flat_points to update the front and overhead points
+        reshaped_coords['front'] = flat_points[0::2]
+        reshaped_coords['overhead'] = flat_points[1::2]
         return reshaped_coords
 
     def recalculate_camera_parameters(self):
@@ -438,15 +478,15 @@ class optimize:
         indexes.append(
             self.get_index_snapshots(data_visible['front'].loc(axis=1)['Tail12', 'x'][tail12_mask].sort_values().index,
                                      [0.01, 0.3, 0.99]))
-        # indexes.append(self.get_index_snapshots(
-        #     data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
-        #     [0.01, 0.99]))
+        indexes.append(self.get_index_snapshots(
+            data_visible['front'].loc(axis=1)['HindpawToeR', 'x'][hindpaw_toeR_mask].sort_values().index,
+            [0.01, 0.99]))
         indexes.append(self.get_index_snapshots(
             data_visible['front'].loc(axis=1)['HindpawToeR', 'y'][hindpaw_toeR_mask].sort_values().index,
             [0.01, 0.99]))
-        # indexes.append(
-        #     self.get_index_snapshots(data_visible['side'].loc(axis=1)['EarR', 'y'][earR_mask].sort_values().index,
-        #                              [0.2, 0.7, 0.9]))
+        indexes.append(
+            self.get_index_snapshots(data_visible['side'].loc(axis=1)['EarR', 'y'][earR_mask].sort_values().index,
+                                     [0.01, 0.99]))
 
         # check for door positions too
         door_mask = np.logical_and.reduce((data['side'].loc(axis=1)['Door', 'likelihood'] > pcutoff,

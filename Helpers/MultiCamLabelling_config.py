@@ -56,12 +56,12 @@ REFERENCE_LABEL_WEIGHTS = {
         'Tail1': 5.0,
         'Tail6': 1.0,
         'Tail12': 5.0,
-        'StartPlatR': 100, ### all calib points in SIDE ONLY are given high weighting
-        'StepR': 100,
-        'StartPlatL': 100,
-        'StepL': 100,
-        'TransitionR': 100,
-        'TransitionL': 100,
+        'StartPlatR': 0.5,
+        'StepR': 0.5,
+        'StartPlatL': 0.5,
+        'StepL': 0.5,
+        'TransitionR': 0.5,
+        'TransitionL': 0.5,
         'Door': 10.0,
     },
     'front': {

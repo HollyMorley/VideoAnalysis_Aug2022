@@ -53,6 +53,85 @@ expstuff = {
         'preruns_CharMidHigh': 5
     }
 }
+
+exp_cats = {
+    'APAChar_LowHigh': {
+        'Repeats': {
+            'Wash': {
+                'Exp': {
+                    'Day1': {'A': ['20230306'], 'B': ['20230309']},
+                    'Day2': {'A': ['20230308'], 'B': ['20230312']},
+                    'Day3': {'A': ['20230310'], 'B': ['20230314']},
+                },
+                'Washout': {
+                    'Day1': {'A': ['20230307'], 'B': ['20230310']},
+                    'Day2': {'A': ['20230309'], 'B': ['20230313']},
+                    'Day3': {'A': ['20230312'], 'B': ['20230315']},
+                }
+            }
+        },
+        'Extended': {
+            'Day1': {'A': ['20230316'], 'B': ['20230403']},
+            'Day2': {'A': ['20230317'], 'B': ['20230404']},
+            'Day3': {'A': ['20230318'], 'B': ['20230405']},
+            'Day4': {'A': ['20230319'], 'B': ['20230406']}
+        }
+    },
+    'APAChar_HighLow': {
+        'Extended': {
+            'Day1': {'A': ['20230325'], 'B': ['20230412']},
+            'Day2': {'A': ['20230326'], 'B': ['20230413']},
+            'Day3': {'A': ['20230327'], 'B': ['20230414']},
+            'Day4': {'A': ['20230328'], 'B': ['20230415']}
+        }
+    },
+    'APAChar_LowMid': {
+        'Extended': {
+            'Day1': {'A': ['20230407'], 'B': ['20230320']},
+            'Day2': {'A': ['20230408'], 'B': ['20230321']},
+            'Day3': {'A': ['20230409'], 'B': ['20230322']},
+            'Day4': {'A': ['20230410'], 'B': ['20230323']}
+        }
+    },
+    'PerceptionTest': {'A': ['20230411'], 'B': ['20230416']},
+    'VMT_LowHigh': {
+        'pd': {
+            'Basic': {
+                'Prep': {'A': ['20230420'], 'B': ['20230427']},
+                'Experiment': {'A': ['20230421'], 'B': ['20230428']}
+            },
+            'Extreme': {
+                'Prep': {'A': ['20230513'], 'B': ['20230514']},
+                'Experiment': {'A': ['20230514'], 'B': ['20230515']}
+            }
+        },
+        'ac': {
+            'Basic': {
+                'Prep': {'A': ['20230426'], 'B': ['20230503']},
+                'Experiment': {'A': ['20230427'], 'B': ['20230504']}
+            },
+            'Extreme': {
+                'Prep': {'A': ['20230515'], 'B': ['20230516']},
+                'Experiment': {'A': ['20230516'], 'B': ['20230517']}
+            }
+        }
+    },
+    'VMT_HighLow': {
+        'pd': {
+            'Basic': {
+                'Prep': {'A': ['20230504'], 'B': ['20230421']},
+                'Experiment': {'A': ['20230505'], 'B': ['20230422']}
+            }
+        },
+        'ac': {
+            'Basic': {
+                'Prep': {'A': ['20230428'], 'B': ['20230505']},
+                'Experiment': {'A': ['20230429'], 'B': ['20230506']}
+            }
+        }
+    }
+}
+
 structural_stuff = {
     'belt_width': 53.5, # mm
     'belt_length_sideviewrange': 600, # mm
@@ -78,13 +157,16 @@ settings = {
 #         'plotting_destfolder': r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Nov23'
 # }
 paths = {
-        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round2_Jan23',
+        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round3_Oct24',
         'plotting_destfolder': r'H:\Dual-belt_APAs\Plots\Mar24',
         'video_folder': r"X:\hmorley\Dual-belt_APAs\videos\Round_3",
         'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles" #todo maybe change this to Margrie ceph dir
 }
 
 micestuff = {
+    'mice_IDs': {'A': ['1035243', '1035244', '1035245', '1035246', '1035249', '1035250'],
+            'B': ['1035297', '1035298', '1035299', '1035301', '1035302']
+            },
     'mice_ID': [
         '1034976',
         '1034978',

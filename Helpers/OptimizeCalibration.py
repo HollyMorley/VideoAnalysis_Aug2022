@@ -6,18 +6,33 @@ import numpy as np
 import pandas as pd
 import cv2
 import os
+import sys
 import matplotlib.pyplot as plt
 from pycalib.calib import triangulate
 import pickle
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from concurrent.futures import ThreadPoolExecutor
-from skopt import gp_minimize
-from skopt.space import Real
-from itertools import product
 import time
+import warnings
+from scipy.optimize import OptimizeWarning
+import contextlib
+import subprocess
+
+
+class FileLogger:
+    def __init__(self, file_path):
+        self.file = open(file_path, 'w')
+
+    def write(self, message):
+        self.file.write(message)
+        self.file.flush()  # Ensure immediate write
+
+    def flush(self):
+        pass  # Needed for compatibility with print's flush behavior
+
+    def close(self):
+        self.file.close()
 
 class optimize:
-    def __init__(self, calibration_coords, extrinsics, intrinsics, parent_instance):
+    def __init__(self, calibration_coords, extrinsics, intrinsics, base_path_name, parent_instance):
         self.calibration_coords = calibration_coords
         self.P = None
         self.intrinsics = intrinsics
@@ -27,6 +42,7 @@ class optimize:
         #self.reference_data = []
         self.body_part_points = {}
         self.error_history = []  # Store error values during optimization
+        self.base_path_name = base_path_name
 
     def optimise_calibration(self, debugging):
         dir = os.path.dirname(self.parent.files['side'])
@@ -53,12 +69,11 @@ class optimize:
         return calibration_data
 
     def optimise(self):
-        archive_calibration_coords = self.calibration_coords.copy()
         reference_points = ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR',
                             'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12',
                             'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']
         #self.reference_data = self.get_data_for_optimisation(reference_points)
-        self.body_part_points, door_index = self.convert_df_to_dict(reference_points)
+        self.body_part_points = self.convert_df_to_dict(reference_points)
 
         reference_indexes = list(self.body_part_points.keys())
 
@@ -77,7 +92,7 @@ class optimize:
         start_time = time.time()
 
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':True}) # 100000, 1e-15, 1e-15
+                          options={'maxiter': 100000, 'ftol': 1e-5, 'gtol': 1e-5, 'disp':True}) # 100000, 1e-15, 1e-15
 
         # End the timer
         end_time = time.time()
@@ -86,7 +101,10 @@ class optimize:
 
         optimized_points = self.reshape_calibration_points(result.x)
 
-        #self.plot_original_vs_optimized(reference_points, door_index[2], optimized_points, self.calibration_coords)
+        min_index = np.sort(reference_indexes).min()
+        max_index = np.sort(reference_indexes).max()
+        self.plot_original_vs_optimized(min_index, optimized_points, self.calibration_coords, 'start')
+        self.plot_original_vs_optimized(max_index, optimized_points, self.calibration_coords, 'end')
 
         # for label, views in optimized_points.items():
         #     for view, point in views.items():
@@ -98,16 +116,12 @@ class optimize:
 
         new_total_error, new_errors = self.compute_reprojection_error(reference_points, reference_indexes, weighted=True)
         print(f"New total reprojection error for {reference_points}: \n{new_total_error}")
+        print(f"Reprojection error improvement: {initial_total_error - new_total_error}, as a percentage: {((initial_total_error - new_total_error) / initial_total_error) * 100:.2f}%")
 
         return calibration_data, new_total_error
 
     def convert_df_to_dict(self, reference_points):
         reference_data = self.get_data_for_optimisation(reference_points)
-
-        door_present_mask = np.logical_and.reduce((np.any(reference_data['side']['Door'], axis=1),
-                                                   np.any(reference_data['front']['Door'], axis=1),
-                                                   np.any(reference_data['overhead']['Door'], axis=1)))
-        door_index = np.where(door_present_mask)[0]
 
         reference_data_dict = {}
         for view, df in reference_data.items():
@@ -133,16 +147,17 @@ class optimize:
                     # Set the coordinate tuple
                     reference_data_dict[index][bodypart][view] = (x_coord, y_coord) if pd.notnull(x_coord) and pd.notnull(
                         y_coord) else None
-        return reference_data_dict, door_index
+        return reference_data_dict
 
-    def plot_original_vs_optimized(self, reference_points, frame_number, optimized_points, original_points):
+    def plot_original_vs_optimized(self, frame_number, optimized_points, original_points, suffix):
         """
         Plots the original and optimized calibration labels for each view (side, front, overhead),
         and the error curve during optimization as a fourth subplot.
         """
-        reference_data = self.get_data_for_optimisation(reference_points)
-        real_frame_number = reference_data['side'].iloc(axis=0)[frame_number].loc['original_index'].values[0].astype(
-            int)
+        # reference_data = self.get_data_for_optimisation(reference_points)
+        # real_frame_number = reference_data['side'].iloc(axis=0)[frame_number].loc['original_index'].values[0].astype(
+        #     int)
+        real_frame_number = frame_number
 
         # Get video paths
         day = os.path.basename(self.parent.files['side']).split('_')[1]
@@ -164,7 +179,6 @@ class optimize:
 
         # Plot original vs optimized points for each view and error curve
         fig, axs = plt.subplots(4, 1, figsize=(20, 20))
-        cams = ["side", "front", "overhead"]
 
         # Flags for controlling the legend labels
         original_plotted = False
@@ -177,8 +191,6 @@ class optimize:
             if not ret:
                 print(f"Error: Could not read frame {real_frame_number} from the video for {view} view.")
                 continue
-
-            reference_row = reference_data[view].iloc[frame_number]
 
             axs[i].imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
@@ -204,13 +216,17 @@ class optimize:
 
         # Plot the error curve in the fourth subplot
         axs[3].plot(self.error_history, color='g', label='Total Error')
+        axs[3].set_ylim([self.error_history[-1] - 200, self.error_history[0] + 200])
         axs[3].set_title("Optimization Error Curve")
         axs[3].set_xlabel("Iteration")
         axs[3].set_ylabel("Total Error")
         axs[3].legend()
 
-        #plt.tight_layout()
-        plt.show()
+        plt.tight_layout()
+
+        # save the figure
+        fig.savefig(f"{self.base_path_name}_OptimizationResults_{suffix}.png")
+        plt.close(fig)
 
         # Release the video capture objects
         for cap in caps.values():
@@ -270,6 +286,7 @@ class optimize:
         # Release the video capture objects
         for cap in caps.values():
             cap.release()
+
 
     def flatten_calibration_points(self):
         """

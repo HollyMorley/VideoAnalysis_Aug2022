@@ -1,21 +1,315 @@
+import os, cv2, sys, re, glob
+import pandas as pd
+import time
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from pycalib.calib import triangulate, triangulate_Npts
+from sklearn.linear_model import LinearRegression
+from multiprocessing import Pool, cpu_count, shared_memory
+
+sys.path.append(r'C:\Users\hmorl\Projects\VideoAnalysis_Aug2022')
+
 from Helpers.utils_3d_reconstruction import CameraData, BeltPoints
 from Helpers.CalibrateCams import BasicCalibration
 from Helpers import utils
 from Helpers.Config_23 import *
 from Helpers import MultiCamLabelling_config as opt_config
 from Helpers import OptimizeCalibration
-import os, cv2
-import pandas as pd
-import numpy as np
-import time
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-# from matplotlib import colormaps
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from pycalib.calib import triangulate, triangulate_Npts
-from sklearn.linear_model import LinearRegression
-import cupy as cp
 
+########################################################################################################################
+# Prepare the data for mapping in parallel
+########################################################################################################################
+def process_part_wrapper(args):
+    """
+    Wrapper function for parallel processing of body parts.
+    :param args:
+    :return:
+    """
+    try:
+        (bidx, body_part), shared_data = args
+
+        # Reconstruct shared arrays
+        side_coords_shm = shared_memory.SharedMemory(name=shared_data['side_coords_name'])
+        side_coords = np.ndarray(shared_data['side_coords_shape'], dtype=shared_data['side_coords_dtype'], buffer=side_coords_shm.buf)
+
+        front_coords_shm = shared_memory.SharedMemory(name=shared_data['front_coords_name'])
+        front_coords = np.ndarray(shared_data['front_coords_shape'], dtype=shared_data['front_coords_dtype'], buffer=front_coords_shm.buf)
+
+        overhead_coords_shm = shared_memory.SharedMemory(name=shared_data['overhead_coords_name'])
+        overhead_coords = np.ndarray(shared_data['overhead_coords_shape'], dtype=shared_data['overhead_coords_dtype'], buffer=overhead_coords_shm.buf)
+
+        # Extract other data
+        cameras_extrinsics = shared_data['cameras_extrinsics']
+        cameras_intrinsics = shared_data['cameras_intrinsics']
+        P_gt = shared_data['P_gt']
+        Nc = shared_data['Nc']
+
+        # Process the body part
+        result_data = process_body_part(
+            bidx, body_part,
+            side_coords, front_coords, overhead_coords,
+            cameras_extrinsics, cameras_intrinsics, P_gt, Nc
+        )
+
+        # Close shared memory
+        side_coords_shm.close()
+        front_coords_shm.close()
+        overhead_coords_shm.close()
+
+        return (body_part, result_data)
+    except Exception as e:
+        print(f"Error processing {args[0][1]}: {e}")
+        return (args[0][1], None)
+
+def process_body_part(bidx, body_part, side_coords, front_coords, overhead_coords,
+                      cameras_extrinsics, cameras_intrinsics, P_gt, Nc):
+    coords_2d_all, likelihoods = get_coords_and_likelihoods(
+        bidx, side_coords, front_coords, overhead_coords)
+
+    coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = find_empty_cameras(
+        coords_2d_all, likelihoods, P_gt, Nc)
+
+    result = triangulate_points(
+        coords_2d, likelihoods, Nc_bp, P_gt_bp,
+        cameras_extrinsics, cameras_intrinsics, coords_2d_all
+    )
+
+    return result  # Return the result dictionary
+
+
+def get_coords_and_likelihoods(bidx, side_coords, front_coords, overhead_coords):
+    coords_2d_all = np.array([side_coords[:, bidx, :2], front_coords[:, bidx, :2], overhead_coords[:, bidx, :2]])
+    likelihoods = np.array([side_coords[:, bidx, 2], front_coords[:, bidx, 2], overhead_coords[:, bidx, 2]])
+    return coords_2d_all, likelihoods
+
+def find_empty_cameras(coords_2d, likelihoods, P_gt, Nc):
+    empty_cameras = np.where(np.all(np.all(np.isnan(coords_2d), axis=2), axis=1))
+    if len(empty_cameras) > 0:
+        coords_2d = np.delete(coords_2d, empty_cameras, axis=0)
+        likelihoods = np.delete(likelihoods, empty_cameras, axis=0)
+        Nc_bp = len(coords_2d)
+        P_gt_bp = np.delete(P_gt, empty_cameras, axis=0)
+    else:
+        Nc_bp = Nc
+        P_gt_bp = P_gt
+    return coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras
+
+def triangulate_points(coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics,
+                       cameras_intrinsics, coords_2d_all):
+    real_world_coords = []
+    side_err = []
+    front_err = []
+    overhead_err = []
+    side_repr = []
+    front_repr = []
+    overhead_repr = []
+
+    triangulation_data = prepare_triangulation_data(coords_2d, likelihoods, P_gt_bp, Nc_bp)
+
+    # Initialize empty array for real-world coordinates with NaNs for missing frames
+    Np = coords_2d.shape[1]  # Number of points to triangulate
+    real_world_coords = np.full((Np, 3), np.nan)
+
+    # Perform triangulation for each camera pair and 3-camera case
+    real_world_coords_sidexfront = triangulate_for_pair(triangulation_data['coords_sidexfront_batch'],
+                                                        triangulation_data['P_sidexfront_batch'])
+
+    real_world_coords_frontxoverhead = triangulate_for_pair(triangulation_data['coords_frontxoverhead_batch'],
+                                                            triangulation_data['P_frontxoverhead_batch'])
+
+    real_world_coords_sidexoverhead = triangulate_for_pair(triangulation_data['coords_sidexoverhead_batch'],
+                                                           triangulation_data['P_sidexoverhead_batch'])
+
+    real_world_coords_3cam = triangulate_for_pair(triangulation_data['coords_2d_3cam_batch'],
+                                                  triangulation_data['P_matrices_3cam_batch'])
+
+    # Reinsert the triangulated coordinates back to the original frame order
+    reassemble_in_original_order(real_world_coords, real_world_coords_sidexfront,
+                                 triangulation_data['triangulated_indices_sidexfront'])
+
+    reassemble_in_original_order(real_world_coords, real_world_coords_frontxoverhead,
+                                 triangulation_data['triangulated_indices_frontxoverhead'])
+
+    reassemble_in_original_order(real_world_coords, real_world_coords_sidexoverhead,
+                                 triangulation_data['triangulated_indices_sidexoverhead'])
+
+    reassemble_in_original_order(real_world_coords, real_world_coords_3cam,
+                                 triangulation_data['triangulated_indices_3cam'])
+
+    # Project back to cameras and calculate reprojection errors
+    project_back_to_cameras_vectorized(real_world_coords, cameras_extrinsics, cameras_intrinsics,
+                                       coords_2d_all,
+                                       side_err, front_err, overhead_err,
+                                       side_repr, front_repr, overhead_repr)
+
+    # Finalize the coordinates with reprojection data
+    (real_world_coords_final, side_repr_arr, front_repr_arr, overhead_repr_arr,
+     side_err_arr, front_err_arr, overhead_err_arr) = finalize_coords(
+        real_world_coords, side_repr, front_repr, overhead_repr,
+        side_err, front_err, overhead_err)
+
+    # Prepare the result dictionary
+    result = {
+        'real_world_coords': real_world_coords_final,
+        'side_repr': side_repr_arr,
+        'front_repr': front_repr_arr,
+        'overhead_repr': overhead_repr_arr,
+        'side_err': side_err_arr,
+        'front_err': front_err_arr,
+        'overhead_err': overhead_err_arr,
+    }
+
+    return result
+
+def prepare_triangulation_data(coords_2d, likelihoods, P_gt_bp, Nc_bp):
+    coords_sidexfront = []
+    coords_frontxoverhead = []
+    coords_sidexoverhead = []
+
+    P_sidexfront = []
+    P_frontxoverhead = []
+    P_sidexoverhead = []
+
+    coords_2d_3cam = []
+    P_matrices_3cam = []
+
+    triangulated_indices_sidexfront = []
+    triangulated_indices_frontxoverhead = []
+    triangulated_indices_sidexoverhead = []
+    triangulated_indices_3cam = []
+
+    Np = coords_2d.shape[1]  # Number of points to triangulate
+    for point_idx in range(Np):
+        if Nc_bp < 3:
+            continue
+        else:
+            conf = np.where(likelihoods[:, point_idx] > pcutoff)[0]  # Get cameras with valid data
+            Nc_conf = len(conf)
+
+            if Nc_conf == 2:
+                if set(conf) == {0, 1}:  # side and front
+                    coords_sidexfront.append(coords_2d[conf, point_idx, :])
+                    P_sidexfront.append(np.array([P_gt_bp[i] for i in conf]))
+                    triangulated_indices_sidexfront.append(point_idx)
+                elif set(conf) == {1, 2}:  # front and overhead
+                    coords_frontxoverhead.append(coords_2d[conf, point_idx, :])
+                    P_frontxoverhead.append(np.array([P_gt_bp[i] for i in conf]))
+                    triangulated_indices_frontxoverhead.append(point_idx)
+                elif set(conf) == {0, 2}:  # side and overhead
+                    coords_sidexoverhead.append(coords_2d[conf, point_idx, :])
+                    P_sidexoverhead.append(np.array([P_gt_bp[i] for i in conf]))
+                    triangulated_indices_sidexoverhead.append(point_idx)
+            elif Nc_conf == 3:
+                coords_2d_3cam.append(coords_2d[:, point_idx, :])
+                P_matrices_3cam.append(np.array(P_gt_bp))
+                triangulated_indices_3cam.append(point_idx)
+
+    return {
+        'coords_sidexfront_batch': stack_if_not_empty(coords_sidexfront),
+        'P_sidexfront_batch': stack_if_not_empty(P_sidexfront),
+        'coords_frontxoverhead_batch': stack_if_not_empty(coords_frontxoverhead),
+        'P_frontxoverhead_batch': stack_if_not_empty(P_frontxoverhead),
+        'coords_sidexoverhead_batch': stack_if_not_empty(coords_sidexoverhead),
+        'P_sidexoverhead_batch': stack_if_not_empty(P_sidexoverhead),
+        'coords_2d_3cam_batch': stack_if_not_empty(coords_2d_3cam),
+        'P_matrices_3cam_batch': stack_if_not_empty(P_matrices_3cam),
+        'triangulated_indices_sidexfront': triangulated_indices_sidexfront,
+        'triangulated_indices_frontxoverhead': triangulated_indices_frontxoverhead,
+        'triangulated_indices_sidexoverhead': triangulated_indices_sidexoverhead,
+        'triangulated_indices_3cam': triangulated_indices_3cam
+    }
+
+def stack_if_not_empty(data_list):
+    if len(data_list) > 0:
+        return np.stack(data_list)
+    else:
+        return None
+
+def triangulate_for_pair(coords_batch, P_batch):
+    if coords_batch is None:
+        return []
+
+    real_world_coords = []
+    for frame_idx in range(len(coords_batch)):
+        coords_2d_frame = np.expand_dims(coords_batch[frame_idx], axis=1)  # Shape (2, 1, 2) or (3, 1, 2)
+        P_frame = P_batch[frame_idx]  # Shape (2, 3, 4) or (3, 3, 4)
+
+        # Use triangulate_Npts from pycalib.calib
+        real_world_coord = triangulate_Npts(coords_2d_frame, P_frame)
+        real_world_coords.append(real_world_coord.flatten()[:3])  # Extract XYZ coordinates
+
+    return real_world_coords
+
+def reassemble_in_original_order(real_world_coords, triangulated_coords, triangulated_indices):
+    for idx, point_idx in enumerate(triangulated_indices):
+        real_world_coords[point_idx, :] = triangulated_coords[idx]
+
+def project_back_to_cameras_vectorized(real_world_coords, cameras_extrinsics, cameras_intrinsics,
+                                       coords_2d_all,
+                                       side_err, front_err, overhead_err,
+                                       side_repr, front_repr, overhead_repr):
+    Np = real_world_coords.shape[0]
+
+    # Precompute the rotation and translation for each camera
+    cam_params = {}
+    for cam in ['side', 'front', 'overhead']:
+        cam_params[cam] = {
+            'rvec': cv2.Rodrigues(cameras_extrinsics[cam]['rotm'])[0],
+            'tvec': cameras_extrinsics[cam]['tvec'],
+            'intrinsic': cameras_intrinsics[cam]
+        }
+
+    # Project the world coordinates for each camera
+    for cam_idx, cam in enumerate(['side', 'front', 'overhead']):
+        repr_list = []
+        err_list = []
+
+        # Project each point
+        projected_points, _ = cv2.projectPoints(
+            real_world_coords.reshape(-1, 1, 3),
+            cam_params[cam]['rvec'],
+            cam_params[cam]['tvec'],
+            cam_params[cam]['intrinsic'],
+            None
+        )
+        projected_points = projected_points.reshape(-1, 2)
+
+        # Valid points
+        valid_mask = ~np.isnan(coords_2d_all[cam_idx, :, 0])
+
+        # Reprojection error
+        errors = np.linalg.norm(projected_points[valid_mask] - coords_2d_all[cam_idx, valid_mask], axis=1)
+
+        # Append to lists
+        repr_list.extend(projected_points[valid_mask])
+        err_list.extend(errors)
+
+        # Assign to appropriate lists
+        if cam == 'side':
+            side_repr.extend(repr_list)
+            side_err.extend(err_list)
+        elif cam == 'front':
+            front_repr.extend(repr_list)
+            front_err.extend(err_list)
+        elif cam == 'overhead':
+            overhead_repr.extend(repr_list)
+            overhead_err.extend(err_list)
+
+def finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr,
+                    side_err, front_err, overhead_err):
+    real_world_coords = np.array(real_world_coords)
+    side_repr_arr = np.array(side_repr)
+    front_repr_arr = np.array(front_repr)
+    overhead_repr_arr = np.array(overhead_repr)
+    side_err_arr = np.array(side_err)
+    front_err_arr = np.array(front_err)
+    overhead_err_arr = np.array(overhead_err)
+
+    return (real_world_coords, side_repr_arr, front_repr_arr, overhead_repr_arr,
+            side_err_arr, front_err_arr, overhead_err_arr)
+
+########################################################################################################################
 
 class MapExperiment:
     def __init__(self, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, belt_coords, snapshot_paths):
@@ -192,19 +486,24 @@ class GetSingleExpData:
     # Map the camera views to the real world coordinates for each video file
     ###################################################################################################################
     def map(self):
+        # Get file path for saving data and associated metadata
+        name_idx = os.path.basename(self.files['side']).split('_').index('side')
+        base_file_name = '_'.join(os.path.basename(self.files['side']).split('_')[:name_idx])
+        base_path_name = os.path.join(os.path.dirname(self.files['side']), base_file_name)
+
+
+
         calibration_coords = self.get_belt_coords()
 
         calib_obj = BasicCalibration(calibration_coords)
         cameras_extrinsics = calib_obj.estimate_cams_pose()
         cameras_intrinsics = calib_obj.cameras_intrinsics
 
-        belt_points_WCS = calib_obj.belt_coords_WCS
-        belt_points_CCS = calib_obj.belt_coords_CCS
+        # belt_points_WCS = calib_obj.belt_coords_WCS
+        # belt_points_CCS = calib_obj.belt_coords_CCS
 
-        # optimise the cameras extrinsics
-        #self.plot_belt_coords()
 
-        optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, self)
+        optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, base_path_name, self)
         new_calibration_data = optimise.optimise_calibration(debugging=True) #todo remove debugging
 
         self.extrinsics = new_calibration_data['extrinsics']
@@ -215,9 +514,7 @@ class GetSingleExpData:
         results = self.get_realworld_coords()
 
         # Save the results as an HDF5 file
-        name_idx = os.path.basename(self.files['side']).split('_').index('side')
-        file_name = '_'.join(os.path.basename(self.files['side']).split('_')[:name_idx]) + '_mapped3D.h5'
-        file_path = os.path.join(os.path.dirname(self.files['side']), file_name)
+        file_path = base_path_name + '_mapped3D.h5'
 
         # Store the three dataframes into a single HDF5 file with different keys
         with pd.HDFStore(file_path) as store:
@@ -331,46 +628,136 @@ class GetSingleExpData:
     # Triangulate the 3D coordinates of the common body parts in the same order for all 3 camera views
     ####################################################################################################################
 
+    # def process_part(self, idx_body):
+    #     bidx, body_part = idx_body
+    #     #print(f"Triangulating {body_part}...")  # Print statement for each body part
+    #     #start_time_label = time.time()  # Start timer for the current body part
+    #     self.process_body_part(
+    #         bidx, body_part,
+    #         self.side_coords, self.front_coords, self.overhead_coords,
+    #         self.extrinsics, self.intrinsics,
+    #         self.P_gt, self.Nc, self.real_world_coords_allparts,
+    #         self.repr_error_allparts, self.repr_allparts
+    #     )
+    #
+    #     #label_time = time.time() - start_time_label  # End timer for the current body part
+    #     #print(f"Triangulation finished for {body_part} --> {label_time:.2f} seconds")
+    #     return body_part #, label_time
+
+    # def get_realworld_coords(self):
+    #     # Initial setup and data preparation
+    #     labels, self.side_coords, self.front_coords, self.overhead_coords = self.prepare_data()
+    #
+    #     # Get camera parameters
+    #     self.K, self.R_gt, self.t_gt, self.P_gt, self.Nc = self.get_camera_params(self.extrinsics, self.intrinsics)
+    #
+    #     # Set up dataframes for results
+    #     self.real_world_coords_allparts, self.repr_error_allparts, self.repr_allparts = self.setup_dataframes(labels,
+    #                                                                                                           self.side_coords.shape[
+    #                                                                                                               0])
+    #
+    #     # Start multiprocessing pool for parallel triangulation
+    #     print('Starting triangulation...')
+    #     start_time_total = time.time()  # Start timer for total triangulation
+    #
+    #     num_processes = min(6, cpu_count())
+    #
+    #     with Pool(processes=num_processes) as pool:
+    #         pool.map(self.process_part, enumerate(labels['all']))
+    #
+    #     total_time = time.time() - start_time_total  # End timer for total triangulation
+    #     print(f"Total triangulation time: {total_time:.2f} seconds")
+    #
+    #     results = {'real_world_coords': self.real_world_coords_allparts, 'repr_error': self.repr_error_allparts,
+    #                'repr': self.repr_allparts}
+    #
+    #     return results
+    #
+    #     #self.plot_3d_mouse(real_world_coords_allparts, labels, 150)
+    #     #self.plot_3d_video(real_world_coords_allparts, labels, 10, 'walking_mouse_2_slow')
+    #     # self.plot_2d_skeleton_overlay_on_frame_fromOriginal_allViews(165850, labels)
+    #     # self.plot_2d_skeleton_overlay_on_frame_fromReprojection_allViews(repr_allparts, 165850, labels)
+
     def get_realworld_coords(self):
-        # Initial setup and data preparation
+        # Initial setup
         labels, side_coords, front_coords, overhead_coords = self.prepare_data()
+        self.side_coords = side_coords
+        self.front_coords = front_coords
+        self.overhead_coords = overhead_coords
 
-        # Get camera parameters
         K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(self.extrinsics, self.intrinsics)
+        self.real_world_coords_allparts, self.repr_error_allparts, self.repr_allparts = self.setup_dataframes(labels,
+                                                                                                              self.side_coords.shape[
+                                                                                                                  0])
 
-        # Set up dataframes for results
-        real_world_coords_allparts, repr_error_allparts, repr_allparts = self.setup_dataframes(labels, side_coords.shape[0])
+        # Set up shared memory for large arrays
+        side_coords_shm = shared_memory.SharedMemory(create=True, size=side_coords.nbytes)
+        shared_side_coords = np.ndarray(side_coords.shape, dtype=side_coords.dtype, buffer=side_coords_shm.buf)
+        shared_side_coords[:] = side_coords[:]
 
-        # Process each body part
+        front_coords_shm = shared_memory.SharedMemory(create=True, size=front_coords.nbytes)
+        shared_front_coords = np.ndarray(front_coords.shape, dtype=front_coords.dtype, buffer=front_coords_shm.buf)
+        shared_front_coords[:] = front_coords[:]
+
+        overhead_coords_shm = shared_memory.SharedMemory(create=True, size=overhead_coords.nbytes)
+        shared_overhead_coords = np.ndarray(overhead_coords.shape, dtype=overhead_coords.dtype, buffer=overhead_coords_shm.buf)
+        shared_overhead_coords[:] = overhead_coords[:]
+
+        # Prepare shared data
+        shared_data = {
+            'side_coords_shape': side_coords.shape,
+            'side_coords_dtype': side_coords.dtype,
+            'side_coords_name': side_coords_shm.name,
+
+            'front_coords_shape': front_coords.shape,
+            'front_coords_dtype': front_coords.dtype,
+            'front_coords_name': front_coords_shm.name,
+
+            'overhead_coords_shape': overhead_coords.shape,
+            'overhead_coords_dtype': overhead_coords.dtype,
+            'overhead_coords_name': overhead_coords_shm.name,
+
+            'cameras_extrinsics': self.extrinsics,
+            'cameras_intrinsics': self.intrinsics,
+            'P_gt': P_gt,
+            'Nc': Nc,
+        }
+
+        # Prepare arguments for multiprocessing
+        args_list = [((bidx, body_part), shared_data) for bidx, body_part in enumerate(labels['all'])]
+
+        # Start multiprocessing pool
         print('Starting triangulation...')
-        start_time_total = time.time()  # Start timer for total triangulation
-        for bidx, body_part in enumerate(labels['all']):
-            #print(f"Triangulating {body_part}...")
-            start_time_label = time.time()  # Start timer for the current label
-            self.process_body_part(
-                bidx, body_part,
-                side_coords, front_coords, overhead_coords,
-                self.extrinsics, self.intrinsics,
-                P_gt, Nc, real_world_coords_allparts,
-                repr_error_allparts, repr_allparts
-            )
-            label_time = time.time() - start_time_label  # End timer for the current label
-            print(f"Triangulation finished for {body_part} --> {label_time:.2f} seconds")
-        total_time = time.time() - start_time_total  # End timer for total triangulation
+        start_time_total = time.time()
+
+        num_processes = min(6, cpu_count())
+        with Pool(processes=num_processes) as pool:
+            results = pool.map(process_part_wrapper, args_list)
+
+        # Process results
+        for res in results:
+            body_part, result_data = res
+            self.store_results(body_part, result_data)
+
+        total_time = time.time() - start_time_total
         print(f"Total triangulation time: {total_time:.2f} seconds")
 
-        results = {'real_world_coords': real_world_coords_allparts, 'repr_error': repr_error_allparts, 'repr': repr_allparts}
+        # Clean up shared memory
+        side_coords_shm.close()
+        side_coords_shm.unlink()
+        front_coords_shm.close()
+        front_coords_shm.unlink()
+        overhead_coords_shm.close()
+        overhead_coords_shm.unlink()
 
+        # Return results
+        results = {
+            'real_world_coords': self.real_world_coords_allparts,
+            'repr_error': self.repr_error_allparts,
+            'repr': self.repr_allparts
+        }
         return results
 
-        print(real_world_coords_allparts)
-        print('temp')
-        #self.plot_3d_mouse(real_world_coords_allparts, labels, 150)
-        #self.plot_3d_video(real_world_coords_allparts, labels, 10, 'walking_mouse_2_slow')
-        # self.plot_2d_skeleton_overlay_on_frame_fromOriginal_allViews(165850, labels)
-        # self.plot_2d_skeleton_overlay_on_frame_fromReprojection_allViews(repr_allparts, 165850, labels)
-
-        return real_world_coords_allparts, repr_error_allparts
 
     def prepare_data(self):
         labels = self.find_common_bodyparts()
@@ -464,7 +851,11 @@ class GetSingleExpData:
         P_gt = [np.dot(K[i], np.hstack((R_gt[i], t_gt[i]))) for i in range(len(K))]
         Nc = len(K)
 
+        self.P_gt = P_gt
+        self.Nc = Nc
+
         return K, R_gt, t_gt, P_gt, Nc
+
 
     def setup_dataframes(self, labels, length):
         multi_column = pd.MultiIndex.from_product([labels['all'], ['x', 'y', 'z']])
@@ -477,20 +868,25 @@ class GetSingleExpData:
         # repr_allparts = pd.DataFrame(index=range(165690, 165970), columns=multi_column_repr)  # todo remove hardcoding
         return real_world_coords_allparts, repr_error_allparts, repr_allparts
 
-    def process_body_part(self, bidx, body_part, side_coords, front_coords, overhead_coords, cameras_extrinsics,
-                          cameras_intrinsics, P_gt, Nc, real_world_coords_allparts, repr_error_allparts, repr_allparts):
-        coords_2d_all, likelihoods = self.get_coords_and_likelihoods(bidx, side_coords, front_coords, overhead_coords)
-
-        coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = self.find_empty_cameras(coords_2d_all, likelihoods,
-                                                                                        P_gt, Nc)
-
-        real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err = self.triangulate_points(
-            coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics, cameras_intrinsics, coords_2d_all) # len 283708
-
-        self.store_results(
-            body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err,
-            real_world_coords_allparts, repr_error_allparts, repr_allparts
-        )
+    # def process_body_part(self, bidx, body_part, side_coords, front_coords, overhead_coords, cameras_extrinsics,
+    #                       cameras_intrinsics, P_gt, Nc, real_world_coords_allparts, repr_error_allparts, repr_allparts):
+    #     """
+    #     This method processes each body part. It updates the shared dataframes
+    #     for real-world coordinates and reprojection errors directly.
+    #     """
+    #     coords_2d_all, likelihoods = self.get_coords_and_likelihoods(bidx, side_coords, front_coords, overhead_coords)
+    #
+    #     coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras = self.find_empty_cameras(coords_2d_all, likelihoods,
+    #                                                                                     P_gt, Nc)
+    #
+    #     real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err = self.triangulate_points(
+    #         coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics, cameras_intrinsics, coords_2d_all
+    #     )
+    #
+    #     self.store_results(
+    #         body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err, overhead_err,
+    #         real_world_coords_allparts, repr_error_allparts, repr_allparts
+    #     )
 
     def find_empty_cameras(self, coords_2d, likelihoods, P_gt, Nc):
         empty_cameras = np.where(np.all(np.all(np.isnan(coords_2d), axis=2), axis=1))
@@ -504,210 +900,226 @@ class GetSingleExpData:
             P_gt_bp = P_gt
         return coords_2d, likelihoods, P_gt_bp, Nc_bp, empty_cameras
 
-    def get_coords_and_likelihoods(self, bidx, side_coords, front_coords, overhead_coords):
-        coords_2d_all = np.array([side_coords[:, bidx, :2], front_coords[:, bidx, :2], overhead_coords[:, bidx, :2]])
-        likelihoods = np.array([side_coords[:, bidx, 2], front_coords[:, bidx, 2], overhead_coords[:, bidx, 2]])
+    # def get_coords_and_likelihoods(self, bidx, side_coords, front_coords, overhead_coords):
+    #     coords_2d_all = np.array([side_coords[:, bidx, :2], front_coords[:, bidx, :2], overhead_coords[:, bidx, :2]])
+    #     likelihoods = np.array([side_coords[:, bidx, 2], front_coords[:, bidx, 2], overhead_coords[:, bidx, 2]])
+    #
+    #     # coords_2d_all = coords_2d_all[:, 165690:165970, :]  # todo remove hardcoding
+    #     # likelihoods = likelihoods[:, 165690:165970]  # todo remove hardcoding
+    #
+    #     return coords_2d_all, likelihoods
 
-        # coords_2d_all = coords_2d_all[:, 165690:165970, :]  # todo remove hardcoding
-        # likelihoods = likelihoods[:, 165690:165970]  # todo remove hardcoding
-
-        return coords_2d_all, likelihoods
-
-    def triangulate_points(self, coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics,
-                                            cameras_intrinsics, coords_2d_all):
-        real_world_coords = []
-        side_err = []
-        front_err = []
-        overhead_err = []
-        side_repr = []
-        front_repr = []
-        overhead_repr = []
-
-        triangulation_data = self.prepare_triangulation_data(coords_2d, likelihoods, P_gt_bp, Nc_bp)
-
-        # Initialize empty array for real-world coordinates with NaNs for missing frames
-        Np = len(coords_2d[0])
-        real_world_coords = np.full((Np, 3), np.nan)
-
-        # Perform triangulation for each camera pair and 3-camera case
-        real_world_coords_sidexfront = self.triangulate_for_pair(triangulation_data['coords_sidexfront_batch'],
-                                                                 triangulation_data['P_sidexfront_batch'],
-                                                                 num_cameras=2)
-
-        real_world_coords_frontxoverhead = self.triangulate_for_pair(triangulation_data['coords_frontxoverhead_batch'],
-                                                                     triangulation_data['P_frontxoverhead_batch'],
-                                                                     num_cameras=2)
-
-        real_world_coords_sidexoverhead = self.triangulate_for_pair(triangulation_data['coords_sidexoverhead_batch'],
-                                                                    triangulation_data['P_sidexoverhead_batch'],
-                                                                    num_cameras=2)
-
-        real_world_coords_3cam = self.triangulate_for_pair(triangulation_data['coords_2d_3cam_batch'],
-                                                           triangulation_data['P_matrices_3cam_batch'],
-                                                           num_cameras=3)
-
-        # Reinsert the triangulated coordinates back to the original frame order
-        self.reassemble_in_original_order(real_world_coords, real_world_coords_sidexfront,
-                                          triangulation_data['triangulated_indices_sidexfront'])
-
-        self.reassemble_in_original_order(real_world_coords, real_world_coords_frontxoverhead,
-                                          triangulation_data['triangulated_indices_frontxoverhead'])
-
-        self.reassemble_in_original_order(real_world_coords, real_world_coords_sidexoverhead,
-                                          triangulation_data['triangulated_indices_sidexoverhead'])
-
-        self.reassemble_in_original_order(real_world_coords, real_world_coords_3cam,
-                                          triangulation_data['triangulated_indices_3cam'])
-
-        # # After reassembly, calculate reprojection errors and finalize coordinates
-        # for point_idx in range(Np):
-        #     wcs = real_world_coords[point_idx]
-        #     self.project_back_to_cameras(wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx,
-        #                                      side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr)
-
-        # Call the vectorized function for all points at once
-        self.project_back_to_cameras_vectorized(real_world_coords, cameras_extrinsics, cameras_intrinsics,
-                                                coords_2d_all,
-                                                side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr)
-
-        # Finalize the coordinates with reprojection data
-        final = self.finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
-                                     overhead_err)
-
-        return final
-
-    def prepare_triangulation_data(self, coords_2d, likelihoods, P_gt_bp, Nc_bp):
-        coords_sidexfront = []
-        coords_frontxoverhead = []
-        coords_sidexoverhead = []
-
-        P_sidexfront = []
-        P_frontxoverhead = []
-        P_sidexoverhead = []
-
-        coords_2d_3cam = []
-        P_matrices_3cam = []
-
-        triangulated_indices_sidexfront = []
-        triangulated_indices_frontxoverhead = []
-        triangulated_indices_sidexoverhead = []
-        triangulated_indices_3cam = []
-
-        Np = len(coords_2d[0])  # Number of points to triangulate
-        for point_idx in range(Np):
-            if Nc_bp < 3:
-                continue  # Check previous logic for handling missing labels in old dataset (from git version 1/10/24)
-            else:
-                conf = np.where(likelihoods[:, point_idx] > pcutoff)[0]  # Get cameras with valid data
-                Nc_conf = len(conf)
-
-                if Nc_conf == 2:
-                    if set(conf) == {0, 1}:  # side and front
-                        coords_sidexfront.append(coords_2d[conf, point_idx, :2])
-                        P_sidexfront.append(np.array([P_gt_bp[i] for i in conf]))
-                        triangulated_indices_sidexfront.append(point_idx)
-                    elif set(conf) == {1, 2}:  # front and overhead
-                        coords_frontxoverhead.append(coords_2d[conf, point_idx, :2])
-                        P_frontxoverhead.append(np.array([P_gt_bp[i] for i in conf]))
-                        triangulated_indices_frontxoverhead.append(point_idx)
-                    elif set(conf) == {0, 2}:  # side and overhead
-                        coords_sidexoverhead.append(coords_2d[conf, point_idx, :2])
-                        P_sidexoverhead.append(np.array([P_gt_bp[i] for i in conf]))
-                        triangulated_indices_sidexoverhead.append(point_idx)
-                elif Nc_conf == 3:
-                    coords_2d_3cam.append(coords_2d[:, point_idx, :2])
-                    P_matrices_3cam.append(np.array(P_gt_bp))
-                    triangulated_indices_3cam.append(point_idx)
-
-        return {
-            'coords_sidexfront_batch': self.stack_if_not_empty(coords_sidexfront),
-            'P_sidexfront_batch': self.stack_if_not_empty(P_sidexfront),
-            'coords_frontxoverhead_batch': self.stack_if_not_empty(coords_frontxoverhead),
-            'P_frontxoverhead_batch': self.stack_if_not_empty(P_frontxoverhead),
-            'coords_sidexoverhead_batch': self.stack_if_not_empty(coords_sidexoverhead),
-            'P_sidexoverhead_batch': self.stack_if_not_empty(P_sidexoverhead),
-            'coords_2d_3cam_batch': self.stack_if_not_empty(coords_2d_3cam),
-            'P_matrices_3cam_batch': self.stack_if_not_empty(P_matrices_3cam),
-            'triangulated_indices_sidexfront': triangulated_indices_sidexfront,
-            'triangulated_indices_frontxoverhead': triangulated_indices_frontxoverhead,
-            'triangulated_indices_sidexoverhead': triangulated_indices_sidexoverhead,
-            'triangulated_indices_3cam': triangulated_indices_3cam
-        }
-
-    def stack_if_not_empty(self, data_list):
-        if len(data_list) > 0:
-            return np.stack(data_list)
-        else:
-            return None
-
-    def triangulate_for_pair(self, coords_batch, P_batch, num_cameras):
-        if coords_batch is None:
-            return np.full((0, 3), np.nan)
-
-        real_world_coords = []
-        for frame_idx in range(len(coords_batch)):
-            coords_2d_frame = np.expand_dims(coords_batch[frame_idx, :, :], axis=1)  # Shape (2 or 3, 1, 2)
-            P_frame = P_batch[frame_idx, :, :, :]  # Shape (2 or 3, 3, 4)
-
-            real_world_coord = triangulate_Npts(coords_2d_frame, P_frame)
-            real_world_coords.append(real_world_coord)
-
-        return real_world_coords
-
-    def reassemble_in_original_order(self, real_world_coords, triangulated_coords, triangulated_indices):
-        for idx, point_idx in enumerate(triangulated_indices):
-            real_world_coords[point_idx, :] = triangulated_coords[idx]
-
-    def project_back_to_cameras_vectorized(self, real_world_coords, cameras_extrinsics, cameras_intrinsics,
-                                           coords_2d_all,
-                                           side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr):
+    def parallel_triangulate(self, body_part_data):
         """
-        Efficiently project all world coordinates back to camera frames and calculate reprojection errors in batches.
+        This function will be used for parallel triangulation of a single body part.
+        It will call `process_body_part` which updates the class-wide result dataframes directly.
         """
-        # Assuming real_world_coords is of shape (Np, 3), where Np is the number of points
-        Np = real_world_coords.shape[0]
+        bidx, body_part, side_coords, front_coords, overhead_coords, cameras_extrinsics, cameras_intrinsics, P_gt, Nc, real_world_coords_allparts, repr_error_allparts, repr_allparts = body_part_data
 
-        # Precompute the rotation and translation for each camera
-        cam_params = {}
-        for cam in ['side', 'front', 'overhead']:
-            cam_params[cam] = {
-                'rvec': cv2.Rodrigues(cameras_extrinsics[cam]['rotm'])[0],
-                'tvec': cameras_extrinsics[cam]['tvec'],
-                'intrinsic': cameras_intrinsics[cam]
-            }
+        # Directly call process_body_part which updates the result dataframes
+        self.process_body_part(
+            bidx, body_part,
+            side_coords, front_coords, overhead_coords,
+            cameras_extrinsics, cameras_intrinsics,
+            P_gt, Nc, real_world_coords_allparts,
+            repr_error_allparts, repr_allparts
+        )
 
-        # Project the world coordinates for each camera
-        for cam_idx, cam in enumerate(['side', 'front', 'overhead']):
-            if cam == 'side':
-                repr_list = side_repr
-                err_list = side_err
-            elif cam == 'front':
-                repr_list = front_repr
-                err_list = front_err
-            elif cam == 'overhead':
-                repr_list = overhead_repr
-                err_list = overhead_err
-
-            # Project each point using cv2.projectPoints (cannot handle batch natively)
-            CCS_repr = np.zeros((Np, 2))  # Placeholder for the projected points
-            for i in range(Np):
-                projected_points, _ = cv2.projectPoints(
-                    real_world_coords[i:i + 1],  # Take one point at a time
-                    cam_params[cam]['rvec'],
-                    cam_params[cam]['tvec'],
-                    cam_params[cam]['intrinsic'],
-                    np.array([])
-                )
-                # projected_points will be of shape (1, 1, 2), so we directly take [0, 0]
-                CCS_repr[i] = projected_points[0, 0]
-
-            # Compare with the 2D coordinates from coords_2d_all
-            valid_mask = ~np.isnan(coords_2d_all[cam_idx, :, 0])  # Get valid points (non-NaN)
-            repr_error = np.linalg.norm(CCS_repr[valid_mask] - coords_2d_all[cam_idx, valid_mask], axis=1)
-
-            # Append the results to the corresponding lists
-            repr_list.extend(CCS_repr[valid_mask])
-            err_list.extend(repr_error)
+    # def triangulate_points(self, coords_2d, likelihoods, Nc_bp, P_gt_bp, cameras_extrinsics,
+    #                                         cameras_intrinsics, coords_2d_all):
+    #     real_world_coords = []
+    #     side_err = []
+    #     front_err = []
+    #     overhead_err = []
+    #     side_repr = []
+    #     front_repr = []
+    #     overhead_repr = []
+    #
+    #     triangulation_data = self.prepare_triangulation_data(coords_2d, likelihoods, P_gt_bp, Nc_bp)
+    #
+    #     # Initialize empty array for real-world coordinates with NaNs for missing frames
+    #     Np = len(coords_2d[0])
+    #     real_world_coords = np.full((Np, 3), np.nan)
+    #
+    #     # Perform triangulation for each camera pair and 3-camera case
+    #     real_world_coords_sidexfront = self.triangulate_for_pair(triangulation_data['coords_sidexfront_batch'],
+    #                                                              triangulation_data['P_sidexfront_batch'],
+    #                                                              num_cameras=2)
+    #
+    #     real_world_coords_frontxoverhead = self.triangulate_for_pair(triangulation_data['coords_frontxoverhead_batch'],
+    #                                                                  triangulation_data['P_frontxoverhead_batch'],
+    #                                                                  num_cameras=2)
+    #
+    #     real_world_coords_sidexoverhead = self.triangulate_for_pair(triangulation_data['coords_sidexoverhead_batch'],
+    #                                                                 triangulation_data['P_sidexoverhead_batch'],
+    #                                                                 num_cameras=2)
+    #
+    #     real_world_coords_3cam = self.triangulate_for_pair(triangulation_data['coords_2d_3cam_batch'],
+    #                                                        triangulation_data['P_matrices_3cam_batch'],
+    #                                                        num_cameras=3)
+    #
+    #     # Reinsert the triangulated coordinates back to the original frame order
+    #     self.reassemble_in_original_order(real_world_coords, real_world_coords_sidexfront,
+    #                                       triangulation_data['triangulated_indices_sidexfront'])
+    #
+    #     self.reassemble_in_original_order(real_world_coords, real_world_coords_frontxoverhead,
+    #                                       triangulation_data['triangulated_indices_frontxoverhead'])
+    #
+    #     self.reassemble_in_original_order(real_world_coords, real_world_coords_sidexoverhead,
+    #                                       triangulation_data['triangulated_indices_sidexoverhead'])
+    #
+    #     self.reassemble_in_original_order(real_world_coords, real_world_coords_3cam,
+    #                                       triangulation_data['triangulated_indices_3cam'])
+    #
+    #     # # After reassembly, calculate reprojection errors and finalize coordinates
+    #     # for point_idx in range(Np):
+    #     #     wcs = real_world_coords[point_idx]
+    #     #     self.project_back_to_cameras(wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx,
+    #     #                                      side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr)
+    #
+    #     # Call the vectorized function for all points at once
+    #     self.project_back_to_cameras_vectorized(real_world_coords, cameras_extrinsics, cameras_intrinsics,
+    #                                             coords_2d_all,
+    #                                             side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr)
+    #
+    #     # Finalize the coordinates with reprojection data
+    #     final = self.finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+    #                                  overhead_err)
+    #
+    #     return final
+    #
+    # def prepare_triangulation_data(self, coords_2d, likelihoods, P_gt_bp, Nc_bp):
+    #     coords_sidexfront = []
+    #     coords_frontxoverhead = []
+    #     coords_sidexoverhead = []
+    #
+    #     P_sidexfront = []
+    #     P_frontxoverhead = []
+    #     P_sidexoverhead = []
+    #
+    #     coords_2d_3cam = []
+    #     P_matrices_3cam = []
+    #
+    #     triangulated_indices_sidexfront = []
+    #     triangulated_indices_frontxoverhead = []
+    #     triangulated_indices_sidexoverhead = []
+    #     triangulated_indices_3cam = []
+    #
+    #     Np = len(coords_2d[0])  # Number of points to triangulate
+    #     for point_idx in range(Np):
+    #         if Nc_bp < 3:
+    #             continue  # Check previous logic for handling missing labels in old dataset (from git version 1/10/24)
+    #         else:
+    #             conf = np.where(likelihoods[:, point_idx] > pcutoff)[0]  # Get cameras with valid data
+    #             Nc_conf = len(conf)
+    #
+    #             if Nc_conf == 2:
+    #                 if set(conf) == {0, 1}:  # side and front
+    #                     coords_sidexfront.append(coords_2d[conf, point_idx, :2])
+    #                     P_sidexfront.append(np.array([P_gt_bp[i] for i in conf]))
+    #                     triangulated_indices_sidexfront.append(point_idx)
+    #                 elif set(conf) == {1, 2}:  # front and overhead
+    #                     coords_frontxoverhead.append(coords_2d[conf, point_idx, :2])
+    #                     P_frontxoverhead.append(np.array([P_gt_bp[i] for i in conf]))
+    #                     triangulated_indices_frontxoverhead.append(point_idx)
+    #                 elif set(conf) == {0, 2}:  # side and overhead
+    #                     coords_sidexoverhead.append(coords_2d[conf, point_idx, :2])
+    #                     P_sidexoverhead.append(np.array([P_gt_bp[i] for i in conf]))
+    #                     triangulated_indices_sidexoverhead.append(point_idx)
+    #             elif Nc_conf == 3:
+    #                 coords_2d_3cam.append(coords_2d[:, point_idx, :2])
+    #                 P_matrices_3cam.append(np.array(P_gt_bp))
+    #                 triangulated_indices_3cam.append(point_idx)
+    #
+    #     return {
+    #         'coords_sidexfront_batch': self.stack_if_not_empty(coords_sidexfront),
+    #         'P_sidexfront_batch': self.stack_if_not_empty(P_sidexfront),
+    #         'coords_frontxoverhead_batch': self.stack_if_not_empty(coords_frontxoverhead),
+    #         'P_frontxoverhead_batch': self.stack_if_not_empty(P_frontxoverhead),
+    #         'coords_sidexoverhead_batch': self.stack_if_not_empty(coords_sidexoverhead),
+    #         'P_sidexoverhead_batch': self.stack_if_not_empty(P_sidexoverhead),
+    #         'coords_2d_3cam_batch': self.stack_if_not_empty(coords_2d_3cam),
+    #         'P_matrices_3cam_batch': self.stack_if_not_empty(P_matrices_3cam),
+    #         'triangulated_indices_sidexfront': triangulated_indices_sidexfront,
+    #         'triangulated_indices_frontxoverhead': triangulated_indices_frontxoverhead,
+    #         'triangulated_indices_sidexoverhead': triangulated_indices_sidexoverhead,
+    #         'triangulated_indices_3cam': triangulated_indices_3cam
+    #     }
+    #
+    # def stack_if_not_empty(self, data_list):
+    #     if len(data_list) > 0:
+    #         return np.stack(data_list)
+    #     else:
+    #         return None
+    #
+    # def triangulate_for_pair(self, coords_batch, P_batch, num_cameras):
+    #     if coords_batch is None:
+    #         return np.full((0, 3), np.nan)
+    #
+    #     real_world_coords = []
+    #     for frame_idx in range(len(coords_batch)):
+    #         coords_2d_frame = np.expand_dims(coords_batch[frame_idx, :, :], axis=1)  # Shape (2 or 3, 1, 2)
+    #         P_frame = P_batch[frame_idx, :, :, :]  # Shape (2 or 3, 3, 4)
+    #
+    #         real_world_coord = triangulate_Npts(coords_2d_frame, P_frame)
+    #         real_world_coords.append(real_world_coord)
+    #
+    #     return real_world_coords
+    #
+    # def reassemble_in_original_order(self, real_world_coords, triangulated_coords, triangulated_indices):
+    #     for idx, point_idx in enumerate(triangulated_indices):
+    #         real_world_coords[point_idx, :] = triangulated_coords[idx]
+    #
+    # def project_back_to_cameras_vectorized(self, real_world_coords, cameras_extrinsics, cameras_intrinsics,
+    #                                        coords_2d_all,
+    #                                        side_err, front_err, overhead_err, side_repr, front_repr, overhead_repr):
+    #     """
+    #     Efficiently project all world coordinates back to camera frames and calculate reprojection errors in batches.
+    #     """
+    #     # Assuming real_world_coords is of shape (Np, 3), where Np is the number of points
+    #     Np = real_world_coords.shape[0]
+    #
+    #     # Precompute the rotation and translation for each camera
+    #     cam_params = {}
+    #     for cam in ['side', 'front', 'overhead']:
+    #         cam_params[cam] = {
+    #             'rvec': cv2.Rodrigues(cameras_extrinsics[cam]['rotm'])[0],
+    #             'tvec': cameras_extrinsics[cam]['tvec'],
+    #             'intrinsic': cameras_intrinsics[cam]
+    #         }
+    #
+    #     # Project the world coordinates for each camera
+    #     for cam_idx, cam in enumerate(['side', 'front', 'overhead']):
+    #         if cam == 'side':
+    #             repr_list = side_repr
+    #             err_list = side_err
+    #         elif cam == 'front':
+    #             repr_list = front_repr
+    #             err_list = front_err
+    #         elif cam == 'overhead':
+    #             repr_list = overhead_repr
+    #             err_list = overhead_err
+    #
+    #         # Project each point using cv2.projectPoints (cannot handle batch natively)
+    #         CCS_repr = np.zeros((Np, 2))  # Placeholder for the projected points
+    #         for i in range(Np):
+    #             projected_points, _ = cv2.projectPoints(
+    #                 real_world_coords[i:i + 1],  # Take one point at a time
+    #                 cam_params[cam]['rvec'],
+    #                 cam_params[cam]['tvec'],
+    #                 cam_params[cam]['intrinsic'],
+    #                 np.array([])
+    #             )
+    #             # projected_points will be of shape (1, 1, 2), so we directly take [0, 0]
+    #             CCS_repr[i] = projected_points[0, 0]
+    #
+    #         # Compare with the 2D coordinates from coords_2d_all
+    #         valid_mask = ~np.isnan(coords_2d_all[cam_idx, :, 0])  # Get valid points (non-NaN)
+    #         repr_error = np.linalg.norm(CCS_repr[valid_mask] - coords_2d_all[cam_idx, valid_mask], axis=1)
+    #
+    #         # Append the results to the corresponding lists
+    #         repr_list.extend(CCS_repr[valid_mask])
+    #         err_list.extend(repr_error)
 
     # def project_back_to_cameras(self, wcs, cameras_extrinsics, cameras_intrinsics, coords_2d_all, point_idx, side_err,
     #                             front_err, overhead_err, side_repr, front_repr, overhead_repr):
@@ -735,43 +1147,76 @@ class GetSingleExpData:
     #                 overhead_err.append(repr_error)
     #                 overhead_repr.append(repr)
 
-    def finalize_coords(self, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
-                        overhead_err):
-        real_world_coords = np.array(real_world_coords).T
-        side_repr_arr = np.array(side_repr).T
-        front_repr_arr = np.array(front_repr).T
-        overhead_repr_arr = np.array(overhead_repr).T
-        side_err_arr = np.array(side_err).T
-        front_err_arr = np.array(front_err).T
-        overhead_err_arr = np.array(overhead_err).T
+    # def finalize_coords(self, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+    #                     overhead_err):
+    #     real_world_coords = np.array(real_world_coords).T
+    #     side_repr_arr = np.array(side_repr).T
+    #     front_repr_arr = np.array(front_repr).T
+    #     overhead_repr_arr = np.array(overhead_repr).T
+    #     side_err_arr = np.array(side_err).T
+    #     front_err_arr = np.array(front_err).T
+    #     overhead_err_arr = np.array(overhead_err).T
+    #
+    #     if real_world_coords.shape[0] == 4:
+    #         real_world_coords = real_world_coords[:3, :] / real_world_coords[3, :]
+    #     real_world_coords = real_world_coords.T
+    #
+    #     return real_world_coords, side_repr_arr, front_repr_arr, overhead_repr_arr, side_err_arr, front_err_arr, overhead_err_arr
 
-        if real_world_coords.shape[0] == 4:
-            real_world_coords = real_world_coords[:3, :] / real_world_coords[3, :]
-        real_world_coords = real_world_coords.T
+    # def store_results(self, body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
+    #                   overhead_err, real_world_coords_allparts, repr_error_allparts, repr_allparts):
+    #     if len(real_world_coords.shape) == 1:
+    #         real_world_coords_allparts[body_part, 'x'] = np.nan
+    #         real_world_coords_allparts[body_part, 'y'] = np.nan
+    #         real_world_coords_allparts[body_part, 'z'] = np.nan
+    #     else:
+    #         real_world_coords_allparts[body_part, 'x'] = real_world_coords[:, 0]
+    #         real_world_coords_allparts[body_part, 'y'] = real_world_coords[:, 1]
+    #         real_world_coords_allparts[body_part, 'z'] = real_world_coords[:, 2]
+    #
+    #     repr_allparts[body_part, 'side', 'x'] = np.squeeze(side_repr[0, :])
+    #     repr_allparts[body_part, 'side', 'y'] = np.squeeze(side_repr[1, :])
+    #     repr_allparts[body_part, 'front', 'x'] = np.squeeze(front_repr[0, :])
+    #     repr_allparts[body_part, 'front', 'y'] = np.squeeze(front_repr[1, :])
+    #     repr_allparts[body_part, 'overhead', 'x'] = np.squeeze(overhead_repr[0, :])
+    #     repr_allparts[body_part, 'overhead', 'y'] = np.squeeze(overhead_repr[1, :])
+    #
+    #     repr_error_allparts[body_part, 'side'] = side_err
+    #     repr_error_allparts[body_part, 'front'] = front_err
+    #     repr_error_allparts[body_part, 'overhead'] = overhead_err
 
-        return real_world_coords, side_repr_arr, front_repr_arr, overhead_repr_arr, side_err_arr, front_err_arr, overhead_err_arr
+    def store_results(self, body_part, result_data):
+        # Extract data from result_data
+        real_world_coords = result_data['real_world_coords']
+        side_repr = result_data['side_repr']
+        front_repr = result_data['front_repr']
+        overhead_repr = result_data['overhead_repr']
+        side_err = result_data['side_err']
+        front_err = result_data['front_err']
+        overhead_err = result_data['overhead_err']
 
-    def store_results(self, body_part, real_world_coords, side_repr, front_repr, overhead_repr, side_err, front_err,
-                      overhead_err, real_world_coords_allparts, repr_error_allparts, repr_allparts):
-        if len(real_world_coords.shape) == 1:
-            real_world_coords_allparts[body_part, 'x'] = np.nan
-            real_world_coords_allparts[body_part, 'y'] = np.nan
-            real_world_coords_allparts[body_part, 'z'] = np.nan
+        # Update real_world_coords_allparts
+        if real_world_coords is None or len(real_world_coords.shape) == 1:
+            self.real_world_coords_allparts[body_part, 'x'] = np.nan
+            self.real_world_coords_allparts[body_part, 'y'] = np.nan
+            self.real_world_coords_allparts[body_part, 'z'] = np.nan
         else:
-            real_world_coords_allparts[body_part, 'x'] = real_world_coords[:, 0]
-            real_world_coords_allparts[body_part, 'y'] = real_world_coords[:, 1]
-            real_world_coords_allparts[body_part, 'z'] = real_world_coords[:, 2]
+            self.real_world_coords_allparts[body_part, 'x'] = real_world_coords[:, 0]
+            self.real_world_coords_allparts[body_part, 'y'] = real_world_coords[:, 1]
+            self.real_world_coords_allparts[body_part, 'z'] = real_world_coords[:, 2]
 
-        repr_allparts[body_part, 'side', 'x'] = np.squeeze(side_repr[0, :])
-        repr_allparts[body_part, 'side', 'y'] = np.squeeze(side_repr[1, :])
-        repr_allparts[body_part, 'front', 'x'] = np.squeeze(front_repr[0, :])
-        repr_allparts[body_part, 'front', 'y'] = np.squeeze(front_repr[1, :])
-        repr_allparts[body_part, 'overhead', 'x'] = np.squeeze(overhead_repr[0, :])
-        repr_allparts[body_part, 'overhead', 'y'] = np.squeeze(overhead_repr[1, :])
+        # Update repr_allparts
+        self.repr_allparts[body_part, 'side', 'x'] = np.squeeze(side_repr[:, 0])
+        self.repr_allparts[body_part, 'side', 'y'] = np.squeeze(side_repr[:, 1])
+        self.repr_allparts[body_part, 'front', 'x'] = np.squeeze(front_repr[:, 0])
+        self.repr_allparts[body_part, 'front', 'y'] = np.squeeze(front_repr[:, 1])
+        self.repr_allparts[body_part, 'overhead', 'x'] = np.squeeze(overhead_repr[:, 0])
+        self.repr_allparts[body_part, 'overhead', 'y'] = np.squeeze(overhead_repr[:, 1])
 
-        repr_error_allparts[body_part, 'side'] = side_err
-        repr_error_allparts[body_part, 'front'] = front_err
-        repr_error_allparts[body_part, 'overhead'] = overhead_err
+        # Update repr_error_allparts
+        self.repr_error_allparts[body_part, 'side'] = side_err
+        self.repr_error_allparts[body_part, 'front'] = front_err
+        self.repr_error_allparts[body_part, 'overhead'] = overhead_err
 
     def plot_2d_prep_frame(self, view, frame_number):
         # get video paths
@@ -1008,9 +1453,10 @@ class GetSingleExpData:
 
 
 class GetALLRuns:
-    def __init__(self, files=None, directory=None):
+    def __init__(self, files=None, directory=None, overwrite=False):
         self.files = files
         self.directory = directory
+        self.overwrite = overwrite
 
     def GetFiles(self):
         files = utils.Utils().GetlistofH5files(self.files,
@@ -1022,21 +1468,79 @@ class GetALLRuns:
                 files)  # before proceeding, check that mouse names are correctly labeled
 
         for j in range(0, len(files['Side'])):  # all csv files from each cam are same length so use side for all
-            getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
-            getdata.map()
-            print('temp')
+            match = re.search(r'FAA-(\d+)', files['Side'][j])
+            mouseID = match.group(1)
+            pattern = "*%s*_mapped3D.h5" % mouseID
+            dir = os.path.dirname(files['Side'][j])
+
+            if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
+                getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
+                getdata.map()
+            else:
+                print(f"Data for {mouseID} already exists. Skipping...")
+
+        print('All experiments have been mapped to real-world coordinates and saved.')
 
         #### save data
 
+class GetDirsFromConditions:
+    def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None, vmt_level=None, prep=None, overwrite=False):
+        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite = (
+            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite)
 
-def main(directory):
+    def get_dirs(self):
+        if self.speed:
+            exp_speed_name = f"{self.exp}_{self.speed}"
+        else:
+            exp_speed_name = self.exp
+        base_path = os.path.join(paths['filtereddata_folder'], exp_speed_name)
+
+        # join any of the conditions that are not None in the order they appear in the function as individual directories
+        conditions = [self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep]
+        conditions = [c for c in conditions if c is not None]
+        # if Repeats in conditions, add 'Wash' directory in the next position in the list
+        if 'Repeats' in conditions:
+            idx = conditions.index('Repeats')
+            conditions.insert(idx + 1, 'Wash')
+        condition_path = os.path.join(base_path, *conditions)
+
+        if os.path.exists(condition_path):
+            print(f"Directory found: {condition_path}")
+        else:
+            raise FileNotFoundError(f"No path found {condition_path}")
+
+        # Recursively find and process the final data directories
+        self._process_subdirectories(condition_path)
+
+    def _process_subdirectories(self, current_path):
+        """
+        Recursively process directories and get to the final data directories.
+        """
+        subdirs = [d for d in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, d))]
+
+        # If subdirectories exist, traverse deeper
+        if len(subdirs) > 0:
+            print(f"Subdirectories found in {current_path}: {subdirs}")
+            for subdir in subdirs:
+                full_subdir_path = os.path.join(current_path, subdir)
+                # Recursively process subdirectory
+                self._process_subdirectories(full_subdir_path)
+        else:
+            # No more subdirectories, assume this is the final directory with data
+            print(f"Final directory: {current_path}")
+            try:
+                GetALLRuns(directory=current_path, overwrite=self.overwrite).GetFiles()
+            except Exception as e:
+                print(f"Error processing directory {current_path}: {e}")
+
+
+def main():
     # Get all data
-    GetALLRuns(directory=directory).GetFiles()
+    #GetALLRuns(directory=directory).GetFiles()
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', overwrite=False).get_dirs()
 
 
 if __name__ == "__main__":
-    directory = input("Enter the directory path: ")
-    main(directory)
-
-
-
+    # directory = input("Enter the directory path: ")
+    # main(directory)
+    main()

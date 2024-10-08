@@ -92,7 +92,7 @@ class optimize:
         start_time = time.time()
 
         result = minimize(self.objective_function, initial_flat_points, args=args, method='L-BFGS-B', bounds=bounds,
-                          options={'maxiter': 100000, 'ftol': 1e-5, 'gtol': 1e-5, 'disp':True}) # 100000, 1e-15, 1e-15
+                          options={'maxiter': 100000, 'ftol': 1e-6, 'gtol': 1e-6, 'disp':True}) # 100000, 1e-15, 1e-15
 
         # End the timer
         end_time = time.time()

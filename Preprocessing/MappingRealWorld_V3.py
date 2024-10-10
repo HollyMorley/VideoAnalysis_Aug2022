@@ -8,6 +8,12 @@ from pycalib.calib import triangulate, triangulate_Npts
 from sklearn.linear_model import LinearRegression
 from multiprocessing import Pool, cpu_count, shared_memory
 import cupy as cp
+from scipy.signal import savgol_filter
+import ruptures as rpt
+from sklearn.mixture import GaussianMixture
+from kneed import KneeLocator
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 
 sys.path.append(r'C:\Users\hmorl\Projects\VideoAnalysis_Aug2022')
 
@@ -310,6 +316,101 @@ def finalize_coords(real_world_coords, side_repr, front_repr, overhead_repr,
     return (real_world_coords, side_repr_arr, front_repr_arr, overhead_repr_arr,
             side_err_arr, front_err_arr, overhead_err_arr)
 
+
+import numpy as np
+
+
+def find_component_borders(cluster_labels, leniency=2):
+    """
+    Find the frames where two components border each other with some leniency for small gaps.
+
+    Args:
+        cluster_labels: The array of GMM cluster assignments.
+        leniency: The number of frames to tolerate between bordering components.
+
+    Returns:
+        border_frames: A list of frame indices where two components border each other.
+    """
+    border_frames = []
+
+    # Find number of components
+    n_components = len(np.unique(cluster_labels))
+
+    # Find 1st and last frame of each component
+    first_frames = []
+    last_frames = []
+    for i in range(n_components):
+        component_frames = np.where(cluster_labels == i)[0]
+        first_frames.append(component_frames[0])
+        last_frames.append(component_frames[-1])
+
+    # Find the frames where any components border each other with leniency
+    gaps = [(f - l, f, l) for f in first_frames for l in last_frames]
+
+    # Identify the gaps that are within the leniency threshold
+    for gap, first_frame, last_frame in gaps:
+        if np.abs(gap) <= leniency:
+            # find the middle frames between the two components
+            middle = np.round(np.mean([first_frame, last_frame])).astype(int)
+            border_frames.append(middle)  # Record the frame where components border
+
+    # Flatten the list of borders to a unique set of frame indices
+    border_frames = list(set(border_frames))
+
+    return border_frames
+
+
+def fit_gmm_for_label_view(args):
+    """
+    Fit GMM for a specific label and view, return the cluster labels and borders.
+
+    Args:
+        args: A tuple containing (view, label, coords_filtered, leniency, n_components_range)
+
+    Returns:
+        view: The camera view
+        label: The calibration label
+        frame_indices: Indices of the frames used in GMM
+        cluster_labels: Cluster assignments for each frame
+        border_frames: List of frame indices where components change
+    """
+    view, label, coords_filtered, leniency, n_components_range = args
+    #print(f"Analyzing {label} in {view} view...")
+
+    # Prepare the calibration data (x, y positions)
+    X = np.column_stack((coords_filtered[(label, 'x')].values, coords_filtered[(label, 'y')].values))
+    frame_indices = coords_filtered.index.values  # Get the frame indices
+
+    # Fit GMM with different numbers of components and calculate BIC
+    bic = []
+    for n in n_components_range:
+        gmm = GaussianMixture(n_components=n, covariance_type='full', random_state=42)
+        gmm.fit(X)
+        bic.append(gmm.bic(X))
+
+    # Detect the elbow point using BIC
+    knee_locator = KneeLocator(n_components_range, bic, curve='convex', direction='decreasing')
+    best_n_components = knee_locator.elbow
+    print(f"Best number of components for {label} in {view}: {best_n_components}")
+
+    if best_n_components is None:
+        print(f"No elbow detected for {label} in {view}. Skipping...")
+        return view, label, frame_indices, [], []
+    else:
+        # Fit GMM with the best number of components
+        gmm_best = GaussianMixture(n_components=best_n_components, covariance_type='full', random_state=42)
+        gmm_best.fit(X)
+
+        # Get cluster assignments
+        cluster_labels = gmm_best.predict(X)
+
+        # Find borders where components change
+        border_frames = find_component_borders(cluster_labels, leniency)
+        border_frames_real = coords_filtered.iloc[border_frames].index.values
+
+        return view, label, frame_indices, cluster_labels, border_frames_real
+
+
 ########################################################################################################################
 
 class MapExperiment:
@@ -492,36 +593,63 @@ class GetSingleExpData:
         base_file_name = '_'.join(os.path.basename(self.files['side']).split('_')[:name_idx])
         base_path_name = os.path.join(os.path.dirname(self.files['side']), base_file_name)
 
+        # Detect camera shifts
+        calibration_labels = ['StartPlatR', 'TransitionL', 'StartPlatL', 'TransitionR']  # Use your calibration labels
+        segments = self.detect_camera_movement(calibration_labels, threshold=10.0, window_size=10)
 
+        if len(segments) > 1:
+            print(f"Camera movement detected. Processing data in {len(segments)} segments.")
+        else:
+            print("No camera movement detected. Processing data as a single segment.")
 
-        calibration_coords = self.get_belt_coords()
+        # Initialize lists to store results
+        all_real_world_coords = []
+        all_repr_error = []
+        all_repr = []
 
-        calib_obj = BasicCalibration(calibration_coords)
-        cameras_extrinsics = calib_obj.estimate_cams_pose()
-        cameras_intrinsics = calib_obj.cameras_intrinsics
+        for idx, (start_frame, end_frame) in enumerate(segments):
+            print(f"Processing segment {idx + 1}/{len(segments)}: frames {start_frame} to {end_frame}")
 
-        # belt_points_WCS = calib_obj.belt_coords_WCS
-        # belt_points_CCS = calib_obj.belt_coords_CCS
+            # Extract data for this segment
+            segment_indices = range(start_frame, end_frame + 1)
 
+            # Get calibration coordinates for this segment
+            calibration_coords = self.get_belt_coords(segment_indices)
 
-        optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, base_path_name, self)
-        new_calibration_data = optimise.optimise_calibration(debugging=True) #todo remove debugging
+            # Perform calibration
+            calib_obj = BasicCalibration(calibration_coords)
+            cameras_extrinsics = calib_obj.estimate_cams_pose()
+            cameras_intrinsics = calib_obj.cameras_intrinsics
 
-        self.extrinsics = new_calibration_data['extrinsics']
-        self.intrinsics = new_calibration_data['intrinsics']
-        self.belt_coords_CCS = new_calibration_data['belt points CCS']
+            # Create optimize instance and perform optimization
+            optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, base_path_name, self)
+            new_calibration_data = optimise.optimise_calibration(debugging=True)
 
-        # Get real-world data
-        results = self.get_realworld_coords()
+            self.extrinsics = new_calibration_data['extrinsics']
+            self.intrinsics = new_calibration_data['intrinsics']
+            self.belt_coords_CCS = new_calibration_data['belt points CCS']
+
+            # Get real-world data for this segment
+            results = self.get_realworld_coords(segment_indices)
+
+            # Append results
+            all_real_world_coords.append(results['real_world_coords'])
+            all_repr_error.append(results['repr_error'])
+            all_repr.append(results['repr'])
+
+        # Concatenate all segments' results
+        real_world_coords = pd.concat(all_real_world_coords)
+        repr_error = pd.concat(all_repr_error)
+        repr = pd.concat(all_repr)
 
         # Save the results as an HDF5 file
         file_path = base_path_name + '_mapped3D.h5'
 
-        # Store the three dataframes into a single HDF5 file with different keys
+        # Store the dataframes into a single HDF5 file with different keys
         with pd.HDFStore(file_path) as store:
-            store.put('real_world_coords', results['real_world_coords'])
-            store.put('repr_error', results['repr_error'])
-            store.put('repr', results['repr'])
+            store.put('real_world_coords', real_world_coords)
+            store.put('repr_error', repr_error)
+            store.put('repr', repr)
 
         print(f"Data saved to HDF5 file at {file_path}")
 
@@ -573,33 +701,41 @@ class GetSingleExpData:
             plt.scatter(x, y, color=color, alpha=0.8, s=4)
             plt.text(x, y, bodypart, fontsize=9, color=color)
 
-    def get_belt_coords(self):
+    def get_belt_coords(self, segment_indices=None):
         masks = {'side': [], 'front': [], 'overhead': []}
         belt_coords = {'side': [], 'front': [], 'overhead': []}
         means = {'side': [], 'front': [], 'overhead': []}
         for view in vidstuff['cams']:
-            masks[view] = np.all(self.DataframeCoors[view].loc(axis=1)[
-                                        ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
-                                            'TransitionL'], 'likelihood'] > 0.99, axis=1)
-            belt_coords[view] = self.DataframeCoors[view].loc(axis=1)[
+            if segment_indices is not None:
+                df_view = self.DataframeCoors[view].iloc[segment_indices]
+            else:
+                df_view = self.DataframeCoors[view]
+            masks[view] = np.all(df_view.loc(axis=1)[
+                                     ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
+                                      'TransitionL'], 'likelihood'] > 0.99, axis=1)
+            belt_coords[view] = df_view.loc(axis=1)[
                 ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][masks[view]]
             means[view] = belt_coords[view].mean(axis=0)
 
-        # concatenate the mean values of the belt coordinates from the 3 camera views with the camera names as columns
-        belt_coords = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
-        belt_coords.columns = vidstuff['cams']
+        # Concatenate the mean values
+        belt_coords_df = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
+        belt_coords_df.columns = vidstuff['cams']
 
-        # add door coordinates
-        door_coords = self.get_door_coords()
-        belt_coords.reset_index(inplace=True, drop=False)
-        coords = pd.concat([belt_coords, door_coords], axis=0).reset_index(drop=True)
+        # Add door coordinates
+        door_coords = self.get_door_coords(segment_indices)
+        belt_coords_df.reset_index(inplace=True, drop=False)
+        coords = pd.concat([belt_coords_df, door_coords], axis=0).reset_index(drop=True)
 
         return coords
 
-    def get_door_coords(self):
+    def get_door_coords(self, segment_indices=None):
         masks = {'side': [], 'front': [], 'overhead': []}
         for view in vidstuff['cams']:
-            masks[view] = self.DataframeCoors[view].loc(axis=1)['Door', 'likelihood'] > pcutoff
+            if segment_indices is not None:
+                df_view = self.DataframeCoors[view].iloc[segment_indices]
+            else:
+                df_view = self.DataframeCoors[view]
+            masks[view] = df_view.loc(axis=1)['Door', 'likelihood'] > pcutoff
 
         mask = masks['side'] & masks['front'] & masks['overhead']
 
@@ -607,10 +743,14 @@ class GetSingleExpData:
         door_present = {'side': [], 'front': [], 'overhead': []}
         door_closed_masks = {'side': [], 'front': [], 'overhead': []}
         for view in vidstuff['cams']:
-            door_present[view] = self.DataframeCoors[view].loc(axis=1)['Door', ['x', 'y']][mask]
+            df_view = self.DataframeCoors[view].iloc[segment_indices] if segment_indices is not None else \
+            self.DataframeCoors[view]
+            door_present[view] = df_view.loc(axis=1)['Door', ['x', 'y']][mask]
             door_closed_masks[view] = np.logical_and(
-                door_present[view]['Door', 'y'] < door_present[view]['Door', 'y'].mean() + door_present[view]['Door', 'y'].sem() * sem_factor,
-                door_present[view]['Door', 'y'] > door_present[view]['Door', 'y'].mean() - door_present[view]['Door', 'y'].sem() * sem_factor)
+                door_present[view]['Door', 'y'] < door_present[view]['Door', 'y'].mean() + door_present[view][
+                    'Door', 'y'].sem() * sem_factor,
+                door_present[view]['Door', 'y'] > door_present[view]['Door', 'y'].mean() - door_present[view][
+                    'Door', 'y'].sem() * sem_factor)
 
         closed_mask = door_closed_masks['side'] & door_closed_masks['front'] & door_closed_masks['overhead']
 
@@ -618,27 +758,295 @@ class GetSingleExpData:
         for view in vidstuff['cams']:
             means[view] = door_present[view][closed_mask].mean(axis=0)
 
-        # concatenate the mean values of the door coordinates from the 3 camera views with the camera names as columns
+        # Concatenate the mean values
         door_coords = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
         door_coords.columns = ['side', 'front', 'overhead']
         door_coords.reset_index(inplace=True, drop=False)
 
         return door_coords
 
+    # def detect_camera_movement(self, threshold=5.0, downsample_factor=20, frame_interval=500):
+    #     """
+    #     Detects camera movement by analyzing global frame differences.
+    #
+    #     Args:
+    #         threshold: Threshold for significant change to consider as movement.
+    #         downsample_factor: Factor to downsample frames to reduce computation.
+    #         frame_interval: Interval between frames to process.
+    #
+    #     Returns:
+    #         segments: List of tuples representing frame ranges where the camera remains stationary.
+    #     """
+    #     video_paths = {
+    #         # 'side': self.get_video_path('side'),
+    #         # 'front': self.get_video_path('front'),
+    #         'overhead': self.get_video_path('overhead')
+    #     }
+    #
+    #     segments = {}
+    #     for view in ['side', 'front', 'overhead']:
+    #         view = 'overhead' #todo remove!!!!
+    #         cap = cv2.VideoCapture(video_paths[view])
+    #         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    #         frame_indices = range(0, total_frames, frame_interval)
+    #         diff_metrics = []
+    #
+    #         # Initialize previous frame
+    #         prev_gray = None
+    #
+    #         for idx in frame_indices:
+    #             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+    #             ret, frame = cap.read()
+    #             if not ret:
+    #                 break
+    #
+    #             # Downsample and convert to grayscale
+    #             frame_small = cv2.resize(frame, (0, 0), fx=1 / downsample_factor, fy=1 / downsample_factor)
+    #
+    #             if prev_gray is not None:
+    #                 # Compute absolute difference
+    #                 frame_diff = cv2.absdiff(prev_gray, frame_small)
+    #                 # Sum the differences to get a metric
+    #                 diff_metric = np.sum(frame_diff) / 255
+    #                 diff_metrics.append(diff_metric)
+    #             else:
+    #                 # Initialize diff_metrics with a zero for the first frame
+    #                 diff_metrics.append(0)
+    #
+    #             # Update previous frame
+    #             prev_gray = frame_small
+    #
+    #         cap.release()
+    #
+    #         # Convert diff_metrics to a NumPy array
+    #         diff_metrics = np.array(diff_metrics).reshape(-1, 1)
+    #
+    #         # Apply change point detection
+    #         algo = rpt.Pelt(model="l2").fit(diff_metrics)
+    #         change_points = algo.predict(pen=10,max_cp=5)
+    #
+    #         # Define segments based on change points
+    #         segments_view = []
+    #         last_cp = 0
+    #         for cp in change_points:
+    #             start_frame = frame_indices[last_cp]
+    #             end_frame = frame_indices[cp - 1] if cp - 1 < len(frame_indices) else frame_indices[-1]
+    #             segments_view.append((start_frame, end_frame))
+    #             last_cp = cp
+    #         segments[view] = segments_view
+    #
+    #     # Combine segments from all views (assuming synchronization)
+    #     combined_segments = self.combine_segments(segments)
+    #     return combined_segments
+
+    # def get_video_path(self, view):
+    #     # # Implement this method to return the correct video path for each view
+    #     # # Example:
+    #     # return self.video_files[view]
+    #     if view == 'overhead':
+    #         return r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230308\HM_20230308_APACharRepeat_FAA-1035245_R_overhead_1.avi"
+    #
+    #
+    # def combine_segments(self, segments):
+    #     """
+    #     Combines segments from different views by taking the intersection.
+    #
+    #     Args:
+    #         segments: Dictionary containing segments for each view.
+    #
+    #     Returns:
+    #         combined_segments: List of tuples representing unified segments.
+    #     """
+    #     # Get segments for each view
+    #     side_segments = segments.get('side', [])
+    #     front_segments = segments.get('front', [])
+    #     overhead_segments = segments.get('overhead', [])
+    #
+    #     # Flatten the segments and sort them
+    #     all_starts = sorted(set([s[0] for s in side_segments + front_segments + overhead_segments]))
+    #     all_ends = sorted(set([s[1] for s in side_segments + front_segments + overhead_segments]))
+    #
+    #     # Initialize combined segments
+    #     combined_segments = []
+    #     for start, end in zip(all_starts, all_ends):
+    #         combined_segments.append((start, end))
+    #
+    #     return combined_segments
+
+    # def fit_gmm_for_label_view(self, view, label, coords_filtered, leniency=2, n_components_range=range(1, 10)):
+    #     """
+    #     Fit GMM for a specific label and view, return the borders.
+    #     """
+    #     print(f"Analyzing {label} in {view} view...")
+    #
+    #     # Prepare the data
+    #     X = np.column_stack((coords_filtered[(label, 'x')].values, coords_filtered[(label, 'y')].values))
+    #
+    #     # Fit GMM with different numbers of components
+    #     bic = []
+    #     for n in n_components_range:
+    #         gmm = GaussianMixture(n_components=n, covariance_type='full', random_state=42)
+    #         gmm.fit(X)
+    #         bic.append(gmm.bic(X))
+    #
+    #     # Detect the elbow point using BIC
+    #     knee_locator = KneeLocator(n_components_range, bic, curve='convex', direction='decreasing')
+    #     best_n_components = knee_locator.elbow
+    #
+    #     if best_n_components is None:
+    #         print(f"No elbow detected for {label} in {view}. Skipping...")
+    #         return view, label, []
+    #     else:
+    #         # Fit GMM with the best number of components
+    #         gmm_best = GaussianMixture(n_components=best_n_components, covariance_type='full', random_state=42)
+    #         gmm_best.fit(X)
+    #
+    #         # Get cluster assignments
+    #         cluster_labels = gmm_best.predict(X)
+    #
+    #         # Find borders where components change
+    #         border_frames = self.find_component_borders(cluster_labels, leniency)
+    #
+    #         return view, label, border_frames
+
+    def detect_camera_movement(self, calibration_labels, threshold=10.0, window_size=10):
+        """
+        Detects camera movement by analyzing shifts in 2D calibration label positions across all cameras.
+        """
+        data = self.DataframeCoors  # Assuming DataframeCoors contains your data
+
+        # Create a mask where all views (side, front, overhead) have valid calibration points (likelihood >= 0.999)
+        valid_frames_mask = np.ones(len(data['side']), dtype=bool)  # Start with all frames as valid
+
+        for view in ['side', 'front', 'overhead']:
+            coords = data[view].loc[:, (calibration_labels, ['x', 'y', 'likelihood'])]
+
+            # Apply the likelihood mask: only keep frames where all calibration points have likelihood >= 0.999
+            for calib_label in calibration_labels:
+                view_mask = coords[(calib_label, 'likelihood')] >= 0.999
+                valid_frames_mask &= view_mask  # Update the global mask
+
+        # Apply the global mask to all views and calibration labels
+        coords_filtered_all_views = {}
+        for view in ['side', 'front', 'overhead']:
+            coords_filtered_all_views[view] = data[view].loc[valid_frames_mask, (calibration_labels, ['x', 'y'])].copy()
+
+            # Optionally, smooth the coordinates to reduce noise
+            for label in calibration_labels:
+                coords_filtered_all_views[view][(label, 'x')] = savgol_filter(
+                    coords_filtered_all_views[view][(label, 'x')].values,
+                    window_length=10001, polyorder=3)
+                coords_filtered_all_views[view][(label, 'y')] = savgol_filter(
+                    coords_filtered_all_views[view][(label, 'y')].values,
+                    window_length=10001, polyorder=3)
+
+        # Prepare arguments for multiprocessing
+        tasks = []
+        for view, coords_filtered in coords_filtered_all_views.items():
+            for label in calibration_labels:
+                args = (view, label, coords_filtered, 5, range(1, 10))
+                tasks.append(args)
+
+        # Run GMM in parallel using ProcessPoolExecutor
+        all_results = []  # Collect all results for plotting
+        all_borders = {}
+        with ProcessPoolExecutor() as executor:
+            futures = [executor.submit(fit_gmm_for_label_view, args) for args in tasks]
+            for future in as_completed(futures):
+                view, label, frame_indices, cluster_labels, borders = future.result()
+                all_results.append((view, label, frame_indices, cluster_labels))
+                if view not in all_borders:
+                    all_borders[view] = {}
+                all_borders[view][label] = borders
+
+        # Collect all border frames
+        border_frames_list = []
+        for view, labels_borders in all_borders.items():
+            for label, borders in labels_borders.items():
+                border_frames_list.extend(borders)
+
+            # Remove duplicates and sort
+            unique_border_frames = sorted(set(border_frames_list))
+
+            # Refine unique border frames
+            refined_border_frames = []
+            window_size = 5000  # Define your window size for grouping borders
+
+            # Group border frames if at least 3 occur within a 5000-frame window and calculate the average
+            current_window = []
+            for frame in unique_border_frames:
+                if not current_window or (frame - current_window[-1] <= window_size):
+                    current_window.append(frame)
+                else:
+                    if len(current_window) >= 3:  # Check if there are at least 3 borders in the current window
+                        refined_border_frames.append(int(np.mean(current_window)))  # Take the average of the borders
+                    current_window = [frame]
+
+            # Check the last window
+            if len(current_window) >= 3:
+                refined_border_frames.append(int(np.mean(current_window)))
+
+        # Define segments based on movement frames
+        frames = data['side'].index  # Assuming 'side' has the frames
+        segments = []
+        last_frame = frames[0]
+        for movement_frame in refined_border_frames:
+            segments.append((last_frame, movement_frame - 1))
+            last_frame = movement_frame
+        segments.append((last_frame, frames[-1]))
+
+        # Return segments and all_results for plotting
+        return segments
+
+    def plot_gmm_results(self, all_results, all_borders):
+        """
+        Plots the cluster labels over frames for each view and calibration label, including borders.
+
+        Args:
+            all_results: List of tuples containing (view, label, frame_indices, cluster_labels)
+            all_borders: Dictionary containing borders for each view and label
+        """
+        for view, label, frame_indices, cluster_labels in all_results:
+            if len(cluster_labels) == 0:
+                continue  # Skip if no clusters
+            plt.figure(figsize=(12, 6))
+            plt.scatter(frame_indices, cluster_labels, c=cluster_labels, cmap='viridis', s=10)
+            plt.title(f'GMM Clusters Over Frames - View: {view}, Label: {label}')
+            plt.xlabel('Frame Index')
+            plt.ylabel('Cluster Label')
+            plt.colorbar(label='Cluster')
+
+            # Plot vertical lines for borders
+            borders = all_borders.get(view, {}).get(label, [])
+            for border in borders:
+                plt.axvline(frame_indices[border], color='red', linestyle='--')
+
+            plt.show()
+
     ####################################################################################################################
     # Triangulate the 3D coordinates of the common body parts in the same order for all 3 camera views
     ####################################################################################################################
-    def get_realworld_coords(self):
+    def get_realworld_coords(self, segment_indices):
         # Initial setup
-        labels, side_coords, front_coords, overhead_coords = self.prepare_data()
+        DataframeCoors_segment = {}
+        for view in vidstuff['cams']:
+            DataframeCoors_segment[view] = self.DataframeCoors[view].iloc[segment_indices]
+
+        labels, side_coords, front_coords, overhead_coords = self.prepare_data(DataframeCoors_segment)
         self.side_coords = side_coords
         self.front_coords = front_coords
         self.overhead_coords = overhead_coords
 
         K, R_gt, t_gt, P_gt, Nc = self.get_camera_params(self.extrinsics, self.intrinsics)
+        length = side_coords.shape[0]
         self.real_world_coords_allparts, self.repr_error_allparts, self.repr_allparts = self.setup_dataframes(labels,
-                                                                                                              self.side_coords.shape[
-                                                                                                                  0])
+                                                                                                              length)
+
+        # Set the index to be the frame indices from the original data
+        frame_indices = DataframeCoors_segment['side'].index
+        self.real_world_coords_allparts.index = frame_indices
+        self.repr_error_allparts.index = frame_indices
+        self.repr_allparts.index = frame_indices
 
         # Set up shared memory for large arrays
         side_coords_shm = shared_memory.SharedMemory(create=True, size=side_coords.nbytes)
@@ -677,7 +1085,7 @@ class GetSingleExpData:
         args_list = [((bidx, body_part), shared_data) for bidx, body_part in enumerate(labels['all'])]
 
         # Start multiprocessing pool
-        print('Starting triangulation...')
+        print('---------------------------------------------------------------\nStarting triangulation...')
         start_time_total = time.time()
 
         num_processes = min(6, cpu_count())
@@ -690,7 +1098,7 @@ class GetSingleExpData:
             self.store_results(body_part, result_data)
 
         total_time = time.time() - start_time_total
-        print(f"Total triangulation time: {total_time:.2f} seconds")
+        print(f"Total triangulation time: {total_time:.2f} seconds\n---------------------------------------------------------------")
 
         # Clean up shared memory
         side_coords_shm.close()
@@ -708,16 +1116,15 @@ class GetSingleExpData:
         }
         return results
 
-
-    def prepare_data(self):
-        labels = self.find_common_bodyparts()
-        side_coords, front_coords, overhead_coords = self.get_common_camera_arrays(labels)
+    def prepare_data(self, DataframeCoors_segment):
+        labels = self.find_common_bodyparts(DataframeCoors_segment)
+        side_coords, front_coords, overhead_coords = self.get_common_camera_arrays(labels, DataframeCoors_segment)
         return labels, side_coords, front_coords, overhead_coords
 
-    def find_common_bodyparts(self):
+    def find_common_bodyparts(self, DataframeCoors_segment):
         bodyparts = {'side': [], 'front': [], 'overhead': []}
         for view in vidstuff['cams']:
-            bodyparts[view] = self.get_unique_bodyparts(self.DataframeCoors[view])
+            bodyparts[view] = self.get_unique_bodyparts(DataframeCoors_segment[view])
 
         common_bodyparts = self.get_intersected_bodyparts(
             bodyparts['side'], bodyparts['front'], bodyparts['overhead'])
@@ -757,17 +1164,12 @@ class GetSingleExpData:
             'front': front, 'overhead': overhead
         }
 
-    def get_common_camera_arrays(self, labels):
-        """
-        Get the 3D coordinates of the common body parts in the same order for all 3 camera views
-        :param labels: dictionary of lists of common body parts for each camera view
-        :return: 3 numpy arrays with shape (num_rows, num_labels, 3) for side, front and overhead camera views
-        """
+    def get_common_camera_arrays(self, labels, DataframeCoors_segment):
         data = {'side': [], 'front': [], 'overhead': []}
         for view in vidstuff['cams']:
-            data[view] = self.DataframeCoors[view].to_numpy()
+            data[view] = DataframeCoors_segment[view].to_numpy()
 
-        num_rows = self.DataframeCoors['side'].shape[0]
+        num_rows = DataframeCoors_segment['side'].shape[0]
 
         # Mapping of current labels to their column indices in the common label list
         label_to_index = {'side': {}, 'front': {}, 'overhead': {}}
@@ -777,7 +1179,7 @@ class GetSingleExpData:
             for idx, label in enumerate(labels[view]):
                 pos = labels['all'].index(label)
                 label_to_index[view][label] = pos
-            # create empty array with shape (3, num_labels, num_rows) filled with NaNs
+            # create empty array with shape (num_rows, num_labels, 3) filled with NaNs
             coords[view] = np.full((num_rows, len(labels['all']), 3), np.nan, dtype=data[view].dtype)
 
         # Fill in the data for existing labels in their new positions for each camera view
@@ -785,7 +1187,7 @@ class GetSingleExpData:
             for view in vidstuff['cams']:
                 if label in labels[view]:
                     pos = label_to_index[view][label]
-                    original_pos_mask = self.DataframeCoors[view].columns.get_loc(label)
+                    original_pos_mask = DataframeCoors_segment[view].columns.get_loc(label)
                     original_pos = np.where(original_pos_mask)[0]
                     coords[view][:, pos, :] = data[view][:, original_pos]
 
@@ -806,16 +1208,17 @@ class GetSingleExpData:
 
         return K, R_gt, t_gt, P_gt, Nc
 
-
     def setup_dataframes(self, labels, length):
+        # Initialize the columns for the DataFrames based on body parts and their coordinates
         multi_column = pd.MultiIndex.from_product([labels['all'], ['x', 'y', 'z']])
-        real_world_coords_allparts = pd.DataFrame(columns=multi_column)
         multi_column_err = pd.MultiIndex.from_product([labels['all'], ['side', 'front', 'overhead']])
         multi_column_repr = pd.MultiIndex.from_product([labels['all'], ['side', 'front', 'overhead'], ['x', 'y']])
-        repr_error_allparts = pd.DataFrame(index=range(0, length), columns=multi_column_err)
-        repr_allparts = pd.DataFrame(index=range(0, length), columns=multi_column_repr)
-        # repr_error_allparts = pd.DataFrame(index=range(165690, 165970), columns=multi_column_err)  # todo remove hardcoding #7170, 7900
-        # repr_allparts = pd.DataFrame(index=range(165690, 165970), columns=multi_column_repr)  # todo remove hardcoding
+
+        # Initialize DataFrames with the correct number of rows (length) and multi-level columns
+        real_world_coords_allparts = pd.DataFrame(index=range(length), columns=multi_column)
+        repr_error_allparts = pd.DataFrame(index=range(length), columns=multi_column_err)
+        repr_allparts = pd.DataFrame(index=range(length), columns=multi_column_repr)
+
         return real_world_coords_allparts, repr_error_allparts, repr_allparts
 
     def find_empty_cameras(self, coords_2d, likelihoods, P_gt, Nc):
@@ -1135,7 +1538,8 @@ class GetALLRuns:
             dir = os.path.dirname(files['Side'][j])
 
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
-                print(f"Mapping data for {mouseID}...")
+                print(f"###############################################################"
+                      f"\nMapping data for {mouseID}...\n###############################################################")
                 getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
                 getdata.map()
             else:
@@ -1199,7 +1603,8 @@ class GetDirsFromConditions:
 def main():
     # Get all data
     #GetALLRuns(directory=directory).GetFiles()
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', overwrite=False).get_dirs()
+    ### maybe instantiate first to protect entry point of my script
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2', overwrite=False).get_dirs()
 
 
 if __name__ == "__main__":

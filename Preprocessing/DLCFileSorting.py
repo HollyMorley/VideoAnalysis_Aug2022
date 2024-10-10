@@ -5,7 +5,7 @@ import shutil
 from Helpers.Config_23 import *
 
 dlc_dir = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2"  # Adjust if needed
-dlc_dest = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round3_Oct24"
+dlc_dest = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24"
 
 MouseIDs = micestuff['mice_IDs']
 

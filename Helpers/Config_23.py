@@ -157,7 +157,7 @@ settings = {
 #         'plotting_destfolder': r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Nov23'
 # }
 paths = {
-        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round3_Oct24',
+        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24',
         'plotting_destfolder': r'H:\Dual-belt_APAs\Plots\Mar24',
         'video_folder': r"X:\hmorley\Dual-belt_APAs\videos\Round_3",
         'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles" #todo maybe change this to Margrie ceph dir

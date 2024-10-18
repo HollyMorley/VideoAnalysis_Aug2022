@@ -217,7 +217,6 @@ class GetRuns:
 
         return trialstart_idxs, runback_idxs, runstart_idxs, transition_idxs, runend_idxs, trialend_idxs
 
-
     def filterData(self):#, DataframeCoor_side, DataframeCoor_front, DataframeCoor_overhead, pcutoff):
         runs = self.find_runs()
         TrialStart, RunBack, RunStart, Transition, RunEnd, TrialEnd, Run_idx, Run_ID = [], [], [], [], [], [], [], []

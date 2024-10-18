@@ -25,9 +25,12 @@ def copy_files_recursive(src_dir, dest_dir, current_dict, current_path, MouseIDs
             for mouse_group in ['A', 'B']:
                 if mouse_group in MouseIDs:
                     for date in current_dict[mouse_group]:
-                        print(f'Processing: {current_path}, {mouse_group}, {date}')
-                        copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, date, MouseIDs,
-                                                   overwrite)
+                        try:
+                            print(f'Processing: {current_path}, {mouse_group}, {date}')
+                            copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, date, MouseIDs,
+                                                       overwrite)
+                        except:
+                            print(f"No file found for {current_path}, {mouse_group}, {date}")
         else:
             # Continue recursion if we haven't reached 'A'/'B' level yet
             for key, value in current_dict.items():

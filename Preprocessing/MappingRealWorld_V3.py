@@ -391,10 +391,10 @@ def fit_gmm_for_label_view(args):
     # Detect the elbow point using BIC
     knee_locator = KneeLocator(n_components_range, bic, curve='convex', direction='decreasing')
     best_n_components = knee_locator.elbow
-    print(f"Best number of components for {label} in {view}: {best_n_components}")
+    #print(f"Best number of components for {label} in {view}: {best_n_components}")
 
     if best_n_components is None:
-        print(f"No elbow detected for {label} in {view}. Skipping...")
+        #print(f"No elbow detected for {label} in {view}. Skipping...")
         return view, label, frame_indices, [], []
     else:
         # Fit GMM with the best number of components
@@ -595,7 +595,7 @@ class GetSingleExpData:
 
         # Detect camera shifts
         calibration_labels = ['StartPlatR', 'TransitionL', 'StartPlatL', 'TransitionR']  # Use your calibration labels
-        segments = self.detect_camera_movement(calibration_labels, threshold=10.0, window_size=10)
+        segments = self.detect_camera_movement(calibration_labels)
 
         if len(segments) > 1:
             print(f"Camera movement detected. Processing data in {len(segments)} segments.")
@@ -712,10 +712,16 @@ class GetSingleExpData:
                 df_view = self.DataframeCoors[view]
             masks[view] = np.all(df_view.loc(axis=1)[
                                      ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
-                                      'TransitionL'], 'likelihood'] > 0.99, axis=1)
+                                      'TransitionL'], 'likelihood'] > 0.999, axis=1)
             belt_coords[view] = df_view.loc(axis=1)[
                 ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][masks[view]]
-            means[view] = belt_coords[view].mean(axis=0)
+
+            means[view] = belt_coords[view].median(axis=0)
+            std = belt_coords[view].std(axis=0)
+            if view == 'side':
+                for label in std.index.get_level_values('bodyparts').unique():
+                    if np.any(std.loc[label] > 2):
+                        print(f"!!!!!Warning: high std for {label} in {view} view: {std.loc[label]}!!!!!")
 
         # Concatenate the mean values
         belt_coords_df = pd.concat([means['side'], means['front'], means['overhead']], axis=1)
@@ -765,151 +771,7 @@ class GetSingleExpData:
 
         return door_coords
 
-    # def detect_camera_movement(self, threshold=5.0, downsample_factor=20, frame_interval=500):
-    #     """
-    #     Detects camera movement by analyzing global frame differences.
-    #
-    #     Args:
-    #         threshold: Threshold for significant change to consider as movement.
-    #         downsample_factor: Factor to downsample frames to reduce computation.
-    #         frame_interval: Interval between frames to process.
-    #
-    #     Returns:
-    #         segments: List of tuples representing frame ranges where the camera remains stationary.
-    #     """
-    #     video_paths = {
-    #         # 'side': self.get_video_path('side'),
-    #         # 'front': self.get_video_path('front'),
-    #         'overhead': self.get_video_path('overhead')
-    #     }
-    #
-    #     segments = {}
-    #     for view in ['side', 'front', 'overhead']:
-    #         view = 'overhead' #todo remove!!!!
-    #         cap = cv2.VideoCapture(video_paths[view])
-    #         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    #         frame_indices = range(0, total_frames, frame_interval)
-    #         diff_metrics = []
-    #
-    #         # Initialize previous frame
-    #         prev_gray = None
-    #
-    #         for idx in frame_indices:
-    #             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-    #             ret, frame = cap.read()
-    #             if not ret:
-    #                 break
-    #
-    #             # Downsample and convert to grayscale
-    #             frame_small = cv2.resize(frame, (0, 0), fx=1 / downsample_factor, fy=1 / downsample_factor)
-    #
-    #             if prev_gray is not None:
-    #                 # Compute absolute difference
-    #                 frame_diff = cv2.absdiff(prev_gray, frame_small)
-    #                 # Sum the differences to get a metric
-    #                 diff_metric = np.sum(frame_diff) / 255
-    #                 diff_metrics.append(diff_metric)
-    #             else:
-    #                 # Initialize diff_metrics with a zero for the first frame
-    #                 diff_metrics.append(0)
-    #
-    #             # Update previous frame
-    #             prev_gray = frame_small
-    #
-    #         cap.release()
-    #
-    #         # Convert diff_metrics to a NumPy array
-    #         diff_metrics = np.array(diff_metrics).reshape(-1, 1)
-    #
-    #         # Apply change point detection
-    #         algo = rpt.Pelt(model="l2").fit(diff_metrics)
-    #         change_points = algo.predict(pen=10,max_cp=5)
-    #
-    #         # Define segments based on change points
-    #         segments_view = []
-    #         last_cp = 0
-    #         for cp in change_points:
-    #             start_frame = frame_indices[last_cp]
-    #             end_frame = frame_indices[cp - 1] if cp - 1 < len(frame_indices) else frame_indices[-1]
-    #             segments_view.append((start_frame, end_frame))
-    #             last_cp = cp
-    #         segments[view] = segments_view
-    #
-    #     # Combine segments from all views (assuming synchronization)
-    #     combined_segments = self.combine_segments(segments)
-    #     return combined_segments
-
-    # def get_video_path(self, view):
-    #     # # Implement this method to return the correct video path for each view
-    #     # # Example:
-    #     # return self.video_files[view]
-    #     if view == 'overhead':
-    #         return r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230308\HM_20230308_APACharRepeat_FAA-1035245_R_overhead_1.avi"
-    #
-    #
-    # def combine_segments(self, segments):
-    #     """
-    #     Combines segments from different views by taking the intersection.
-    #
-    #     Args:
-    #         segments: Dictionary containing segments for each view.
-    #
-    #     Returns:
-    #         combined_segments: List of tuples representing unified segments.
-    #     """
-    #     # Get segments for each view
-    #     side_segments = segments.get('side', [])
-    #     front_segments = segments.get('front', [])
-    #     overhead_segments = segments.get('overhead', [])
-    #
-    #     # Flatten the segments and sort them
-    #     all_starts = sorted(set([s[0] for s in side_segments + front_segments + overhead_segments]))
-    #     all_ends = sorted(set([s[1] for s in side_segments + front_segments + overhead_segments]))
-    #
-    #     # Initialize combined segments
-    #     combined_segments = []
-    #     for start, end in zip(all_starts, all_ends):
-    #         combined_segments.append((start, end))
-    #
-    #     return combined_segments
-
-    # def fit_gmm_for_label_view(self, view, label, coords_filtered, leniency=2, n_components_range=range(1, 10)):
-    #     """
-    #     Fit GMM for a specific label and view, return the borders.
-    #     """
-    #     print(f"Analyzing {label} in {view} view...")
-    #
-    #     # Prepare the data
-    #     X = np.column_stack((coords_filtered[(label, 'x')].values, coords_filtered[(label, 'y')].values))
-    #
-    #     # Fit GMM with different numbers of components
-    #     bic = []
-    #     for n in n_components_range:
-    #         gmm = GaussianMixture(n_components=n, covariance_type='full', random_state=42)
-    #         gmm.fit(X)
-    #         bic.append(gmm.bic(X))
-    #
-    #     # Detect the elbow point using BIC
-    #     knee_locator = KneeLocator(n_components_range, bic, curve='convex', direction='decreasing')
-    #     best_n_components = knee_locator.elbow
-    #
-    #     if best_n_components is None:
-    #         print(f"No elbow detected for {label} in {view}. Skipping...")
-    #         return view, label, []
-    #     else:
-    #         # Fit GMM with the best number of components
-    #         gmm_best = GaussianMixture(n_components=best_n_components, covariance_type='full', random_state=42)
-    #         gmm_best.fit(X)
-    #
-    #         # Get cluster assignments
-    #         cluster_labels = gmm_best.predict(X)
-    #
-    #         # Find borders where components change
-    #         border_frames = self.find_component_borders(cluster_labels, leniency)
-    #
-    #         return view, label, border_frames
-
-    def detect_camera_movement(self, calibration_labels, threshold=10.0, window_size=10):
+    def detect_camera_movement(self, calibration_labels):
         """
         Detects camera movement by analyzing shifts in 2D calibration label positions across all cameras.
         """

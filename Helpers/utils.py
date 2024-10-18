@@ -133,22 +133,26 @@ class Utils:
         print(vidfiles)
         return vidfiles
 
-    def GetlistofH5files(self, files=None, directory=None, filtered=None, suffix=None): #### update and change name to Getlistofanalysedfiles
-        if directory is not None and files is None:
-            if filtered is None and suffix is None:
-                datafiles_side = glob("%s\\*%s*.h5" % (directory, 'side')) # !!!!!!!!!!!!GOT RID OF scorer_side!!!!!!!!!!!!!!!!!!!!!!!!!!
-                datafiles_front = glob("%s\\*%s*.h5" % (directory, 'front'))
-                datafiles_overhead = glob("%s\\*%s*.h5" % (directory, 'overhead'))
-            elif filtered is True and suffix is None:
-                datafiles_side = glob("%s\\*%s*%s_Runs.h5" % (directory, 'side', vidstuff['scorers']['side']))
-                datafiles_front = glob("%s\\new\\*%s*%s_Runs.h5" % (directory, 'front', vidstuff['scorers']['front']))
-                datafiles_overhead = glob("%s\\*%s*%s_Runs.h5" % (directory, 'overhead', vidstuff['scorers']['overhead']))
+    def GetListofMappedFiles(self, directory):
+        mappedfiles = glob("%s\\*_mapped3D.h5" % directory)
+        mappedfiles.sort()
+        if not mappedfiles:
+            print("No mapped files found in this directory")
+        else:
+            print("Files to be analysed are:\n"
+                  "%d files\n"
+                  "%s" % (len(mappedfiles), mappedfiles))
+            return mappedfiles
 
-            ## this is horrible code this way as just overwriting the above (if suffix not None) but cant be bothered to go back through all uses of this function to change atm
-            if suffix is not None:
-                datafiles_side = glob("%s\\*%s*_%s.h5" % (directory, 'side',suffix))
-                datafiles_front = glob("%s\\new\\*%s*_%s.h5" % (directory, 'front',suffix))
-                datafiles_overhead = glob("%s\\*%s*_%s.h5" % (directory, 'overhead',suffix))
+    def GetlistofH5files(self, files=None, directory=None):
+        datafiles_side = None
+        datafiles_front = None
+        datafiles_overhead = None
+
+        if directory is not None and files is None:
+            datafiles_side = glob("%s\\*%s*.h5" % (directory, 'side')) # !!!!!!!!!!!!GOT RID OF scorer_side!!!!!!!!!!!!!!!!!!!!!!!!!!
+            datafiles_front = glob("%s\\*%s*.h5" % (directory, 'front'))
+            datafiles_overhead = glob("%s\\*%s*.h5" % (directory, 'overhead'))
 
             datafiles_side.sort()
             datafiles_front.sort()

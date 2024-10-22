@@ -392,9 +392,48 @@ class GetRuns:
     #     return runstarts
 
     def find_run_start(self, r, run_bounds):
+        # Step 1: Determine the initial run bound start based on nose detection
+        run_bound_start = self.determine_initial_run_bound_start(r, run_bounds)
+
+        # Step 2 & 3: Extract and combine data for all four paws
+        paw_data_combined = self.extract_and_combine_paw_data(run_bound_start, run_bounds[1])
+
+        # Step 4: Filter data where both forepaw 'x' positions are greater than 0
+        paw_data_x0 = self.filter_paw_data_beyond_start_platform(paw_data_combined)
+
+        # Step 5: Detect stance and swing events for each paw
+        stance_events = self.detect_stance_events(paw_data_x0)
+
+        # Step 6: Check for alternating patterns for each paw
+        is_valid_paws = self.check_real_stance(stance_events)#, swing_events)
+        #is_valid_paws = self.check_alternating_patterns(stance_events)#, swing_events)
+
+        # Step 6.1: Filter stance events to include only valid paws
+        valid_stance_events = {
+            key: stances for key, stances in stance_events.items() if is_valid_paws.get(key, False)
+        }
+
+        if not valid_stance_events:
+            raise ValueError("No valid paws found after alternating pattern check.")
+
+        # Step 7: Determine run start frame based on the earliest stance event among all valid paws
+        runstart_frame, runstart_key, runstart_paw = self.determine_run_start_frame(valid_stance_events)
+
+        # Step 8: Verify that all valid paws touch down shortly after
+        self.verify_paws_touch_down(valid_stance_events, runstart_frame, runstart_key)
+
+        # Step 9: Additional checks (nose ahead of tail, etc.)
+        self.perform_additional_checks(runstart_frame)
+
+        # Step 10: Set the run start frame
+        self.run_start_frame = runstart_frame
+        print(f"Run starts at frame {runstart_frame}, paw: {runstart_paw}")
+
+        return runstart_frame
+
+    def determine_initial_run_bound_start(self, r, run_bounds):
         utils_obj = utils.Utils()
 
-        # 1. Determine the initial run bound start based on nose detection
         nose_present_mask = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')].notna()
         nose_present = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')][nose_present_mask]
         nose_present_chunks = utils_obj.find_blocks(nose_present.index, gap_threshold=15, block_min_size=10)
@@ -405,7 +444,9 @@ class GetRuns:
             run_bound_start = self.trial_starts[r]
             print(f"No nose detected before run start in trial {r}")
 
-        # 2. Extract and combine data for all four paws
+        return run_bound_start
+
+    def extract_and_combine_paw_data(self, run_bound_start, run_bound_end):
         paw_sides = ['Right', 'Left']
         paw_types = ['Forepaw', 'Hindpaw']
         combined_coords = {}
@@ -413,24 +454,27 @@ class GetRuns:
         for side in paw_sides:
             for paw in paw_types:
                 # Define paw markers
-                if paw_types == 'Forepaw':
+                if paw == 'Forepaw':
                     paw_markers = [f'{paw}Toe{side[0]}', f'{paw}Knuckle{side[0]}', f'{paw}Ankle{side[0]}']
                 else:
                     paw_markers = [f'{paw}Toe{side[0]}', f'{paw}Knuckle{side[0]}']
                 # Extract data for the paw
-                paw_data = self.data.loc[run_bound_start:run_bounds[1], paw_markers]
+                paw_data = self.data.loc[run_bound_start:run_bound_end, paw_markers]
                 # Combine coordinates for 'x' and 'z'
                 for coord in ['x', 'z']:
                     combined_coord = self.combine_paw_data(paw_data.loc(axis=1)[:, coord], sigma=1)
                     # Store in a dictionary for easy access
                     combined_coords[(paw, side, coord)] = combined_coord
 
-        # 3. Create a MultiIndex DataFrame for all paws
-        paw_data_combined = pd.DataFrame(index=self.data.loc[run_bound_start:run_bounds[1]].index)
+        # Create a MultiIndex DataFrame for all paws
+        paw_data_combined = pd.DataFrame(index=self.data.loc[run_bound_start:run_bound_end].index)
         for (paw, side, coord), data in combined_coords.items():
             paw_data_combined[(paw, side, coord)] = data
 
-        # 4. Filter data where both forepaw 'x' positions are greater than 0 (beyond the start platform)
+        return paw_data_combined
+
+    def filter_paw_data_beyond_start_platform(self, paw_data_combined):
+        paw_sides = ['Right', 'Left']
         x0_idx = paw_data_combined.index[
             np.all(
                 [paw_data_combined[('Forepaw', side, 'x')] > 0 for side in paw_sides],
@@ -439,77 +483,120 @@ class GetRuns:
         ]
         paw_data_x0 = paw_data_combined.loc[x0_idx]
 
-        # 5. Detect stance and swing events for each paw
+        return paw_data_x0
+
+    def detect_stance(self, paw_data_x0):
+        utils_obj = utils.Utils()
+        paw_sides = ['Right', 'Left']
+        paw_types = ['Forepaw', 'Hindpaw']
         stance_events = {}
-        swing_events = {}
+        #swing_events = {}
+
         for paw in paw_types:
             for side in paw_sides:
                 key = (paw, side)
                 combined_z = paw_data_x0[(paw, side, 'z')]
                 combined_z_diff = combined_z.diff()
 
+                combined_x = paw_data_x0[(paw, side, 'x')]
+                combined_x_diff = combined_x.diff()
+
                 # Detect stance: when z is low and stable
                 stance_idx = paw_data_x0.index[
                     (combined_z < 1.5) & (combined_z_diff.abs() < 0.2)
                     ]
-                # Detect swing end: when z decreases significantly
-                swingend_idx = paw_data_x0.index[
-                    (combined_z > 1) & (combined_z_diff < -0.5)
-                    ]
+
+                # # Detect swing end: when z decreases significantly
+                # swingend_idx = paw_data_x0.index[
+                #     (combined_z > 1) & (combined_z_diff < -0.5)
+                #     ]
 
                 # Find chunks of stance and swing events
                 if paw == 'Forepaw':
                     stance_chunks = utils_obj.find_blocks(stance_idx, gap_threshold=2, block_min_size=4)
-                    swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=3, block_min_size=1)
+                    #swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=3, block_min_size=1)
                 else:
                     stance_chunks = utils_obj.find_blocks(stance_idx, gap_threshold=5, block_min_size=2)
-                    swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=4, block_min_size=4)
+                   # swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=4, block_min_size=4)
 
                 # Calculate middle indices
                 stance_middle = np.mean(stance_chunks, axis=1).astype(int)
-                swing_middle = np.mean(swing_chunks, axis=1).astype(int)
+                #swing_middle = np.mean(swing_chunks, axis=1).astype(int)
 
                 # Store events
                 stance_events[key] = stance_middle
-                swing_events[key] = swing_middle
+                #swing_events[key] = swing_middle
 
-        # 6. Check for alternating patterns for each  # todo also check for alternating pattern between paws - l/r
+        return stance_events #, swing_events
+
+    def check_real_stance(self, stance_events):
         is_valid_paws = {}
+        paw_sides = ['Right', 'Left']
+        paw_types = ['Forepaw', 'Hindpaw']
         for paw in paw_types:
             for side in paw_sides:
                 key = (paw, side)
+                stances = stance_events.get(key, [])
+
+                if len(stances) == 0:
+                    is_valid_paws[key] = False
+                    continue
+
+                # check
+
+                is_valid_paws[key] = is_valid
+
+    def check_alternating_patterns(self, stance_events): #, swing_events):
+        is_valid_paws = {}
+        paw_sides = ['Right', 'Left']
+        paw_types = ['Forepaw', 'Hindpaw']
+
+        for paw in paw_types:
+            for side in paw_sides:
+                key = (paw, side)
+                stances = stance_events.get(key, [])
+                #swings = swing_events.get(key, [])
+
+                if len(stances) == 0: # and len(swings) == 0:
+                    is_valid_paws[key] = False
+                    continue
+
                 events = np.concatenate((
-                    np.column_stack((stance_events[key], np.full(len(stance_events[key]), 'stance'))),
-                    np.column_stack((swing_events[key], np.full(len(swing_events[key]), 'swing')))
+                    np.column_stack((stances, np.full(len(stances), 'stance'))),
+                    #np.column_stack((swings, np.full(len(swings), 'swing')))
                 ))
+
                 # Sort events chronologically
                 events_sorted = events[events[:, 0].astype(int).argsort()]
                 # Check for alternating patterns
                 is_valid = self.check_alternating(events_sorted)
                 is_valid_paws[key] = is_valid
 
-        # 7. Determine run start frame based on the earliest stance event among all paws
-        first_stance_frames = {}
-        for key, stances in stance_events.items():
-            if len(stances) > 0:
-                first_stance_frames[key] = stances[0]
+        return is_valid_paws
+
+    def determine_run_start_frame(self, stance_events):
+        # Collect the first stance frames from valid paws
+        first_stance_frames = {key: stances[0] for key, stances in stance_events.items() if len(stances) > 0}
+
         if not first_stance_frames:
-            raise ValueError("No stance events found for any paw")
+            raise ValueError("No stance events found for any valid paw")
 
         # Find the earliest stance event
         runstart_key = min(first_stance_frames, key=first_stance_frames.get)
         runstart_frame = first_stance_frames[runstart_key]
         runstart_paw = runstart_key
 
-        # 8. Verify that all paws touch down shortly after
-        max_allowed_gap = 10  # Adjust as needed
+        return runstart_frame, runstart_key, runstart_paw
+
+    def verify_paws_touch_down(self, stance_events, runstart_frame, runstart_key, max_allowed_gap=10):
+        first_stance_frames = {key: stances[0] for key, stances in stance_events.items() if len(stances) > 0}
         for key, first_frame in first_stance_frames.items():
             if key != runstart_key:
                 gap = first_frame - runstart_frame
                 if gap < 0 or gap > max_allowed_gap:
                     raise ValueError(f"Paw {key} did not touch down shortly after the run start frame.")
 
-        # 9. Additional checks (nose ahead of tail, etc.)
+    def perform_additional_checks(self, runstart_frame):
         nose_x = self.data.loc[runstart_frame, ('Nose', 'x')]
         tail_base_x = self.data.loc[runstart_frame, ('TailBase', 'x')]
 
@@ -521,29 +608,22 @@ class GetRuns:
 
         if not (0 < tail_base_x < 10):
             raise ValueError(
-                f"Tail base x position at run start frame {runstart_frame} is out of bounds: {tail_base_x}")
+                f"Tail base x position at run start frame {runstart_frame} is out of bounds: {tail_base_x}"
+            )
+    # def check_alternating(self, events):
+    #     states = events[:, 1]
+    #     # Check starting with 'swing'
+    #     is_alternating_swing = all(
+    #         states[i] != states[i + 1] for i in range(len(states) - 1)
+    #     ) and states[0] == 'swing'
+    #
+    #     # Check starting with 'stance'
+    #     is_alternating_stance = all(
+    #         states[i] != states[i + 1] for i in range(len(states) - 1)
+    #     ) and states[0] == 'stance'
+    #
+    #     return is_alternating_swing or is_alternating_stance
 
-        # 10. Set the run start frame
-        self.run_start_frame = runstart_frame
-        print(f"Run starts at frame {runstart_frame}, paw: {runstart_paw}")
-
-        return runstart_frame  # Or any other relevant return value
-
-    def check_alternating(self, events):
-        states = events[:, 1]
-        # Check starting with 'swing'
-        is_alternating_swing = all(
-            states[i] != states[i + 1] for i in range(len(states) - 1)
-        ) and states[0] == 'swing'
-
-        # Check starting with 'stance'
-        is_alternating_stance = all(
-            states[i] != states[i + 1] for i in range(len(states) - 1)
-        ) and states[0] == 'stance'
-
-        return is_alternating_swing or is_alternating_stance
-
-    # Define a function to combine the z-coordinates for each paw with customizable smoothing and interpolation
     def combine_paw_data(self, paw_df, sigma=2, interpolation_method='spline', limit=10): #limit=100, interpolated well but big effect pre data
         # Identify rows where all values are NaN
         all_nan_rows = np.isnan(paw_df.values).all(axis=1)

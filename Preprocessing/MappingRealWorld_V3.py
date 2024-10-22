@@ -777,30 +777,43 @@ class GetSingleExpData:
         """
         data = self.DataframeCoors  # Assuming DataframeCoors contains your data
 
-        # Create a mask where all views (side, front, overhead) have valid calibration points (likelihood >= 0.999)
-        valid_frames_mask = np.ones(len(data['side']), dtype=bool)  # Start with all frames as valid
+        coords_filtered_all_views = {}
 
         for view in ['side', 'front', 'overhead']:
             coords = data[view].loc[:, (calibration_labels, ['x', 'y', 'likelihood'])]
 
-            # Apply the likelihood mask: only keep frames where all calibration points have likelihood >= 0.999
+            # Step 1: Create a mask with a pcutoff of 0.999
+            valid_frames_mask = np.ones(len(coords), dtype=bool)
             for calib_label in calibration_labels:
-                view_mask = coords[(calib_label, 'likelihood')] >= 0.999
-                valid_frames_mask &= view_mask  # Update the global mask
+                valid_frames_mask &= coords[(calib_label, 'likelihood')] >= 0.999
 
-        # Apply the global mask to all views and calibration labels
-        coords_filtered_all_views = {}
-        for view in ['side', 'front', 'overhead']:
-            coords_filtered_all_views[view] = data[view].loc[valid_frames_mask, (calibration_labels, ['x', 'y'])].copy()
+            # Check if there are more than 1001 valid frames
+            if np.sum(valid_frames_mask) > 1001:
+                # Use the stricter mask (0.999 pcutoff)
+                final_valid_frames_mask = valid_frames_mask
+            else:
+                # Step 2: Use a less strict mask with a pcutoff of 0.9
+                valid_frames_mask_09 = np.ones(len(coords), dtype=bool)
+                for calib_label in calibration_labels:
+                    valid_frames_mask_09 &= coords[(calib_label, 'likelihood')] >= 0.9
+                final_valid_frames_mask = valid_frames_mask_09
 
-            # Optionally, smooth the coordinates to reduce noise
+            # Apply the final valid frames mask
+            coords_filtered_all_views[view] = data[view].loc[
+                final_valid_frames_mask, (calibration_labels, ['x', 'y'])].copy()
+
+            # Smoothing the coordinates
             for label in calibration_labels:
-                coords_filtered_all_views[view][(label, 'x')] = savgol_filter(
-                    coords_filtered_all_views[view][(label, 'x')].values,
-                    window_length=10001, polyorder=3)
-                coords_filtered_all_views[view][(label, 'y')] = savgol_filter(
-                    coords_filtered_all_views[view][(label, 'y')].values,
-                    window_length=10001, polyorder=3)
+                x_data = coords_filtered_all_views[view][(label, 'x')].values
+                y_data = coords_filtered_all_views[view][(label, 'y')].values
+
+                # Ensure window_length is valid and smaller than the data size
+                window_len = min(1001, len(x_data) if len(x_data) % 2 != 0 else len(x_data) - 1)
+
+                coords_filtered_all_views[view][(label, 'x')] = savgol_filter(x_data, window_length=window_len,
+                                                                              polyorder=3)
+                coords_filtered_all_views[view][(label, 'y')] = savgol_filter(y_data, window_length=window_len,
+                                                                              polyorder=3)
 
         # Prepare arguments for multiprocessing
         tasks = []
@@ -1400,10 +1413,13 @@ class GetALLRuns:
             dir = os.path.dirname(files['Side'][j])
 
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
-                print(f"###############################################################"
-                      f"\nMapping data for {mouseID}...\n###############################################################")
-                getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
-                getdata.map()
+                try:
+                    print(f"###############################################################"
+                          f"\nMapping data for {mouseID}...\n###############################################################")
+                    getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
+                    getdata.map()
+                except Exception as e:
+                    print(f"Error processing {mouseID}: {e}")
             else:
                 print(f"Data for {mouseID} already exists. Skipping...")
 
@@ -1466,8 +1482,14 @@ def main():
     # Get all data
     #GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2', overwrite=False).get_dirs()
-
+    # print("Analysing LowMid...")
+    # GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
+    # print("Analysing HighLow...")
+    # GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
+    # print("Analysing LowHigh...")
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
+    #GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Washout', day='Day1', overwrite=False).get_dirs()
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', day='Day2', overwrite=False).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

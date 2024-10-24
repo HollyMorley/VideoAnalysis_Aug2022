@@ -10,10 +10,8 @@ from matplotlib import cm
 from matplotlib.backend_tools import ToolZoom, ToolPan
 
 # Load video and deeplabcut coordinates
-video_path = r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230308\HM_20230308_APACharRepeat_FAA-1035245_R_overhead_1.avi"
-coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round3_Oct24\APAChar_LowHigh"
-              r"\Repeats\Wash\Exp\Day2"
-              r"\HM_20230308_APACharRepeat_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5")
+video_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\temp\HM_20230404_APACharExt_FAA-1035299_None_side_1.avi"
+coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230404\HM_20230404_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1000000.h5")
 print(f"Video path: {video_path}")
 
 # Check if video file exists

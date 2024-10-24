@@ -713,6 +713,22 @@ class GetSingleExpData:
             masks[view] = np.all(df_view.loc(axis=1)[
                                      ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
                                       'TransitionL'], 'likelihood'] > 0.999, axis=1)
+            if sum(masks[view]) < 1000:
+                no_transitionL_mask = np.all(df_view.loc(axis=1)[
+                                        ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR'], 'likelihood'] > 0.999, axis=1)
+                if sum(no_transitionL_mask) >= 1000:
+                    print("Low confidence calibration label for TransitionL detected in %s. Using low confidence TransitionL for now, will be optimised but check quality." %view)
+                    masks[view] = no_transitionL_mask
+                else:
+                    print("Low confidence calibration labels detected, attempting to use pcutoff = 0.9...")
+                    masks[view] = np.all(df_view.loc(axis=1)[
+                                             ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
+                                              'TransitionL'], 'likelihood'] > 0.9, axis=1)
+                    if sum(masks[view]) < 100:
+                        low_conf_mask = np.all(df_view.loc(axis=1)[
+                                             ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR',
+                                              'TransitionL'], 'likelihood'] > 0.8, axis=1)
+                        raise ValueError("Insufficient high confidence calibration labels detected!!! Only %s frames available out of %s. At pcutoff = 0.8, %s frames available." %(sum(masks[view]), len(masks[view]), sum(low_conf_mask)))
             belt_coords[view] = df_view.loc(axis=1)[
                 ['StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL'], ['x', 'y']][masks[view]]
 
@@ -1482,14 +1498,14 @@ def main():
     # Get all data
     #GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    # print("Analysing LowMid...")
-    # GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
-    # print("Analysing HighLow...")
-    # GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
-    # print("Analysing LowHigh...")
-    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
-    #GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Washout', day='Day1', overwrite=False).get_dirs()
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', day='Day2', overwrite=False).get_dirs()
+    print("Analysing LowHigh...")
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
+    print("Analysing LowMid...")
+    GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
+    print("Analysing HighLow...")
+    GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
+
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', day='Day2', overwrite=False).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

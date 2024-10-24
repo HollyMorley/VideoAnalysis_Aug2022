@@ -624,26 +624,26 @@ class GetRuns:
     #
     #     return is_alternating_swing or is_alternating_stance
 
-    def combine_paw_data(self, paw_df, sigma=2, interpolation_method='spline', limit=10): #limit=100, interpolated well but big effect pre data
-        # Identify rows where all values are NaN
-        all_nan_rows = np.isnan(paw_df.values).all(axis=1)
-        # Prepare an array to hold combined values
-        combined_z = np.full(paw_df.shape[0], np.nan)
-        # Compute nanmedian only for rows that are not all NaN
-        if not all_nan_rows.all():
-            combined_z[~all_nan_rows] = np.nanmedian(paw_df.values[~all_nan_rows], axis=1)
-        # Create a pandas Series to handle interpolation easily
-        combined_z_series = pd.Series(combined_z, index=paw_df.index)
-        # Interpolate missing values (NaNs)
-        interpolated_z = combined_z_series.interpolate(
-            method=interpolation_method,
-            order=3,
-            limit=limit,
-            limit_direction='backward'
-        ).values
-        # Apply Gaussian smoothing with the customizable sigma
-        smoothed_z = gaussian_filter1d(interpolated_z, sigma=sigma)
-        return smoothed_z
+    # def combine_paw_data(self, paw_df, sigma=2, interpolation_method='spline', limit=10): #limit=100, interpolated well but big effect pre data
+    #     # Identify rows where all values are NaN
+    #     all_nan_rows = np.isnan(paw_df.values).all(axis=1)
+    #     # Prepare an array to hold combined values
+    #     combined_z = np.full(paw_df.shape[0], np.nan)
+    #     # Compute nanmedian only for rows that are not all NaN
+    #     if not all_nan_rows.all():
+    #         combined_z[~all_nan_rows] = np.nanmedian(paw_df.values[~all_nan_rows], axis=1)
+    #     # Create a pandas Series to handle interpolation easily
+    #     combined_z_series = pd.Series(combined_z, index=paw_df.index)
+    #     # Interpolate missing values (NaNs)
+    #     interpolated_z = combined_z_series.interpolate(
+    #         method=interpolation_method,
+    #         order=3,
+    #         limit=limit,
+    #         limit_direction='backward'
+    #     ).values
+    #     # Apply Gaussian smoothing with the customizable sigma
+    #     smoothed_z = gaussian_filter1d(interpolated_z, sigma=sigma)
+    #     return smoothed_z
 
     ################################################# Helper functions #################################################
     def detect_paw_touchdown(data, paw_labels, x_min, x_max, z_tolerance):

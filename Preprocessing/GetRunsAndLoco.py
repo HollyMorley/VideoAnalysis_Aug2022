@@ -4,19 +4,26 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 import threading
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Slider, Button
+import matplotlib.patches as patches
 from scipy.signal import find_peaks
+import joblib
 import cv2
 import Helpers.utils as utils
 from Helpers.Config_23 import *
+from Preprocessing import GaitFeatureExtraction as gfe
 
 class GetRuns:
     def __init__(self, file):
         self.file = file
         self.data = self.get_data()
-
+        self.model = self.load_model()
         self.trial_starts, self.trial_ends = [], []
         self.run_starts, self.run_ends = [], []
+
+    def load_model(self):
+        model_filename = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'limb_classification_model.pkl')
+        return joblib.load(model_filename)
 
     def visualise_video_frames(self, view, start_frame, end_frame):
         day = os.path.basename(self.file).split('_')[1]
@@ -90,10 +97,15 @@ class GetRuns:
 
     def get_runs(self):
         self.find_trials()
+        self.find_steps()
         self.find_run_stages()
         # self.get_run_ends()
         # self.get_run_starts()
         return runs
+
+    #-------------------------------------------------------------------------------------------------------------------
+    #-------------------------------------------- Finding trials -------------------------------------------------------
+    #-------------------------------------------------------------------------------------------------------------------
 
     def find_trials(self):
         door_open, door_close = self.door_opn_cls()
@@ -179,6 +191,252 @@ class GetRuns:
         mouse_on_belt = facing_forward_mask & (self.data.loc[:, ('Nose', 'x')] > 200) & (self.data.loc[:, ('Nose', 'x')] < 500)
         mouse_on_belt_index = mouse_on_belt.index[mouse_on_belt]
         return mouse_on_belt_index
+
+    #-------------------------------------------------------------------------------------------------------------------
+    #-------------------------------------------- Finding steps --------------------------------------------------------
+    #-------------------------------------------------------------------------------------------------------------------
+    def find_steps(self):
+        for r in range(len(self.trial_starts)):
+            run_bounds, runbacks = self.find_real_run_vs_rbs(r)
+            if len(run_bounds) == 1:
+                run_bounds = run_bounds[0]
+                self.classify_steps_in_run(r, run_bounds)
+                print(f"Run {r} completed")
+            else:
+                raise ValueError("More than one run detected in a trial (in find_steps)")
+
+    def classify_steps_in_run(self, r, run_bounds):
+        # load the model
+        model_filename = os.path.join(paths['filtereddata_folder'] + '\LimbStuff', 'limb_classification_model.pkl')
+        model = self.model
+
+        # Extract features from the paws
+        paw_data = self.data.loc[run_bounds[0]:run_bounds[1], (['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
+                                             'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
+                                             'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
+                                             'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL'], ['x','z'])]
+        # interpolate and smooth the data
+        limbparts = paw_data.columns.get_level_values('bodyparts').unique()
+        coords = paw_data.columns.get_level_values('coords').unique()
+
+        for limbpart in limbparts:
+            for coord in coords:
+                limbpart_coords = paw_data[(limbpart, coord)].copy()
+
+                # Check if the Series is not all NaNs
+                if limbpart_coords.notnull().any():
+                    # Interpolate missing values
+                    interpolated = limbpart_coords.interpolate(
+                        method='spline',
+                        order=3,
+                        limit=20,
+                        limit_direction='both'
+                    )
+
+                    # Apply Gaussian smoothing
+                    smoothed = gaussian_filter1d(interpolated.values, sigma=2)
+
+                    # Assign back to group
+                    paw_data.loc[:, (limbpart, coord)] = smoothed
+                else:
+                    # If all values are NaN, keep them as NaN
+                    paw_data.loc[:, (limbpart, coord)] = np.nan
+
+        # Extract features from the paws
+        feature_extractor = gfe.FeatureExtractor(data=paw_data, fps=fps)
+        frames_to_process = paw_data.index
+        feature_extractor.extract_features(frames_to_process)
+        features_df = feature_extractor.features_df
+        estimator = model.estimators_[0]
+        paw_order = estimator.classes_
+        expected_features = estimator.get_booster().feature_names
+        features_df = features_df[expected_features]
+        features_df = features_df.astype(float)
+
+        stance_pred = model.predict(features_df)
+
+        # add 4 columns to self.data for the stance/swing predictions (0,1) for each paw
+        paw_labels = ['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
+        desired_paws = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
+        # turn stance_pred into a DataFrame
+        stance_pred_df = pd.DataFrame(stance_pred, columns=paw_labels)
+        stance_pred_df_ordered = stance_pred_df[desired_paws]
+        self.plot_stances(r, stance_pred_df_ordered)
+
+        for i, paw in enumerate(desired_paws):
+            self.data.loc(axis=0)[run_bounds[0]:run_bounds[1]].loc[(paw, 'SwSt')] = stance_pred_df_ordered[paw]
+
+    def plot_stances(self, r, stance_pred):
+        # Get the number of frames (176)
+        frames = np.arange(stance_pred.shape[0])  # X-axis: Frames or time steps
+
+        # Create a figure with two subplots: one for forepaws and one for hindpaws
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+        # Plot for Forepaws (ForepawR and ForepawL)
+        for i, paw in enumerate(['ForepawR', 'ForepawL']):  # Loop through Forepaws
+            ax1.plot(frames, stance_pred[paw], label=paw, marker='o')
+
+        # Add labels, title, and legend for Forepaws
+        ax1.set_ylabel('Stance Period (0 or 1)')
+        ax1.set_title('Stance Periods for Forepaws')
+        ax1.legend()
+        ax1.grid(True)
+
+        # Plot for Hindpaws (HindpawR and HindpawL)
+        for i, paw in enumerate(['HindpawR', 'HindpawL'], start=2):  # Loop through Hindpaws
+            ax2.plot(frames, stance_pred[paw], label=paw, marker='o')
+
+        # Add labels, title, and legend for Hindpaws
+        ax2.set_xlabel('Frames')
+        ax2.set_ylabel('Stance Period (0 or 1)')
+        ax2.set_title('Stance Periods for Hindpaws')
+        ax2.legend()
+        ax2.grid(True)
+
+        # Show the plot
+        plt.tight_layout()
+        # save plot to file
+        plt.savefig(os.path.join(paths['filtereddata_folder'] + '\LimbStuff\RunStances', 'stance_periods_run%s.png' % r))
+
+    def visualize_run_steps(self, run_number, view='Front'):
+        import matplotlib.pyplot as plt
+
+        day = os.path.basename(self.file).split('_')[1]
+        filename_pattern = '_'.join(os.path.basename(self.file).split('_')[:-1])
+        video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
+        if len(video_files) > 1:
+            raise ValueError("Multiple video files found for the same view. Please check the video files.")
+        elif len(video_files) == 0:
+            raise ValueError("No video file found for the specified view.")
+        else:
+            video_file = video_files[0]
+
+        # Get start and end frames for the specified run
+        start_frame = int(self.trial_starts[run_number])
+        end_frame = int(self.trial_ends[run_number])
+
+        # Open the video file and preload frames
+        cap = cv2.VideoCapture(video_file)
+        frames = []
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        for i in range(start_frame, end_frame + 1):
+            ret, frame = cap.read()
+            if not ret:
+                print(f"Failed to read frame {i}")
+                break
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        cap.release()
+
+        if not frames:
+            raise ValueError("No frames were loaded. Cannot proceed with visualization.")
+
+        # Set initial frame and index setup
+        frame_index = 0
+        actual_frame_number = start_frame + frame_index
+
+        # Initialize figure and axes
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.25)
+
+        # Display the first frame
+        frame_image = ax.imshow(frames[frame_index])
+        ax.axis('off')
+
+        # Add frame number text at the top
+        frame_text = ax.text(0.5, 1.02, f'Frame: {actual_frame_number}', transform=ax.transAxes, ha='center', fontsize=12)
+
+        # Define paws and limb boxes
+        paws = ['ForepawL', 'HindpawL', 'ForepawR', 'HindpawR']
+        limb_boxes = {}
+
+        # Set limb box positions
+        box_positions = {
+            'ForepawL': [0.1, 0.05, 0.35, 0.08],
+            'HindpawL': [0.1, 0.15, 0.35, 0.08],
+            'ForepawR': [0.55, 0.05, 0.35, 0.08],
+            'HindpawR': [0.55, 0.15, 0.35, 0.08],
+        }
+
+        for paw in paws:
+            left, bottom, width, height = box_positions[paw]
+            ax_box = fig.add_axes([left, bottom, width, height])
+            rect = patches.Rectangle((0, 0), 1, 1, facecolor='grey')
+            ax_box.add_patch(rect)
+            ax_box.axis('off')
+            ax_box.set_xlim(0, 1)
+            ax_box.set_ylim(0, 1)
+            ax_box.set_title(paw, fontsize=10)
+            limb_boxes[paw] = rect
+
+        # Create skip buttons with fixed delta values, using partial for callbacks
+        button_positions = [(0.05 + i * 0.09, 0.9, 0.08, 0.04) for i in range(8)]
+        button_labels = ['-1000', '-100', '-10', '-1', '+1', '+10', '+100', '+1000']
+        button_deltas = [-1000, -100, -10, -1, 1, 10, 100, 1000]
+
+        for pos, label, delta in zip(button_positions, button_labels, button_deltas):
+            ax_button = fig.add_axes(pos)
+            button = Button(ax_button, label)
+            button.on_clicked(partial(self._update_frame_via_button, delta=delta))
+
+        # Create slider above limb boxes
+        ax_slider = plt.axes([0.15, 0.86, 0.7, 0.03])
+        slider = Slider(ax_slider, 'Frame', 0, len(frames) - 1, valinit=frame_index, valfmt='%d')
+
+        def update_frame(delta=None, frame_number=None):
+            nonlocal frame_index, actual_frame_number
+            if delta is not None:
+                frame_index = max(0, min(frame_index + delta, len(frames) - 1))
+            elif frame_number is not None:
+                frame_index = frame_number
+            actual_frame_number = start_frame + frame_index
+
+            # Update the frame image
+            frame_image.set_data(frames[frame_index])
+
+            # Update limb boxes based on stance or swing
+            if actual_frame_number in self.data.index:
+                for paw in paws:
+                    SwSt = self.data.loc[actual_frame_number, (paw, 'SwSt')]
+                    if SwSt == 1:
+                        limb_boxes[paw].set_facecolor('green')
+                    elif SwSt == 0:
+                        limb_boxes[paw].set_facecolor('red')
+                    else:
+                        limb_boxes[paw].set_facecolor('grey')
+            else:
+                for paw in paws:
+                    limb_boxes[paw].set_facecolor('grey')
+
+            # Update frame number display
+            frame_text.set_text(f'Frame: {actual_frame_number}')
+
+            # Synchronize slider
+            slider.eventson = False
+            slider.set_val(frame_index)
+            slider.eventson = True
+
+            # Refresh canvas
+            fig.canvas.draw_idle()
+            plt.pause(0.001)
+
+        # Slider event to move frames
+        def slider_update(val):
+            frame_number = int(slider.val)
+            update_frame(frame_number=frame_number)
+        slider.on_changed(slider_update)
+
+        # Set update_frame function to be accessible within _update_frame_via_button
+        self.update_frame = update_frame
+
+        plt.show()
+
+    def _update_frame_via_button(self, delta, event=None):
+        # Call update_frame with the delta value
+        self.update_frame(delta=delta)
+
+
+
 
     def check_post_runs(self, forward_data, forward_chunks):
         post_transition_mask = forward_data.loc[:, ('Nose', 'x')] > 470
@@ -268,9 +526,15 @@ class GetRuns:
             runbacks = []
         return forward_chunks, runbacks
 
+    #-------------------------------------------------------------------------------------------------------------------
+    #------------------------------------------ Finding runstages ------------------------------------------------------
+    #-------------------------------------------------------------------------------------------------------------------
+
+
+
     def find_run_stages(self):
         for r in range(len(self.trial_starts)):
-            run_bounds, runbacks = self.find_real_run_vs_rbs(r)
+           # run_bounds, runbacks = self.find_real_run_vs_rbs(r)
             if len(run_bounds) == 1:
                 run_bounds = run_bounds[0]
                 runstart = self.find_run_start(r, run_bounds)

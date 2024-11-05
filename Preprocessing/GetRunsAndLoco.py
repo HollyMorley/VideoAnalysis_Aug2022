@@ -8,22 +8,50 @@ from matplotlib.widgets import Slider, Button
 import matplotlib.patches as patches
 from scipy.signal import find_peaks
 import joblib
+from joblib import Parallel, delayed
 import cv2
+import time
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Preprocessing import GaitFeatureExtraction as gfe
 
 class GetRuns:
-    def __init__(self, file):
+    def __init__(self, file, debug_steps=False):
         self.file = file
-        self.data = self.get_data()
+        self.debug_steps = debug_steps
         self.model = self.load_model()
         self.trial_starts, self.trial_ends = [], []
         self.run_starts, self.run_ends = [], []
 
+        if self.debug_steps:
+            try:
+                # Try to load self.data from a saved file
+                filename = self.get_saved_data_filename()
+                self.data = pd.read_hdf(filename, key='real_world_coords_steps')
+                self.data_loaded_from_file = True
+                print("Loaded self.data from saved file.")
+            except FileNotFoundError:
+                print("Saved data file not found. Recalculating...")
+                self.data = self.get_data()
+                self.data_loaded_from_file = False
+        else:
+            self.data = self.get_data()
+            self.data_loaded_from_file = False
+
     def load_model(self):
         model_filename = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'limb_classification_model.pkl')
         return joblib.load(model_filename)
+
+    def get_saved_data_filename(self):
+        # Generate a consistent filename for saving/loading self.data
+        base_dir = os.path.dirname(self.file)
+        filename = os.path.basename(self.file).replace('.h5', '_steps.h5')
+        return os.path.join(base_dir, filename)
+
+    def save_data(self):
+        filename = self.get_saved_data_filename()
+        self.data.to_hdf(filename, key='real_world_coords_steps')
+        print(f"Saved self.data to {filename}")
 
     def visualise_video_frames(self, view, start_frame, end_frame):
         day = os.path.basename(self.file).split('_')[1]
@@ -97,7 +125,14 @@ class GetRuns:
 
     def get_runs(self):
         self.find_trials()
-        self.find_steps()
+        if not self.data_loaded_from_file:
+            start = time.time()
+            self.find_steps()
+            end = time.time()
+            print(f"Time taken to find steps: {end - start}")
+            self.save_data()
+        else:
+            print("Data loaded from file, skipping step calculation.")
         self.find_run_stages()
         # self.get_run_ends()
         # self.get_run_starts()
@@ -196,25 +231,281 @@ class GetRuns:
     #-------------------------------------------- Finding steps --------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
     def find_steps(self):
-        for r in range(len(self.trial_starts)):
-            run_bounds, runbacks = self.find_real_run_vs_rbs(r)
+        start = time.time()
+        # Process each run in parallel
+        num_cores = joblib.cpu_count()  # Get the number of CPU cores
+        results = Parallel(n_jobs=-1)(
+            delayed(self.process_run)(r)
+            for r in range(len(self.trial_starts))
+        )
+        end = time.time()
+        print(f"Time taken to process all runs: {end - start}")
+
+        # Combine the steps from all runs
+        StepsALL = pd.concat(results)
+        StepsALL = StepsALL.reindex(self.data.index)
+        #self.data['Steps'] = StepsALL
+        # add columns to self.data for the stance/swing predictions (0,1) for each paw with (paw, SwSt) as the column name
+        for paw in StepsALL.columns:
+            self.data[(paw, 'SwSt')] = StepsALL[paw].values
+
+    def process_run(self, r):
+        try:
+            # Create a copy of the data relevant to this trial
+            # Use run_data relevant to this trial
+            trial_start = self.trial_starts[r]
+            trial_end = self.trial_ends[r]
+            run_data = self.data.loc[trial_start:trial_end].copy()
+            #steps = self.classify_steps_in_run(r, [self.trial_starts[r], self.trial_ends[r]], run_data)
+            # Pass run_data to methods instead of self.data
+            run_bounds, runbacks = self.find_real_run_vs_rbs(r, run_data)
             if len(run_bounds) == 1:
                 run_bounds = run_bounds[0]
-                self.classify_steps_in_run(r, run_bounds)
+                steps = self.classify_steps_in_run(r, run_bounds, run_data)
                 print(f"Run {r} completed")
+                return steps
             else:
                 raise ValueError("More than one run detected in a trial (in find_steps)")
+        except Exception as e:
+            print(f"Error processing run {r}: {e}")
+            return pd.DataFrame()
 
-    def classify_steps_in_run(self, r, run_bounds):
+    # def find_steps(self):
+    #     Steps = []
+    #     for r in range(len(self.trial_starts)):
+    #         #steps = self.classify_steps_in_run(r, [self.trial_starts[r], self.trial_ends[r]])
+    #         run_bounds, runbacks = self.find_real_run_vs_rbs(r) #todo#### CLASSIFY STEPS BEFORE THIS!!!! ####
+    #         if len(run_bounds) == 1:
+    #             run_bounds = run_bounds[0]
+    #             steps = self.classify_steps_in_run(r, run_bounds)
+    #             Steps.append(steps)
+    #             print(f"Run {r} completed")
+    #         else:
+    #             raise ValueError("More than one run detected in a trial (in find_steps)")
+    #     StepsALL = pd.concat(Steps)
+    #     # transfer StepsALL to a df with the same index as self.data and nans for empty rows not included in StepsALL
+    #     StepsALL = StepsALL.reindex(self.data.index)
+    #     # add the steps to self.data
+    #     self.data['Steps'] = StepsALL
+
+    def show_steps_in_videoframes(self, view='Side'):
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Slider, TextBox
+        import matplotlib.patches as patches
+
+        # Create a list of runs
+        num_runs = len(self.trial_starts)
+        if num_runs == 0:
+            raise ValueError("No runs available to display.")
+
+        # Load the video file
+        day = os.path.basename(self.file).split('_')[1]
+        filename_pattern = '_'.join(os.path.basename(self.file).split('_')[:-1])
+        video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
+        if len(video_files) > 1:
+            raise ValueError("Multiple video files found for the same view. Please check the video files.")
+        elif len(video_files) == 0:
+            raise ValueError("No video file found for the specified view.")
+        else:
+            video_file = video_files[0]
+
+        # Initialize figure and axes
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.80, bottom=0.25)  # Adjusted to make room for widgets
+
+        # Initial run index
+        run_index = 0
+        start_frame = int(self.trial_starts[run_index])
+        end_frame = int(self.trial_ends[run_index])
+
+        # Load frames for the initial run
+        frames = self.load_frames(video_file, start_frame, end_frame)
+
+        if not frames:
+            raise ValueError("No frames were loaded. Cannot proceed with visualization.")
+
+        # Set initial frame and index setup
+        frame_index = 0
+        actual_frame_number = start_frame + frame_index
+
+        # Display the first frame
+        frame_image = ax.imshow(frames[frame_index])
+        ax.axis('off')
+
+        # Add frame number text at the top
+        frame_text = ax.text(0.5, 1.02, f'Run: {run_index}/{num_runs}, Frame: {actual_frame_number}',
+                             transform=ax.transAxes, ha='center', fontsize=12)
+
+        # Define paws and limb boxes
+        paws = ['HindpawR', 'HindpawL', 'ForepawR', 'ForepawL']
+        limb_boxes = {}
+
+        # Set limb box positions (as per your rearranged order)
+        box_positions = {
+            'HindpawR': [0.1, 0.05, 0.35, 0.08],
+            'HindpawL': [0.1, 0.15, 0.35, 0.08],
+            'ForepawR': [0.55, 0.05, 0.35, 0.08],
+            'ForepawL': [0.55, 0.15, 0.35, 0.08],
+        }
+
+        for paw in paws:
+            left, bottom, width, height = box_positions[paw]
+            ax_box = fig.add_axes([left, bottom, width, height])
+            rect = patches.Rectangle((0, 0), 1, 1, facecolor='grey')
+            ax_box.add_patch(rect)
+            ax_box.axis('off')
+            ax_box.set_xlim(0, 1)
+            ax_box.set_ylim(0, 1)
+            ax_box.set_title(paw, fontsize=10)
+            limb_boxes[paw] = rect
+
+        # Create run selection text box
+        ax_run_textbox = plt.axes([0.1, 0.85, 0.1, 0.05])
+        run_textbox = TextBox(ax_run_textbox, 'Run:', initial=str(run_index))
+
+        # Create frame slider
+        ax_frame_slider = plt.axes([0.25, 0.85, 0.5, 0.05])
+        frame_slider = Slider(ax_frame_slider, 'Frame', 0, len(frames) - 1, valinit=0, valfmt='%d')
+
+        # Function to display the frame
+        def display_frame():
+            nonlocal frame_index, actual_frame_number
+            frame_image.set_data(frames[frame_index])
+            actual_frame_number = start_frame + frame_index
+            frame_text.set_text(f'Run: {run_index}/{num_runs}, Frame: {actual_frame_number}')
+            self.update_limb_boxes(actual_frame_number, limb_boxes, paws)
+            fig.canvas.draw_idle()
+
+        # Update functions
+        def update_frame(val):
+            nonlocal frame_index
+            frame_index = int(frame_slider.val)
+            display_frame()
+
+        def submit_run(text):
+            nonlocal run_index, start_frame, end_frame, frames, frame_index, actual_frame_number
+            try:
+                run_num = int(text)
+                if 1 <= run_num <= num_runs:
+                    run_index = run_num
+                    start_frame = int(self.trial_starts[run_index])
+                    end_frame = int(self.trial_ends[run_index])
+
+                    # Load frames for the selected run
+                    frames = self.load_frames(video_file, start_frame, end_frame)
+                    if not frames:
+                        print(f"No frames loaded for run {run_index}")
+                        return
+
+                    frame_index = 0
+
+                    # Update frame slider
+                    frame_slider.valmin = 0
+                    frame_slider.valmax = len(frames) - 1
+                    frame_slider.set_val(0)
+                    frame_slider.ax.set_xlim(frame_slider.valmin, frame_slider.valmax)
+
+                    display_frame()
+                else:
+                    print(f"Invalid run number. Please enter a number between 1 and {num_runs}.")
+            except ValueError:
+                print("Please enter a valid integer for the run number.")
+
+        # Connect slider and text box to update functions
+        frame_slider.on_changed(update_frame)
+        run_textbox.on_submit(submit_run)
+
+        # Keyboard event handling
+        def on_key_press(event):
+            nonlocal frame_index, run_index, start_frame, end_frame, frames, actual_frame_number
+            if event.key == 'right':
+                if frame_index < len(frames) - 1:
+                    frame_index += 1
+                    frame_slider.set_val(frame_index)
+                    display_frame()
+            elif event.key == 'left':
+                if frame_index > 0:
+                    frame_index -= 1
+                    frame_slider.set_val(frame_index)
+                    display_frame()
+            # elif event.key == 'up':
+            #     if run_index < num_runs - 1:
+            #         run_index += 1
+            #         start_frame = int(self.trial_starts[run_index])
+            #         end_frame = int(self.trial_ends[run_index])
+            #         frames = self.load_frames(video_file, start_frame, end_frame)
+            #         frame_index = 0
+            #         frame_slider.valmin = 0
+            #         frame_slider.valmax = len(frames) - 1
+            #         frame_slider.set_val(0)
+            #         run_textbox.set_val(str(run_index + 1))
+            #         display_frame()
+            # elif event.key == 'down':
+            #     if run_index > 0:
+            #         run_index -= 1
+            #         start_frame = int(self.trial_starts[run_index])
+            #         end_frame = int(self.trial_ends[run_index])
+            #         frames = self.load_frames(video_file, start_frame, end_frame)
+            #         frame_index = 0
+            #         frame_slider.valmin = 0
+            #         frame_slider.valmax = len(frames) - 1
+            #         frame_slider.set_val(0)
+            #         run_textbox.set_val(str(run_index + 1))
+            #         display_frame()
+
+        # Connect the key press event
+        fig.canvas.mpl_connect('key_press_event', on_key_press)
+
+        plt.show()
+
+    def load_frames(self, video_file, start_frame, end_frame):
+        # Load frames from video file between start_frame and end_frame
+        cap = cv2.VideoCapture(video_file)
+        frames = []
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        for i in range(start_frame, end_frame + 1):
+            ret, frame = cap.read()
+            if not ret:
+                print(f"Failed to read frame {i}")
+                break
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        cap.release()
+        return frames
+
+    def update_limb_boxes(self, actual_frame_number, limb_boxes, paws):
+        if actual_frame_number in self.data.index:
+            for paw in paws:
+                try:
+                    SwSt = self.data.loc[actual_frame_number, (paw, 'SwSt')]
+                    if SwSt == 1:
+                        limb_boxes[paw].set_facecolor('green')  # Stance
+                    elif SwSt == 0:
+                        limb_boxes[paw].set_facecolor('red')  # Swing
+                    else:
+                        limb_boxes[paw].set_facecolor('grey')  # Unknown
+                except KeyError:
+                    limb_boxes[paw].set_facecolor('grey')
+        else:
+            for paw in paws:
+                limb_boxes[paw].set_facecolor('grey')
+
+    def classify_steps_in_run(self, r, run_bounds, run_data):
         # load the model
-        model_filename = os.path.join(paths['filtereddata_folder'] + '\LimbStuff', 'limb_classification_model.pkl')
         model = self.model
 
+        # Use run_data instead of self.data
+        start_frame = run_bounds[0] - 100  # Adjust as needed
+        end_frame = run_bounds[1]
+
+        # Ensure start_frame is not negative
+        start_frame = max(start_frame, run_data.index[0])
+
         # Extract features from the paws
-        paw_data = self.data.loc[run_bounds[0]:run_bounds[1], (['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
+        paw_data = run_data.loc[start_frame:end_frame, (['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
                                              'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
                                              'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
-                                             'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL'], ['x','z'])]
+                                             'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL',
+                                             'Nose', 'Tail1', 'Tail12'], ['x','z'])]
         # interpolate and smooth the data
         limbparts = paw_data.columns.get_level_values('bodyparts').unique()
         coords = paw_data.columns.get_level_values('coords').unique()
@@ -256,15 +547,20 @@ class GetRuns:
         stance_pred = model.predict(features_df)
 
         # add 4 columns to self.data for the stance/swing predictions (0,1) for each paw
-        paw_labels = ['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
-        desired_paws = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
+        # paw_labels = ['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
+        paw_labels = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
+        #desired_paws = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
         # turn stance_pred into a DataFrame
         stance_pred_df = pd.DataFrame(stance_pred, columns=paw_labels)
-        stance_pred_df_ordered = stance_pred_df[desired_paws]
-        self.plot_stances(r, stance_pred_df_ordered)
+        #stance_pred_df_ordered = stance_pred_df[paw_labels]
+        self.plot_stances(r, stance_pred_df)
 
-        for i, paw in enumerate(desired_paws):
-            self.data.loc(axis=0)[run_bounds[0]:run_bounds[1]].loc[(paw, 'SwSt')] = stance_pred_df_ordered[paw]
+        # make and return a df with the indexes and the stance predictions
+        stance_pred_df_index = pd.DataFrame(stance_pred, index=features_df.index, columns=paw_labels)
+        return stance_pred_df_index
+
+        # for i, paw in enumerate(desired_paws):
+        #     self.data.loc[run_bounds[0]:run_bounds[1], (paw, 'SwSt')] = stance_pred_df_ordered[paw].values
 
     def plot_stances(self, r, stance_pred):
         # Get the number of frames (176)
@@ -505,8 +801,13 @@ class GetRuns:
 
         return runbacks, true_run
 
-    def find_real_run_vs_rbs(self, r):
-        run_data = self.data.loc(axis=0)[self.trial_starts[r]:self.trial_ends[r]]
+    def find_real_run_vs_rbs(self, r, run_data):
+        #run_data = self.data.loc(axis=0)[self.trial_starts[r]:self.trial_ends[r]]
+
+        # Use run_data instead of self.data
+        trial_start = self.trial_starts[r]
+        trial_end = self.trial_ends[r]
+        run_data = run_data.loc[trial_start:trial_end]
 
         # filter by when mouse facing forward
         facing_forward_mask = self.find_forward_facing_bool(run_data, xthreshold=20, zthreshold=40)
@@ -939,9 +1240,10 @@ class GetRuns:
 
 
 class GetAllFiles:
-    def __init__(self, directory=None, overwrite=False):
+    def __init__(self, directory=None, overwrite=False, debug_steps=False):
         self.directory = directory
         self.overwrite = overwrite
+        self.debug_steps = debug_steps
 
     def GetFiles(self):
         files = utils.Utils().GetListofMappedFiles(self.directory)  # gets dictionary of side, front and overhead 3D files
@@ -955,7 +1257,7 @@ class GetAllFiles:
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
                 print(f"###############################################################"
                       f"\nFinding runs and extracting gait for {mouseID}...\n###############################################################")
-                get_runs = GetRuns(files[j])
+                get_runs = GetRuns(files[j], self.debug_steps)
                 runs = get_runs.get_runs() # todo update this to real end function
                 # gait = GetGait(runs)??
             else:
@@ -966,9 +1268,9 @@ class GetAllFiles:
 
 class GetConditionFiles:
     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None,
-                 vmt_level=None, prep=None, overwrite=False):
-        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite = (
-            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite)
+                 vmt_level=None, prep=None, overwrite=False, debug_steps=False):
+        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite, self.debug_steps = (
+            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite, debug_steps)
 
     def get_dirs(self):
         if self.speed:
@@ -1012,7 +1314,7 @@ class GetConditionFiles:
             # No more subdirectories, assume this is the final directory with data
             print(f"Final directory: {current_path}")
             try:
-                GetAllFiles(directory=current_path, overwrite=self.overwrite).GetFiles()
+                GetAllFiles(directory=current_path, overwrite=self.overwrite, debug_steps=self.debug_steps).GetFiles()
             except Exception as e:
                 print(f"Error processing directory {current_path}: {e}")
 
@@ -1022,7 +1324,7 @@ def main():
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
-                          overwrite=False).get_dirs()
+                          overwrite=False, debug_steps=True).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

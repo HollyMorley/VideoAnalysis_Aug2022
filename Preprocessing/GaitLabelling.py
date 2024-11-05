@@ -363,7 +363,10 @@ def main():
         "HM_20230308_APACharRepeat_FAA-1035244_L_side_1",
         "HM_20230319_APACharExt_FAA-1035245_R_side_1",
         "HM_20230326_APACharExt_FAA-1035246_LR_side_1",
-        "HM_20230404_APACharExt_FAA-1035299_None_side_1" # files present but not been mapped
+        "HM_20230404_APACharExt_FAA-1035299_None_side_1", # files present but not been mapped
+        "HM_20230412_APACharExt_FAA-1035302_LR_side_1",
+        "HM_20230309_APACharRepeat_FAA-1035301_R_side_1",
+        "HM_20230325_APACharExt_FAA-1035249_R_side_1"
     ]
     output_file = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff\limb_labels.csv"
 

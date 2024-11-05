@@ -33,7 +33,7 @@ class FeatureExtractor:
                          'Knee': 'HindpawKneeL'}
         }
         coords = ['x', 'z']
-        time_offsets = [-5, 0, 5]
+        time_offsets = [-10, -5, 0, 5, 10] #todo added in extra time offsets
         delta_t = 1 / self.fps  # Time difference between consecutive frames
 
         features_list = []
@@ -47,6 +47,21 @@ class FeatureExtractor:
                     # For velocity calculation at time t + offset
                     t_minus = t - 1
                     t_plus = t + 1
+                    for bodypart in ['Nose', 'Tail1', 'Tail12']:
+                        # get x velocity
+                        if bodypart != 'Tail12':
+                            if t_minus in indices and t_plus in indices:
+                                x_minus = self.data.loc[t_minus, (bodypart, 'x')]
+                                x_plus = self.data.loc[t_plus, (bodypart, 'x')]
+                                x_velocity = (x_plus - x_minus) / (2 * delta_t)
+                                x_velocity_feature_name = f"{bodypart}_x_velocity_t{offset}"
+                                frame_features[x_velocity_feature_name] = x_velocity
+                        # get x position #todo added this too
+                        if t in indices:
+                            x_pos = self.data.loc[t, (bodypart, 'x')]
+                            x_pos_feature_name = f"{bodypart}_x_t{offset}"
+                            frame_features[x_pos_feature_name] = x_pos
+
                     for paw_name, paw_joints in paws.items():
                         for joint in joints:
                             joint_label = paw_joints.get(joint)
@@ -90,6 +105,9 @@ class FeatureExtractor:
                                 frame_features[angle_feature_name] = np.nan
                 else:
                     # Assign NaN for all features at time t + offset if t + offset is out of bounds
+                    for bodypart in ['Nose', 'Tail1', 'Tail12']:
+                        x_velocity_feature_name = f"{bodypart}_x_velocity_t{offset}"
+                        frame_features[x_velocity_feature_name] = np.nan
                     for paw_name, paw_joints in paws.items():
                         for joint in joints:
                             if paw_joints.get(joint) is None:
@@ -155,7 +173,8 @@ class RunClassifier:
                 limb_crds = crd_data[['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
                                       'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
                                       'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
-                                      'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL']].copy()
+                                      'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL',
+                                      'Nose','Tail1','Tail12']].copy()
                 # Remove 'y' coordinates
                 limb_crds = limb_crds.drop('y', axis=1, level=1)
                 # Add filename as an index, preserving the original index as FrameIdx

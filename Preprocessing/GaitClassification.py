@@ -200,7 +200,7 @@ def main():
     # Define data path and label columns
     data_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff\extracted_features.csv"
     output_dir = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff"
-    label_columns = ['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
+    label_columns = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']#['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
 
     # Load and preprocess data
     X, y, feature_columns, label_encoders = load_and_preprocess_data(data_path, label_columns)

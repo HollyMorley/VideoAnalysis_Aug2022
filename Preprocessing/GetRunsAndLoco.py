@@ -267,7 +267,7 @@ class GetRuns:
             self.data[(paw, 'SwSt')] = StepsALL[paw].values
 
         # fill in 'run' column in self.data between run start and end values with 1's
-        self.data['run'] = False
+        self.data['running'] = False # todo just changed to running from run
         for start, end in RunBounds:
                 self.data.loc[start:end, 'running'] = True
 
@@ -840,8 +840,6 @@ class GetRuns:
     #-------------------------------------------------------------------------------------------------------------------
     #------------------------------------------ Finding runstages ------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
-
-
     def find_run_stages(self):
         runs = self.data.index.get_level_values('Run').unique()
         for r in runs:
@@ -851,6 +849,7 @@ class GetRuns:
             self.find_transition(r, paw_touchdown, limb_data)
         self.create_runstage_index()
         self.find_taps(paw_touchdown, limb_data)
+        self.plot_run_stage_frames('Transition', 'Side')
 
     def get_run_data(self, r):
         step_data = self.data.loc(axis=0)[r].loc(axis=1)[['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']]
@@ -866,39 +865,8 @@ class GetRuns:
 
         return step_data, limb_data, paw_touchdown
 
-    def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time):
-        # check all touchdown during running phase
-        # For each paw, find the first frame where touchdown occurs
-        touchdownx4 = {}
-        for paw in paw_labels:
-            touchdown_series = paw_touchdown[paw]
-            if touchdown_series.any():
-                timed_touchdown_frame_mask = touchdown_series == True
-                timed_touchdown_frame = []
-                if time == 'first':
-                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[0]
-                elif time == 'last':
-                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[-1]
-                elif time == 'transition':
-                    pass #todo for now
-                touchdownx4[paw] = timed_touchdown_frame
-            else:
-                raise ValueError(f"No touchdown detected for {paw} in run {r}")
-        if time == 'first':
-            # Find last paw to touch down for first time
-            timed_touchdown = max(touchdownx4.values())
-        elif time == 'last':
-            # Find first paw to touch down for last time
-            timed_touchdown = min(touchdownx4.values())
-
-        if self.data.loc[(r, timed_touchdown + 1),'running'] == False:
-            raise ValueError(f"First touchdown for all paws in run {r} is not during running phase")
-
-        return timed_touchdown
-
     def find_run_start(self, r, paw_touchdown):
         paw_labels = paw_touchdown.columns
-
         first_touchdown_x4 = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first')
 
         # Find the first touchdown frame for each paw leading up to first_touchdown_x4
@@ -923,12 +891,20 @@ class GetRuns:
             # Find the block that ends at or just before first_touchdown_x4 for this paw #todo need something more sophisticated here, e.g. instead of looking for when there are all 4 paws in touchdown, look for 3 in touchdown and 1 (ie hindpaw) in swing and THEN look for the first touchdown of the forepaw preceding this
             block_found = False
             for block in reversed(blocks):
+                # check if the block ends at or before first_touchdown_x4
                 if block[0] <= first_touchdown_x4:
-                    # This block leads up to first_touchdown_x4
-                    first_touchdown_frame = block[0]
-                    paw_first_touchdowns[paw] = first_touchdown_frame
-                    block_found = True
-                    break  # Exit the loop once the block is found
+                    # Also check if hindpaw has touched down before this block
+                    hindpaw_touchdowns = paw_touchdown[['HindpawR', 'HindpawL']]
+                    hindpaw_preceding_touchdown = hindpaw_touchdowns[hindpaw_touchdowns.index < block[0]]
+                    hind_paw_preceding_present = hindpaw_preceding_touchdown.any(axis=0).any()
+                    if hind_paw_preceding_present and len(blocks) > 1:
+                        # this is not the block we are looking for
+                        continue
+                    else:
+                        first_touchdown_frame = block[0]
+                        paw_first_touchdowns[paw] = first_touchdown_frame
+                        block_found = True
+                        break
             if not block_found:
                 raise ValueError(f"No stepping sequence found leading up to {first_touchdown_x4} for {paw}, run {r}")
 
@@ -972,7 +948,7 @@ class GetRuns:
         # find first forepaw touchdown frame on to second belt, which is after the gap at 470mm x position
         forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
 
-        paw_touchdown_snippet = paw_touchdown.loc[self.run_starts[r]:self.run_ends[r], ['ForepawR', 'ForepawL']]
+        paw_touchdown_snippet = paw_touchdown.loc[self.run_starts[r]:self.run_ends[r], ['ForepawL', 'ForepawR']]
         limb_data_snippet = limb_data.loc[self.run_starts[r]:self.run_ends[r], forepaw_labels]
 
         # get mean of each paw in paw_labels (comprised of toe, knuckle, ankle)
@@ -982,6 +958,10 @@ class GetRuns:
         limb_x_mean = limb_x.groupby(axis=1,level='side').mean()
 
         post_transition_mask = limb_x_mean > 470
+        # check 'L' and 'ForepawL' are the first column and 'R' and 'ForepawR' are the second column
+        if not np.logical_and(post_transition_mask.columns[0] == 'L', paw_touchdown_snippet.columns[0] == 'ForepawL'):
+            raise ValueError("Columns are not in the expected order!!")
+
         transition_mask = np.logical_and(post_transition_mask.values, paw_touchdown_snippet.values)
         transition_frame = paw_touchdown_snippet[transition_mask].index[0]
         self.transitions.append(transition_frame)
@@ -989,30 +969,78 @@ class GetRuns:
     def create_runstage_index(self):
         # instantiate RunStage column
         self.data['RunStage'] = 'None'
-        # Fill in the stages 'RunStart', 'Transition', 'RunEnd' within the running == True period:
-        # runstart >= 'RunStart' > transition
-        # transition >= 'Transition' > runend_steps
-        # runend_steps > 'RunEnd'
-        for r in self.data.index.get_level_values('Run').unique():
+
+        # Prepare to collect indices to drop after 'run_end' for each run
+        indices_to_drop = []
+
+        # Get MultiIndex levels for 'Run' and 'FrameIdx'
+        run_levels = self.data.index.get_level_values('Run')
+        frame_levels = self.data.index.get_level_values('FrameIdx')
+
+        for r in run_levels.unique():
             run_start = self.run_starts[r]
             transition = self.transitions[r]
             run_end = self.run_ends[r]
             run_end_steps = self.run_ends_steps[r]
-            for f in range(run_start, transition):
-                self.data.loc[(r,f),'RunStage'] = 'RunStart'
-            for f in range(transition, run_end_steps + 1):
-                self.data.loc[(r,f),'RunStage'] = 'Transition'
-            for f in range(run_end_steps + 1, run_end):
-                self.data.loc[(r,f),'RunStage'] = 'RunEnd'
-            # drop the rows after run_end for this run
-            self.data.drop(index=self.data.loc[(r,run_end+1):].index, inplace=True)
-        # make 'RunStage' part of index, ['Run', 'RunStage', 'FrameIdx']
+
+            # Boolean mask for the current run
+            is_current_run = (run_levels == r)
+
+            # TrailStart stage
+            trialstart_mask = is_current_run & (frame_levels < run_start)
+            self.data.loc[trialstart_mask, 'RunStage'] = 'TrialStart'
+
+            # RunStart stage
+            runstart_mask = is_current_run & (frame_levels >= run_start) & (frame_levels < transition)
+            self.data.loc[runstart_mask, 'RunStage'] = 'RunStart'
+
+            # Transition stage
+            transition_mask = is_current_run & (frame_levels >= transition) & (frame_levels <= run_end_steps)
+            self.data.loc[transition_mask, 'RunStage'] = 'Transition'
+
+            # RunEnd stage
+            runend_mask = is_current_run & (frame_levels > run_end_steps) & (frame_levels <= run_end)
+            self.data.loc[runend_mask, 'RunStage'] = 'RunEnd'
+
+            # Collect indices to drop after run_end for this run
+            drop_mask = is_current_run & (frame_levels > run_end)
+            indices_to_drop.extend(self.data.index[drop_mask])
+
+        # Drop all collected indices at once
+        if indices_to_drop:
+            self.data.drop(index=indices_to_drop, inplace=True)
+
+        # Add in runbacks from 'rb' column
+        runbacks = self.data.loc(axis=0)[:, 'rb'].index
+        self.data.loc[runbacks, 'RunStage'] = 'RunBack'
+
+        # Set 'RunStage' as part of the index and reorder
         self.data.set_index('RunStage', append=True, inplace=True)
         self.data = self.data.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
 
     def find_taps(self, paw_touchdown, limb_data):
         # find taps and can measure this as a duration of time where mouse has a paw either hovering or touching the belt without stepping
-        pass
+        tap_indexes = []
+        runs = self.data.index.get_level_values('Run').unique()
+        for r in runs:
+            pre_run_data = self.data.loc(axis=0)[r, 'TrialStart']
+            # check for runbacks
+            runbacks = self.data.loc(axis=0)[r, 'RunBack'].index.get_level_values('FrameIdx')
+            if any(runbacks):
+                last_runback = runbacks[-1]
+                pre_run_data = pre_run_data[pre_run_data.index > last_runback]
+            # find forepaw touchdown frames at x > 0 in pre_run_data
+            forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
+            paw_touchdown_snippet = paw_touchdown.loc[pre_run_data.index, ['ForepawL', 'ForepawR']]
+            limb_data_snippet = limb_data.loc[pre_run_data.index, forepaw_labels]
+            post_mask = limb_data_snippet.loc(axis=1)[:, 'x'].droplevel('coords', axis=1) > 0
+            tap_mask = np.logical_and(post_mask, paw_touchdown_snippet)
+            tap_frames = paw_touchdown_snippet[tap_mask].index
+            if any(tap_frames):
+                tap_indexes.extend(tap_frames)
+        # add taps as a column
+        self.data['Tap'] = False
+        self.data.loc[tap_indexes, 'Tap'] = True
 
 
 
@@ -1021,6 +1049,37 @@ class GetRuns:
 
 
     ################################################# Helper functions #################################################
+    def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time):
+        # check all touchdown during running phase
+        # For each paw, find the first frame where touchdown occurs
+        touchdownx4 = {}
+        for paw in paw_labels:
+            touchdown_series = paw_touchdown[paw]
+            if touchdown_series.any():
+                timed_touchdown_frame_mask = touchdown_series == True
+                timed_touchdown_frame = []
+                if time == 'first':
+                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[0]
+                elif time == 'last':
+                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[-1]
+                elif time == 'transition':
+                    pass #todo for now
+                touchdownx4[paw] = timed_touchdown_frame
+            else:
+                raise ValueError(f"No touchdown detected for {paw} in run {r}")
+        if time == 'first':
+            # Find last paw to touch down for first time
+            timed_touchdown = max(touchdownx4.values())
+        elif time == 'last':
+            # Find first paw to touch down for last time
+            timed_touchdown = min(touchdownx4.values())
+
+        if self.data.loc[(r, timed_touchdown + 1),'running'] == False:
+            # warn that first touchdown is not during running phase
+            print(f"First touchdown for all paws is not during running phase in run {r}")
+
+        return timed_touchdown
+
     def detect_paw_touchdown(self, step_data, limb_data, paw_labels, x_threshold):
         """
         Detects paw touchdown frames for each paw individually based on:
@@ -1075,25 +1134,106 @@ class GetRuns:
 
         return touchdown_frames
 
-    def confirm_body_movement(data, frame_idx, frames_ahead, x_threshold):
-        # Checks if nose and tail base move onto the belt within frames_ahead
-        future_frames = data.index[frame_idx:frame_idx + frames_ahead]
-        nose_x = data.loc[future_frames, ('Nose', 'x')]
-        tail_base_x = data.loc[future_frames, ('TailBase', 'x')]
-        return (nose_x > x_threshold).any() and (tail_base_x > x_threshold).any()
+    ################################################ Plotting functions ################################################
+    def plot_run_stage_frames(self, run_stage, view='Side'):
+        """
+        Plot video frames for a specified run stage across all runs.
 
-    def detect_run_backs(data, start_frame, end_frame, x_threshold):
-        # Detects significant decreases in x-position indicating run backs
-        x_positions = data.loc[start_frame:end_frame, ('Nose', 'x')]
-        return ((x_positions.diff() < -x_threshold).any())
+        Parameters:
+        - run_stage: str, the run stage to visualize ('RunStart', 'Transition', 'RunEnd')
+        - view: str, the camera view to use ('Side', 'Front', etc.)
+        """
+        # Get unique runs
+        runs = self.data.index.get_level_values('Run').unique()
 
+        # Load video file(s)
+        day = os.path.basename(self.file).split('_')[1]
+        filename_pattern = '_'.join(os.path.basename(self.file).split('_')[:-1])
+        video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
 
+        if not video_files:
+            raise ValueError(f"No video files found for view '{view}'.")
+        elif len(video_files) > 1:
+            print(f"Multiple video files found for view '{view}'. Using the first one.")
+        video_file = video_files[0]
 
+        # Open the video file
+        cap = cv2.VideoCapture(video_file)
 
+        # Function to plot frames for a single run
+        def plot_run_frames(r):
+            # Get frames for the specified run stage
+            try:
+                run_stage_data = self.data.loc[r].loc[run_stage]
+            except KeyError:
+                print(f"No data for run {r} and run stage '{run_stage}'.")
+                return
 
+            if run_stage_data.empty:
+                print(f"No data for run {r} and run stage '{run_stage}'.")
+                return
 
+            # Get frame indices
+            frame_indices = run_stage_data.index.get_level_values('FrameIdx').unique().tolist()
 
+            # Load frames
+            frames = []
+            for frame_idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    print(f"Could not read frame {frame_idx} from video.")
+                    continue
+                frames.append((frame_idx, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
 
+            if not frames:
+                print(f"No frames loaded for run {r} and run stage '{run_stage}'.")
+                return
+
+            # Plot frames using Matplotlib
+            fig, ax = plt.subplots()
+            plt.subplots_adjust(bottom=0.25)
+            frame_idx, frame_image_data = frames[0]
+            frame_image = ax.imshow(frame_image_data)
+            ax.set_title(f"Run {r}, RunStage: {run_stage}, Frame: {frame_idx}")
+            ax.axis('off')
+
+            # Slider to navigate through frames
+            ax_slider = plt.axes([0.25, 0.1, 0.5, 0.03])
+            frame_slider = Slider(ax_slider, 'Frame', 0, len(frames) - 1, valinit=0, valfmt='%d')
+
+            # Button to close the plot
+            ax_button = plt.axes([0.85, 0.025, 0.1, 0.04])
+            close_button = Button(ax_button, 'Close')
+
+            def update(val):
+                idx = int(frame_slider.val)
+                frame_idx, frame_image_data = frames[idx]
+                frame_image.set_data(frame_image_data)
+                ax.set_title(f"Run {r}, RunStage: {run_stage}, Frame: {frame_idx}")
+                fig.canvas.draw_idle()
+
+            def close(event):
+                plt.close(fig)
+
+            frame_slider.on_changed(update)
+            close_button.on_clicked(close)
+
+            plt.show()
+
+        # Iterate over runs and plot in separate threads (optional)
+        threads = []
+        for r in runs:
+            t = threading.Thread(target=plot_run_frames, args=(r,))
+            t.start()
+            threads.append(t)
+
+        # Wait for all threads to finish
+        for t in threads:
+            t.join()
+
+        # Release the video capture
+        cap.release()
 
 
 class GetAllFiles:

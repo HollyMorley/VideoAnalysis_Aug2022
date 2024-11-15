@@ -2,14 +2,13 @@ import pandas as pd
 import os
 import glob
 import lightgbm as lgb
-from xgboost import XGBClassifier
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     classification_report,
     accuracy_score,
-    hamming_loss,
-    confusion_matrix
+    confusion_matrix,
+    ConfusionMatrixDisplay
 )
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,22 +28,17 @@ def load_and_preprocess_data(data_path, label_columns):
     X = data[feature_columns + ['Filename', 'Frame']]
     y = data[label_columns]
 
-    # Remove rows with missing labels
-    missing_labels = y.isnull().any(axis=1)
-    if missing_labels.any():
-        print(f"Removing {missing_labels.sum()} rows with missing labels.")
-        X = X[~missing_labels]
-        y = y[~missing_labels]
+    # Ensure all 'unknown' labels are consistent
+    y = y.replace({'unknown': 'unknown', np.nan: 'unknown'})
 
-    # Encode labels if necessary
+    # Encode labels, including 'unknown' as a class
     label_encoders = {}
     for col in label_columns:
-        if y[col].dtype == 'object' or y[col].dtype.name == 'category':
-            label_enc = LabelEncoder()
-            y[col] = label_enc.fit_transform(y[col].astype(str))
-            label_encoders[col] = label_enc
-            class_names = label_enc.classes_
-            print(f"Classes for {col}:", class_names)
+        label_enc = LabelEncoder()
+        y[col] = label_enc.fit_transform(y[col].astype(str))
+        label_encoders[col] = label_enc
+        class_names = label_enc.classes_
+        print(f"Classes for {col}:", class_names)
 
     # Reset indices
     X.reset_index(drop=True, inplace=True)
@@ -54,28 +48,19 @@ def load_and_preprocess_data(data_path, label_columns):
 
 
 def train_model(X_train_features, y_train, output_dir, model_type='lightgbm'):
-    if model_type == 'xgboost':
-        # Define the base estimator for XGBoost
-        base_estimator = XGBClassifier(
-            objective='binary:logistic',
-            booster='gbtree',
-            learning_rate=0.05,
-            n_estimators=100,
-            max_depth=6,
-            verbosity=1,
-            use_label_encoder=False
-        )
-    else:
-        # Default to LightGBM
+    if model_type == 'lightgbm':
         base_estimator = lgb.LGBMClassifier(
-            objective='binary',
+            objective='multiclass',
             boosting_type='gbdt',
             num_leaves=31,
             learning_rate=0.05,
             n_estimators=100,
             verbose=-1,
-            is_unbalance=True  # Adjust if classes are imbalanced
+            n_jobs=-1
         )
+    else:
+        # Add other model types if needed
+        pass
 
     # Create the multi-output classifier
     multi_target_model = MultiOutputClassifier(base_estimator, n_jobs=-1)
@@ -92,7 +77,36 @@ def train_model(X_train_features, y_train, output_dir, model_type='lightgbm'):
     return multi_target_model
 
 
-def plot_misclassified_sample(base_directory, filename, frame_num, true_labels, predicted_labels, output_dir):
+def multiclass_multioutput_hamming_loss(y_true, y_pred):
+    """
+    Compute the Hamming loss for multiclass-multioutput classification.
+
+    Parameters:
+    y_true (numpy array or pandas DataFrame): True labels of shape (n_samples, n_outputs)
+    y_pred (numpy array): Predicted labels of shape (n_samples, n_outputs)
+
+    Returns:
+    float: Hamming loss
+    """
+    # Ensure inputs are numpy arrays
+    if isinstance(y_true, pd.DataFrame) or isinstance(y_true, pd.Series):
+        y_true = y_true.values
+    if isinstance(y_pred, pd.DataFrame) or isinstance(y_pred, pd.Series):
+        y_pred = y_pred.values
+
+    # Total number of labels
+    n_samples, n_outputs = y_true.shape
+    total_labels = n_samples * n_outputs
+
+    # Number of mismatches
+    mismatches = (y_true != y_pred).sum()
+
+    # Hamming loss
+    hamming_loss = mismatches / total_labels
+    return hamming_loss
+
+
+def plot_misclassified_sample(base_directory, filename, frame_num, true_labels, predicted_labels, output_dir, label_encoders):
     # Construct the image path
     subdir = filename.replace('_mapped3D.h5', '')
     image_filename_png = f'img{frame_num}.png'
@@ -118,10 +132,18 @@ def plot_misclassified_sample(base_directory, filename, frame_num, true_labels, 
     plt.imshow(image)
     plt.axis('off')
 
-    # Prepare the label text (convert numeric labels to 'Stance' or 'Swing')
-    label_mapping = {1: 'Stance', 0: 'Swing'}
-    true_label_text = '\n'.join([f'{limb}: {label_mapping.get(label, label)}' for limb, label in true_labels.items()])
-    predicted_label_text = '\n'.join([f'{limb}: {label_mapping.get(label, label)}' for limb, label in predicted_labels.items()])
+    # Prepare the label text using label_encoders to decode labels
+    true_label_text_list = []
+    predicted_label_text_list = []
+    for limb in true_labels.keys():
+        label_enc = label_encoders[limb]
+        true_label_decoded = label_enc.inverse_transform([true_labels[limb]])[0]
+        predicted_label_decoded = label_enc.inverse_transform([predicted_labels[limb]])[0]
+        true_label_text_list.append(f"{limb}: {true_label_decoded}")
+        predicted_label_text_list.append(f"{limb}: {predicted_label_decoded}")
+
+    true_label_text = '\n'.join(true_label_text_list)
+    predicted_label_text = '\n'.join(predicted_label_text_list)
 
     # Add text annotations outside the image
     plt.gcf().text(0.05, 0.95, f"True Labels:\n{true_label_text}", fontsize=10, color='green', verticalalignment='top',
@@ -132,13 +154,14 @@ def plot_misclassified_sample(base_directory, filename, frame_num, true_labels, 
     plt.title(f"Misclassified Sample\nFilename: {filename}, Frame: {frame_num}")
 
     # Save the plot to a file
-    os.makedirs(output_dir + "\Misclassified_Plots", exist_ok=True)
-    plot_filename = f"{filename}_frame{frame_num}_misclassified.png"
-    plot_path = os.path.join(output_dir + "\Misclassified_Plots", plot_filename)
+    os.makedirs(os.path.join(output_dir, "Misclassified_Plots"), exist_ok=True)
+    plot_filename = f"{filename}_frame{frame_num}_misclassified_{limb}.png"
+    plot_path = os.path.join(output_dir, "Misclassified_Plots", plot_filename)
     plt.savefig(plot_path)
     plt.close()  # Close the figure to free memory
 
-def analyze_misclassifications(X_test, y_test, y_pred, label_columns, base_directory, output_dir):
+
+def analyze_misclassifications(X_test, y_test, y_pred, label_columns, base_directory, output_dir, label_encoders):
     for idx, col in enumerate(label_columns):
         print(f"\nAnalyzing misclassifications for {col}:")
 
@@ -151,32 +174,33 @@ def analyze_misclassifications(X_test, y_test, y_pred, label_columns, base_direc
             # Extract misclassified samples
             X_misclassified = X_test.iloc[misclassified].reset_index(drop=True)
             y_true_misclassified = y_test.iloc[misclassified].reset_index(drop=True)
-            y_pred_misclassified = pd.Series(y_pred[misclassified, idx], index=y_true_misclassified.index)
+            y_pred_misclassified = y_pred[misclassified]
 
             # For each misclassified sample, plot and save the image
             for i in range(len(X_misclassified)):
                 filename = X_misclassified.loc[i, 'Filename']
                 frame_num = X_misclassified.loc[i, 'Frame']
-                true_label = y_true_misclassified[col].iloc[i]
-                predicted_label = y_pred_misclassified.iloc[i]
 
                 # Prepare labels as dictionaries
-                true_labels = {col: true_label}
-                predicted_labels = {col: predicted_label}
+                true_labels = {col: y_true_misclassified[col].iloc[i]}
+                predicted_labels = {col: y_pred_misclassified[i, idx]}
 
                 # Plot and save the misclassified sample
-                plot_misclassified_sample(base_directory, filename, frame_num, true_labels, predicted_labels,
-                                          output_dir)
+                plot_misclassified_sample(
+                    base_directory, filename, frame_num,
+                    true_labels, predicted_labels,
+                    output_dir, label_encoders
+                )
 
 
 def plot_feature_importance(model, feature_columns, output_dir):
-    # Get feature importance from the trained model
-    feature_importance = model.feature_importances_
+    # Since we're using MultiOutputClassifier, we can average importances
+    importances = np.mean([est.feature_importances_ for est in model.estimators_], axis=0)
 
     # Create a DataFrame for better visualization
     feature_importance_df = pd.DataFrame({
         'Feature': feature_columns,
-        'Importance': feature_importance
+        'Importance': importances
     })
 
     # Sort features by importance
@@ -186,10 +210,9 @@ def plot_feature_importance(model, feature_columns, output_dir):
     plt.figure(figsize=(20, 8))
     sns.barplot(x='Importance', y='Feature', data=feature_importance_df.head(20))  # Plot top 20 features
     plt.title('Top 20 Feature Importance')
-    #reduce y tick text size
     plt.yticks(fontsize=8)
 
-    # save the plot
+    # Save the plot
     plot_filename = 'feature_importance.png'
     plot_path = os.path.join(output_dir, plot_filename)
     plt.savefig(plot_path)
@@ -200,10 +223,19 @@ def main():
     # Define data path and label columns
     data_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff\extracted_features.csv"
     output_dir = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff"
-    label_columns = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']#['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
+    label_columns = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
 
     # Load and preprocess data
     X, y, feature_columns, label_encoders = load_and_preprocess_data(data_path, label_columns)
+
+    # Save label encoders and feature columns
+    label_encoders_path = os.path.join(output_dir, 'label_encoders.pkl')
+    joblib.dump(label_encoders, label_encoders_path)
+    print(f"Label encoders saved as label_encoders.pkl")
+
+    feature_columns_path = os.path.join(output_dir, 'feature_columns.pkl')
+    joblib.dump(feature_columns, feature_columns_path)
+    print(f"Feature columns saved as feature_columns.pkl")
 
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -212,7 +244,7 @@ def main():
 
     # Reset indices
     X_train.reset_index(drop=True, inplace=True)
-    X_test.reset_index(drop=True)
+    X_test.reset_index(drop=True, inplace=True)
     y_train.reset_index(drop=True, inplace=True)
     y_test.reset_index(drop=True, inplace=True)
 
@@ -221,7 +253,8 @@ def main():
     X_test_features = X_test[feature_columns]
 
     # Train the model
-    multi_target_model = train_model(X_train_features, y_train, output_dir, model_type='xgboost')
+    multi_target_model = train_model(X_train_features, y_train, output_dir, model_type='lightgbm')
+
 
     # Predict on test data
     y_pred = multi_target_model.predict(X_test_features)
@@ -233,11 +266,19 @@ def main():
         accuracy = accuracy_score(y_test[col], y_pred[:, idx])
         print(f'Accuracy: {accuracy:.4f}')
         print('Classification Report:')
-        print(classification_report(y_test[col], y_pred[:, idx]))
+        print(classification_report(y_test[col], y_pred[:, idx], target_names=label_encoders[col].classes_))
         print('-' * 50)
 
-    # Calculate overall hamming loss
-    hloss = hamming_loss(y_test, y_pred)
+        # Confusion Matrix
+        cm = confusion_matrix(y_test[col], y_pred[:, idx])
+        cm_display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=label_encoders[col].classes_)
+        cm_display.plot()
+        plt.title(f'Confusion Matrix for {col}')
+        plt.savefig(os.path.join(output_dir, f'confusion_matrix_{col}.png'))
+        plt.close()
+
+    # Calculate overall hamming loss using the custom function
+    hloss = multiclass_multioutput_hamming_loss(y_test, y_pred)
     print(f'Overall Hamming Loss: {hloss:.4f}')
 
     # Optionally, calculate subset accuracy (exact match ratio)
@@ -246,8 +287,10 @@ def main():
 
     # Analyze misclassifications and save images
     base_directory = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Manual_Labelling\Side"
-    analyze_misclassifications(X_test, y_test, y_pred, label_columns, base_directory, output_dir)
-    plot_feature_importance(multi_target_model.estimators_[0], feature_columns, output_dir)
+    analyze_misclassifications(X_test, y_test, y_pred, label_columns, base_directory, output_dir, label_encoders)
+
+    # Plot feature importance
+    plot_feature_importance(multi_target_model, feature_columns, output_dir)
 
     plt.show()
 

@@ -4,13 +4,6 @@ import os, cv2, re
 import matplotlib.pyplot as plt
 from matplotlib.widgets import CheckButtons, Button, RectangleSelector
 from matplotlib.patches import Rectangle
-from scipy.ndimage import gaussian_filter1d
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.multioutput import MultiOutputClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-
-# Import tkinter for message boxes
 import tkinter as tk
 from tkinter import messagebox
 
@@ -40,8 +33,9 @@ class NoFlashButton(Button):
             func(event)
 
 class ImageLabeler:
-    def __init__(self, base_dir, subdirs_to_include, output_file):
-        self.base_dir = base_dir
+    def __init__(self, base_dir_side, base_dir_front, subdirs_to_include, output_file):
+        self.base_dir_side = base_dir_side
+        self.base_dir_front = base_dir_front
         self.subdirs_to_include = subdirs_to_include
         self.output_file = output_file
         self.image_files = self.load_image_files()
@@ -49,8 +43,10 @@ class ImageLabeler:
         self.labels = {}  # Store labels with (frame_num, subdir) as keys
         self.num_images = len(self.image_files)
         self.zoom_rect_selector = None  # For zoom functionality
-        self.ax = None  # Will be set in label_images
-        self.image_display = None # Will be set in label_images
+        self.ax_side = None  # Will be set in label_images
+        self.ax_front = None  # Will be set in label_images
+        self.image_display_side = None  # Will be set in label_images
+        self.image_display_front = None  # Will be set in label_images
 
         # Initialize Tkinter root (needed for message boxes)
         self.root = tk.Tk()
@@ -63,75 +59,117 @@ class ImageLabeler:
     def load_image_files(self):
         image_files = []
         for subdir in self.subdirs_to_include:
-            dir_path = os.path.join(self.base_dir, subdir)
-            if not os.path.exists(dir_path):
-                print(f"Warning: Subdirectory {dir_path} does not exist.")
+            dir_path_side = os.path.join(self.base_dir_side, subdir)
+            # Replace 'side' with 'front' in subdirectory name for front images
+            subdir_front = subdir.replace('side', 'front')
+            dir_path_front = os.path.join(self.base_dir_front, subdir_front)
+            if not os.path.exists(dir_path_side):
+                print(f"Warning: Side subdirectory {dir_path_side} does not exist.")
                 continue
-            files = [f for f in os.listdir(dir_path) if f.endswith('.png') or f.endswith('.jpg')]
-            for f in files:
-                match = re.search(r'img(\d+)', f)  # Extract frame numbers from filenames
-                if match:
-                    frame_num = int(match.group(1))
-                    image_files.append({
-                        'frame_num': frame_num,
-                        'filepath': os.path.join(dir_path, f),
-                        'subdir': subdir  # Include subdirectory
-                    })
-        # Sort the images by frame number and subdirectory
+            if not os.path.exists(dir_path_front):
+                print(f"Warning: Front subdirectory {dir_path_front} does not exist.")
+                continue
+            files_side = [f for f in os.listdir(dir_path_side) if f.endswith('.png') or f.endswith('.jpg')]
+            files_front = [f for f in os.listdir(dir_path_front) if f.endswith('.png') or f.endswith('.jpg')]
+
+            # Sort the files by filename (alphabetically)
+            files_side.sort()
+            files_front.sort()
+
+            # Match images by their sorted order
+            min_length = min(len(files_side), len(files_front))
+
+            for i in range(min_length):
+                f_side = files_side[i]
+                f_front = files_front[i]
+                # Extract frame number from side image filename
+                match_side = re.search(r'img(\d+)', f_side)
+                if match_side:
+                    frame_num = int(match_side.group(1))
+                else:
+                    frame_num = i  # Use index if frame number not found
+                filepath_side = os.path.join(dir_path_side, f_side)
+                filepath_front = os.path.join(dir_path_front, f_front)
+                image_files.append({
+                    'frame_num': frame_num,
+                    'filepath_side': filepath_side,
+                    'filepath_front': filepath_front,
+                    'subdir': subdir  # Include original subdirectory for labeling
+                })
+        # Sort the images by subdirectory and frame number
         sorted_files = sorted(image_files, key=lambda x: (x['subdir'], x['frame_num']))
         return sorted_files
 
     def load_existing_labels(self):
         try:
-            labels_df = pd.read_csv(self.output_file)
+            labels_df = pd.read_csv(self.output_file, na_values=['unknown'])
             for _, row in labels_df.iterrows():
                 frame_num = row['Frame']
                 subdir = row['Subdirectory']
                 key = (frame_num, subdir)
                 self.labels[key] = {
-                    'HindpawL': bool(row['HindpawL']),
-                    'ForepawL': bool(row['ForepawL']),
-                    'HindpawR': bool(row['HindpawR']),
-                    'ForepawR': bool(row['ForepawR']),
+                    'HindpawL': self.convert_label(row['HindpawL']),
+                    'ForepawL': self.convert_label(row['ForepawL']),
+                    'HindpawR': self.convert_label(row['HindpawR']),
+                    'ForepawR': self.convert_label(row['ForepawR']),
                 }
             print(f"Loaded existing labels from {self.output_file}")
         except Exception as e:
             print(f"Failed to load existing labels: {e}")
 
+    def convert_label(self, value):
+        if pd.isna(value):
+            return None  # Represent 'unknown' labels as None
+        else:
+            try:
+                return bool(int(value))
+            except ValueError:
+                return None
+
     def load_image(self, index):
         image_info = self.image_files[index]
-        image_path = image_info['filepath']
+        image_path_side = image_info['filepath_side']
+        image_path_front = image_info['filepath_front']
         frame_num = image_info['frame_num']
-        image = plt.imread(image_path)  # Assuming the image is in a supported format
-        return image, frame_num
+        image_side = plt.imread(image_path_side)
+        image_front = plt.imread(image_path_front)
+        return image_side, image_front, frame_num
 
     def load_current_labels(self):
         frame_info = self.image_files[self.current_index]
-        frame_num = frame_info['frame_num']
-        subdir = frame_info['subdir']
+        frame_num = int(frame_info['frame_num'])  # Ensure frame_num is int
+        subdir = frame_info['subdir'].strip()  # Remove any leading/trailing whitespace
         key = (frame_num, subdir)
+        print(f"Current key: {key}")
         if key in self.labels:
             self.limb_states = self.labels[key].copy()
+            print(f"Found labels for key {key}: {self.limb_states}")
         else:
             self.limb_states = {
-                'HindpawL': False,
-                'ForepawL': False,
-                'HindpawR': False,
-                'ForepawR': False
+                'HindpawL': None,
+                'ForepawL': None,
+                'HindpawR': None,
+                'ForepawR': None
             }
+            print(f"No labels found for key {key}. Using default states.")
         self.update_button_colors()
 
     def update_button_colors(self):
-        # Update the text color to indicate selection
-        self.hindpawL_button.label.set_color('green' if self.limb_states['HindpawL'] else 'red')
-        self.forepawL_button.label.set_color('green' if self.limb_states['ForepawL'] else 'red')
-        self.hindpawR_button.label.set_color('green' if self.limb_states['HindpawR'] else 'red')
-        self.forepawR_button.label.set_color('green' if self.limb_states['ForepawR'] else 'red')
-        # Redraw the buttons
-        self.hindpawL_button.ax.figure.canvas.draw_idle()
-        self.forepawL_button.ax.figure.canvas.draw_idle()
-        self.hindpawR_button.ax.figure.canvas.draw_idle()
-        self.forepawR_button.ax.figure.canvas.draw_idle()
+        for limb, button in [('HindpawL', self.hindpawL_button),
+                             ('ForepawL', self.forepawL_button),
+                             ('HindpawR', self.hindpawR_button),
+                             ('ForepawR', self.forepawR_button)]:
+            state = self.limb_states[limb]
+            if state is True:
+                color = 'green'
+            elif state is False:
+                color = 'red'
+            elif state is None:
+                color = 'black'
+            else:
+                color = 'black'  # Default to black if state is unexpected
+            button.label.set_color(color)
+            button.ax.figure.canvas.draw_idle()
 
     def label_images(self):
         # Before initializing Matplotlib figure, ask the user
@@ -155,46 +193,63 @@ class ImageLabeler:
         else:
             self.current_index = 0
 
-        # Initialize Matplotlib figure and axis
-        fig, self.ax = plt.subplots(figsize=(16, 9))
-        # Adjust the subplot to make room at the bottom
-        plt.subplots_adjust(left=0, bottom=0.35, right=1, top=1, wspace=0, hspace=0)
+        # Initialize Matplotlib figure and axes
+        fig = plt.figure(figsize=(16, 9))
+
+        # Positions for axes
+        button_area_height = 0.22  # Height allocated for the buttons at the bottom
+        front_area_height = 0.4  # Increase front area height to move it higher
+        side_area_height = 1 - button_area_height - front_area_height  # Remaining height for the side image
+
+        # Side image occupies the top portion
+        self.ax_side = fig.add_axes([0, front_area_height + button_area_height, 1, side_area_height - 0.05])
+
+        # Front image occupies below the side image
+        self.ax_front = fig.add_axes([0, button_area_height + 0.05, 0.6, front_area_height - 0.05])
 
         # Initialize limb states for the current image
         self.limb_states = {
-            'HindpawL': False,
-            'ForepawL': False,
-            'HindpawR': False,
-            'ForepawR': False
+            'HindpawL': None,
+            'ForepawL': None,
+            'HindpawR': None,
+            'ForepawR': None
         }
 
         # Create navigation buttons at the bottom
-        bprev = Button(plt.axes([0.3, 0.05, 0.1, 0.05]), 'Prev')
-        bnext = Button(plt.axes([0.6, 0.05, 0.1, 0.05]), 'Next')
+        nav_button_y = 0.1
+        nav_button_height = 0.05
+
+        bprev = Button(plt.axes([0.3, nav_button_y, 0.1, nav_button_height]), 'Prev')
+        bnext = Button(plt.axes([0.6, nav_button_y, 0.1, nav_button_height]), 'Next')
 
         # Add zoom and reset view buttons
-        zoom_button = Button(plt.axes([0.05, 0.05, 0.1, 0.05]), 'Zoom')
-        reset_button = Button(plt.axes([0.15, 0.05, 0.1, 0.05]), 'Reset View')
+        zoom_button = Button(plt.axes([0.05, nav_button_y, 0.1, nav_button_height]), 'Zoom')
+        reset_button = Button(plt.axes([0.15, nav_button_y, 0.1, nav_button_height]), 'Reset View')
 
         # Add save button
-        save_button = Button(plt.axes([0.85, 0.05, 0.1, 0.05]), 'Save')
+        save_button = Button(plt.axes([0.85, nav_button_y, 0.1, nav_button_height]), 'Save')
 
-        # Create paw buttons below the image in specified positions
+        # Create paw buttons to the left/middle, aligned with the midline
         button_width = 0.15
         button_height = 0.05
         button_spacing_x = 0.05
         button_spacing_y = 0.05
 
-        # Calculate starting positions to center the buttons
-        start_x = (1 - (button_width * 2 + button_spacing_x)) / 2
-        start_y_top = 0.35  # Adjusted Y-position for the top row
-        start_y_bottom = start_y_top - button_height - button_spacing_y  # Y-position for the bottom row
+        # Calculate total width of paw buttons including spacing
+        total_button_width = button_width * 2 + button_spacing_x
+
+        # Position paw buttons so the leftmost side aligns with the midline (x=0.5)
+        start_x = 0.5  # Left edge of the paw button grid
+
+        # Y positions
+        paw_button_y_top = button_area_height + front_area_height - button_height - 0.1  # Adjusted Y-position for the top row
+        paw_button_y_bottom = paw_button_y_top - button_height - button_spacing_y
 
         # Define button positions
-        hindpawL_button_ax = plt.axes([start_x, start_y_top, button_width, button_height])
-        forepawL_button_ax = plt.axes([start_x + button_width + button_spacing_x, start_y_top, button_width, button_height])
-        hindpawR_button_ax = plt.axes([start_x, start_y_bottom, button_width, button_height])
-        forepawR_button_ax = plt.axes([start_x + button_width + button_spacing_x, start_y_bottom, button_width, button_height])
+        hindpawL_button_ax = plt.axes([start_x, paw_button_y_top, button_width, button_height])
+        forepawL_button_ax = plt.axes([start_x + button_width + button_spacing_x, paw_button_y_top, button_width, button_height])
+        hindpawR_button_ax = plt.axes([start_x, paw_button_y_bottom, button_width, button_height])
+        forepawR_button_ax = plt.axes([start_x + button_width + button_spacing_x, paw_button_y_bottom, button_width, button_height])
 
         # Create custom buttons that do not change color on click or hover and assign to self
         self.hindpawL_button = NoFlashButton(hindpawL_button_ax, 'HindpawL', color='lightgrey', hovercolor='grey')
@@ -206,43 +261,79 @@ class ImageLabeler:
         self.load_current_labels()
 
         # Load the current image
-        image, frame_num = self.load_image(self.current_index)
-        self.image_display = self.ax.imshow(image)  # Use self.image_display here
-        self.ax.axis('off')  # Hide axes ticks
+        image_side, image_front, frame_num = self.load_image(self.current_index)
+        self.image_display_side = self.ax_side.imshow(image_side)
+        self.image_display_front = self.ax_front.imshow(image_front)
+        self.ax_side.axis('off')  # Hide axes ticks
+        self.ax_front.axis('off')  # Hide axes ticks
 
         # Function to update the image display
         def update_image():
-            image, frame_num = self.load_image(self.current_index)
-            if self.image_display is None:
-                # This should not happen, but handle it just in case
-                self.image_display = self.ax.imshow(image)
+            image_side, image_front, frame_num = self.load_image(self.current_index)
+            if self.image_display_side is None:
+                self.image_display_side = self.ax_side.imshow(image_side)
             else:
-                self.image_display.set_data(image)
-            self.ax.set_xlim(0, image.shape[1])
-            self.ax.set_ylim(image.shape[0], 0)
+                self.image_display_side.set_data(image_side)
+            if self.image_display_front is None:
+                self.image_display_front = self.ax_front.imshow(image_front)
+            else:
+                self.image_display_front.set_data(image_front)
+            self.ax_side.set_xlim(0, image_side.shape[1])
+            self.ax_side.set_ylim(image_side.shape[0], 0)
+            self.ax_front.set_xlim(0, image_front.shape[1])
+            self.ax_front.set_ylim(image_front.shape[0], 0)
             frame_info = self.image_files[self.current_index]
             subdir = frame_info['subdir']
-            self.ax.set_title(f"Frame {frame_num} ({self.current_index + 1}/{self.num_images})\nSubdirectory: {subdir}", fontsize=12)
-
+            self.ax_side.set_title(f"Frame {frame_num} ({self.current_index + 1}/{self.num_images})\nSubdirectory: {subdir}", fontsize=12)
             # Update button colors based on limb states
             self.update_button_colors()
             plt.draw()
 
         # Handlers for paw buttons
         def toggle_hindpawL(event):
-            self.limb_states['HindpawL'] = not self.limb_states['HindpawL']
+            if event.button == 1:
+                # Left-click: toggle between False and True
+                current_state = self.limb_states['HindpawL']
+                if current_state is None or current_state is False:
+                    self.limb_states['HindpawL'] = True
+                elif current_state is True:
+                    self.limb_states['HindpawL'] = False
+            elif event.button == 3:
+                # Right-click: set to unknown (None)
+                self.limb_states['HindpawL'] = None
             self.update_button_colors()
 
         def toggle_forepawL(event):
-            self.limb_states['ForepawL'] = not self.limb_states['ForepawL']
+            if event.button == 1:
+                current_state = self.limb_states['ForepawL']
+                if current_state is None or current_state is False:
+                    self.limb_states['ForepawL'] = True
+                elif current_state is True:
+                    self.limb_states['ForepawL'] = False
+            elif event.button == 3:
+                self.limb_states['ForepawL'] = None
             self.update_button_colors()
 
         def toggle_hindpawR(event):
-            self.limb_states['HindpawR'] = not self.limb_states['HindpawR']
+            if event.button == 1:
+                current_state = self.limb_states['HindpawR']
+                if current_state is None or current_state is False:
+                    self.limb_states['HindpawR'] = True
+                elif current_state is True:
+                    self.limb_states['HindpawR'] = False
+            elif event.button == 3:
+                self.limb_states['HindpawR'] = None
             self.update_button_colors()
 
         def toggle_forepawR(event):
-            self.limb_states['ForepawR'] = not self.limb_states['ForepawR']
+            if event.button == 1:
+                current_state = self.limb_states['ForepawR']
+                if current_state is None or current_state is False:
+                    self.limb_states['ForepawR'] = True
+                elif current_state is True:
+                    self.limb_states['ForepawR'] = False
+            elif event.button == 3:
+                self.limb_states['ForepawR'] = None
             self.update_button_colors()
 
         self.hindpawL_button.on_clicked(toggle_hindpawL)
@@ -284,7 +375,7 @@ class ImageLabeler:
         # Zoom functionality
         def zoom_callback(event):
             if self.zoom_rect_selector is None:
-                self.zoom_rect_selector = RectangleSelector(self.ax, onselect, drawtype='box',
+                self.zoom_rect_selector = RectangleSelector(self.ax_side, onselect, drawtype='box',
                                                             useblit=True, button=[1],
                                                             minspanx=5, minspany=5, spancoords='pixels',
                                                             interactive=True)
@@ -298,10 +389,13 @@ class ImageLabeler:
         def reset_callback(event):
             if self.zoom_rect_selector is not None:
                 self.zoom_rect_selector.set_active(False)
-            if self.image_display is not None:
-                self.ax.set_xlim(0, self.image_display.get_array().shape[1])
-                self.ax.set_ylim(self.image_display.get_array().shape[0], 0)
-                plt.draw()
+            if self.image_display_side is not None:
+                self.ax_side.set_xlim(0, self.image_display_side.get_array().shape[1])
+                self.ax_side.set_ylim(self.image_display_side.get_array().shape[0], 0)
+            if self.image_display_front is not None:
+                self.ax_front.set_xlim(0, self.image_display_front.get_array().shape[1])
+                self.ax_front.set_ylim(self.image_display_front.get_array().shape[0], 0)
+            plt.draw()
 
         reset_button.on_clicked(reset_callback)
 
@@ -309,8 +403,8 @@ class ImageLabeler:
         def onselect(eclick, erelease):
             x_min, x_max = sorted([eclick.xdata, erelease.xdata])
             y_min, y_max = sorted([eclick.ydata, erelease.ydata])
-            self.ax.set_xlim(x_min, x_max)
-            self.ax.set_ylim(y_max, y_min)
+            self.ax_side.set_xlim(x_min, x_max)
+            self.ax_side.set_ylim(y_max, y_min)
             plt.draw()
             self.zoom_rect_selector.set_active(False)
 
@@ -340,8 +434,17 @@ class ImageLabeler:
                 'Frame': frame_num,
                 'Subdirectory': subdir  # Include subdirectory
             }
-            # Convert booleans to integers (1 for True, 0 for False)
-            row.update({k: int(v) for k, v in limb_states.items()})
+            # Map limb_states to appropriate values
+            def map_state(v):
+                if v is True:
+                    return 1
+                elif v is False:
+                    return 0
+                elif v is None:
+                    return 'unknown'
+                else:
+                    return 'unknown'
+            row.update({k: map_state(v) for k, v in limb_states.items()})
             labels_list.append(row)
         labels_df = pd.DataFrame(labels_list)
         # Remove duplicates, keeping the last entry
@@ -354,16 +457,18 @@ class ImageLabeler:
 
 
 def main():
-    base_directory = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Manual_Labelling\Side"
+    base_directory_side = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Manual_Labelling\Side"
+    base_directory_front = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\Manual_Labelling\Front"
     # List of subdirectories to include
     subdirectories_to_include = [
+        "HM_20230306_APACharRepeat_FAA-1035243_None_side_1",
         "HM_20230309_APACharRepeat_FAA-1035297_R_side_1",
         "HM_20230306_APACharRepeat_FAA-1035244_L_side_1",
-        "HM_20230307_APAChar_FAA-1035302_LR_side_1", # no files present, not a real experiment *** Have added in to analyse temporarily
+        "HM_20230307_APAChar_FAA-1035302_LR_side_1",
         "HM_20230308_APACharRepeat_FAA-1035244_L_side_1",
         "HM_20230319_APACharExt_FAA-1035245_R_side_1",
         "HM_20230326_APACharExt_FAA-1035246_LR_side_1",
-        "HM_20230404_APACharExt_FAA-1035299_None_side_1", # files present but not been mapped
+        "HM_20230404_APACharExt_FAA-1035299_None_side_1",
         "HM_20230412_APACharExt_FAA-1035302_LR_side_1",
         "HM_20230309_APACharRepeat_FAA-1035301_R_side_1",
         "HM_20230325_APACharExt_FAA-1035249_R_side_1"
@@ -371,7 +476,7 @@ def main():
     output_file = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24\LimbStuff\limb_labels.csv"
 
     # Pass the output_file to the ImageLabeler instance
-    labeler = ImageLabeler(base_directory, subdirectories_to_include, output_file)
+    labeler = ImageLabeler(base_directory_side, base_directory_front, subdirectories_to_include, output_file)
     if labeler.num_images == 0:
         print("No images found in the specified subdirectories.")
         return

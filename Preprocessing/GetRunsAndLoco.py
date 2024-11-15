@@ -19,9 +19,10 @@ class GetRuns:
     def __init__(self, file, debug_steps=False):
         self.file = file
         self.debug_steps = debug_steps
-        self.model = self.load_model()
+        self.model, self.label_encoders, self.feature_columns = self.load_model()
         self.trial_starts, self.trial_ends = [], []
-        self.run_starts, self.run_ends = [], []
+        self.run_starts, self.run_ends_steps, self.run_ends, self.transitions = [], [], [], []
+        self.buffer = 250
 
         if self.debug_steps:
             try:
@@ -40,7 +41,18 @@ class GetRuns:
 
     def load_model(self):
         model_filename = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'limb_classification_model.pkl')
-        return joblib.load(model_filename)
+        model = joblib.load(model_filename)
+
+        # Load label encoders
+        label_encoders_path = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'label_encoders.pkl')
+        label_encoders = joblib.load(label_encoders_path)
+
+        # Load feature columns
+        feature_columns_path = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'feature_columns.pkl')
+        feature_columns = joblib.load(feature_columns_path)
+
+        # Return model, label_encoders, and feature_columns
+        return model, label_encoders, feature_columns
 
     def get_saved_data_filename(self):
         # Generate a consistent filename for saving/loading self.data
@@ -125,17 +137,11 @@ class GetRuns:
 
     def get_runs(self):
         self.find_trials()
-        if not self.data_loaded_from_file:
-            start = time.time()
-            self.find_steps()
-            end = time.time()
-            print(f"Time taken to find steps: {end - start}")
-            self.save_data()
-        else:
-            print("Data loaded from file, skipping step calculation.")
+        self.find_steps()
+        self.index_by_run()
+
         self.find_run_stages()
-        # self.get_run_ends()
-        # self.get_run_starts()
+
         return runs
 
     #-------------------------------------------------------------------------------------------------------------------
@@ -227,43 +233,66 @@ class GetRuns:
         mouse_on_belt_index = mouse_on_belt.index[mouse_on_belt]
         return mouse_on_belt_index
 
+    def index_by_run(self):
+        # create multiindex for self.data with run number as level 0 and frame number as level 1
+        run_idx = []
+        for r, (start, end) in enumerate(zip(self.trial_starts, self.trial_ends)):
+            run_idx.extend([r] * (end - start + 1))
+        frame_idx = np.concatenate([np.arange(start, end + 1) for start, end in zip(self.trial_starts, self.trial_ends)])
+        new_data_idx = pd.MultiIndex.from_arrays([run_idx, frame_idx], names=['Run', 'FrameIdx'])
+        data_snippet = self.data.loc[frame_idx]
+        data_snippet.index = new_data_idx
+        self.data = data_snippet
+
+
+
     #-------------------------------------------------------------------------------------------------------------------
     #-------------------------------------------- Finding steps --------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
     def find_steps(self):
-        start = time.time()
         # Process each run in parallel
-        num_cores = joblib.cpu_count()  # Get the number of CPU cores
-        results = Parallel(n_jobs=-1)(
-            delayed(self.process_run)(r)
-            for r in range(len(self.trial_starts))
-        )
-        end = time.time()
-        print(f"Time taken to process all runs: {end - start}")
+        Steps = []
+        RunBounds = []
+        Runbacks = []
+        for r in range(len(self.trial_starts)):
+            steps, run_bounds, runbacks = self.process_run(r)
+            Steps.append(steps)
+            RunBounds.append(run_bounds)
+            Runbacks.append(runbacks)
 
         # Combine the steps from all runs
-        StepsALL = pd.concat(results)
+        StepsALL = pd.concat(Steps)
         StepsALL = StepsALL.reindex(self.data.index)
-        #self.data['Steps'] = StepsALL
-        # add columns to self.data for the stance/swing predictions (0,1) for each paw with (paw, SwSt) as the column name
         for paw in StepsALL.columns:
             self.data[(paw, 'SwSt')] = StepsALL[paw].values
+
+        # fill in 'run' column in self.data between run start and end values with 1's
+        self.data['run'] = False
+        for start, end in RunBounds:
+                self.data.loc[start:end, 'running'] = True
+
+        # fill in 'rb' column in self.data between runback start and end values with 1's
+        self.data['rb'] = False
+        for rb in Runbacks:
+            for start, end in rb:
+                self.data.loc[start:end, 'rb'] = True
+
 
     def process_run(self, r):
         try:
             # Create a copy of the data relevant to this trial
-            # Use run_data relevant to this trial
             trial_start = self.trial_starts[r]
             trial_end = self.trial_ends[r]
             run_data = self.data.loc[trial_start:trial_end].copy()
-            #steps = self.classify_steps_in_run(r, [self.trial_starts[r], self.trial_ends[r]], run_data)
-            # Pass run_data to methods instead of self.data
+
+            # Pass run_data to methods that should operate within trial bounds
             run_bounds, runbacks = self.find_real_run_vs_rbs(r, run_data)
+
             if len(run_bounds) == 1:
                 run_bounds = run_bounds[0]
-                steps = self.classify_steps_in_run(r, run_bounds, run_data)
+                steps = self.classify_steps_in_run(r, run_bounds)
                 print(f"Run {r} completed")
-                return steps
+                return steps, run_bounds, runbacks
             else:
                 raise ValueError("More than one run detected in a trial (in find_steps)")
         except Exception as e:
@@ -289,14 +318,19 @@ class GetRuns:
     #     self.data['Steps'] = StepsALL
 
     def show_steps_in_videoframes(self, view='Side'):
+        import tkinter as tk
+        from tkinter import ttk
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         import matplotlib.pyplot as plt
-        from matplotlib.widgets import Slider, TextBox
         import matplotlib.patches as patches
 
         # Create a list of runs
         num_runs = len(self.trial_starts)
         if num_runs == 0:
             raise ValueError("No runs available to display.")
+
+        # Prepare run numbers for the dropdown menu
+        run_numbers = [f"Run {i}" for i in range(num_runs)]  # Labels for runs
 
         # Load the video file
         day = os.path.basename(self.file).split('_')[1]
@@ -309,11 +343,31 @@ class GetRuns:
         else:
             video_file = video_files[0]
 
-        # Initialize figure and axes
-        fig, ax = plt.subplots()
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.80, bottom=0.25)  # Adjusted to make room for widgets
+            # Initialize Tkinter window
+        root = tk.Tk()
+        root.title("Run Steps Visualization")
 
-        # Initial run index
+        # Create a frame for the dropdown menu
+        top_frame = tk.Frame(root)
+        top_frame.pack(side=tk.TOP, fill=tk.X)  # Use fill=tk.X to prevent vertical expansion
+
+        # Create the dropdown menu
+        selected_run = tk.StringVar(value=run_numbers[0])
+        run_dropdown = ttk.OptionMenu(top_frame, selected_run, run_numbers[0], *run_numbers,
+                                      command=lambda _: update_run())
+        run_dropdown.pack(side=tk.LEFT, padx=1, pady=2)
+
+        # Create a frame for the Matplotlib figure
+        bottom_frame = tk.Frame(root)
+        bottom_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Create Matplotlib figure and canvas
+        fig = plt.Figure()
+        ax = fig.add_subplot(111)
+        canvas = FigureCanvasTkAgg(fig, master=bottom_frame)
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Initialize variables
         run_index = 0
         start_frame = int(self.trial_starts[run_index])
         end_frame = int(self.trial_ends[run_index])
@@ -333,14 +387,14 @@ class GetRuns:
         ax.axis('off')
 
         # Add frame number text at the top
-        frame_text = ax.text(0.5, 1.02, f'Run: {run_index}/{num_runs}, Frame: {actual_frame_number}',
+        frame_text = ax.text(0.5, 1.02, f'Run: {run_index}, Frame: {actual_frame_number}',
                              transform=ax.transAxes, ha='center', fontsize=12)
 
         # Define paws and limb boxes
         paws = ['HindpawR', 'HindpawL', 'ForepawR', 'ForepawL']
         limb_boxes = {}
 
-        # Set limb box positions (as per your rearranged order)
+        # Set limb box positions
         box_positions = {
             'HindpawR': [0.1, 0.05, 0.35, 0.08],
             'HindpawL': [0.1, 0.15, 0.35, 0.08],
@@ -359,22 +413,18 @@ class GetRuns:
             ax_box.set_title(paw, fontsize=10)
             limb_boxes[paw] = rect
 
-        # Create run selection text box
-        ax_run_textbox = plt.axes([0.1, 0.85, 0.1, 0.05])
-        run_textbox = TextBox(ax_run_textbox, 'Run:', initial=str(run_index))
-
         # Create frame slider
-        ax_frame_slider = plt.axes([0.25, 0.85, 0.5, 0.05])
-        frame_slider = Slider(ax_frame_slider, 'Frame', 0, len(frames) - 1, valinit=0, valfmt='%d')
+        slider_ax = fig.add_axes([0.15, 0.85, 0.7, 0.03])
+        frame_slider = Slider(slider_ax, 'Frame', 0, len(frames) - 1, valinit=0, valfmt='%d')
 
         # Function to display the frame
         def display_frame():
             nonlocal frame_index, actual_frame_number
             frame_image.set_data(frames[frame_index])
             actual_frame_number = start_frame + frame_index
-            frame_text.set_text(f'Run: {run_index}/{num_runs}, Frame: {actual_frame_number}')
+            frame_text.set_text(f'Run: {run_index}, Frame: {actual_frame_number}')
             self.update_limb_boxes(actual_frame_number, limb_boxes, paws)
-            fig.canvas.draw_idle()
+            canvas.draw_idle()
 
         # Update functions
         def update_frame(val):
@@ -382,42 +432,35 @@ class GetRuns:
             frame_index = int(frame_slider.val)
             display_frame()
 
-        def submit_run(text):
+        def update_run():
             nonlocal run_index, start_frame, end_frame, frames, frame_index, actual_frame_number
-            try:
-                run_num = int(text)
-                if 1 <= run_num <= num_runs:
-                    run_index = run_num
-                    start_frame = int(self.trial_starts[run_index])
-                    end_frame = int(self.trial_ends[run_index])
+            run_index = run_numbers.index(selected_run.get())
+            start_frame = int(self.trial_starts[run_index])
+            end_frame = int(self.trial_ends[run_index])
 
-                    # Load frames for the selected run
-                    frames = self.load_frames(video_file, start_frame, end_frame)
-                    if not frames:
-                        print(f"No frames loaded for run {run_index}")
-                        return
+            # Load frames for the selected run
+            frames_new = self.load_frames(video_file, start_frame, end_frame)
+            if not frames_new:
+                print(f"No frames loaded for run {run_index}")
+                return
 
-                    frame_index = 0
+            frames.clear()
+            frames.extend(frames_new)
+            frame_index = 0
 
-                    # Update frame slider
-                    frame_slider.valmin = 0
-                    frame_slider.valmax = len(frames) - 1
-                    frame_slider.set_val(0)
-                    frame_slider.ax.set_xlim(frame_slider.valmin, frame_slider.valmax)
+            # Update frame slider
+            frame_slider.valmin = 0
+            frame_slider.valmax = len(frames) - 1
+            frame_slider.set_val(0)
+            frame_slider.ax.set_xlim(frame_slider.valmin, frame_slider.valmax)
+            display_frame()
 
-                    display_frame()
-                else:
-                    print(f"Invalid run number. Please enter a number between 1 and {num_runs}.")
-            except ValueError:
-                print("Please enter a valid integer for the run number.")
-
-        # Connect slider and text box to update functions
+        # Connect slider to update function
         frame_slider.on_changed(update_frame)
-        run_textbox.on_submit(submit_run)
 
         # Keyboard event handling
         def on_key_press(event):
-            nonlocal frame_index, run_index, start_frame, end_frame, frames, actual_frame_number
+            nonlocal frame_index
             if event.key == 'right':
                 if frame_index < len(frames) - 1:
                     frame_index += 1
@@ -428,35 +471,15 @@ class GetRuns:
                     frame_index -= 1
                     frame_slider.set_val(frame_index)
                     display_frame()
-            # elif event.key == 'up':
-            #     if run_index < num_runs - 1:
-            #         run_index += 1
-            #         start_frame = int(self.trial_starts[run_index])
-            #         end_frame = int(self.trial_ends[run_index])
-            #         frames = self.load_frames(video_file, start_frame, end_frame)
-            #         frame_index = 0
-            #         frame_slider.valmin = 0
-            #         frame_slider.valmax = len(frames) - 1
-            #         frame_slider.set_val(0)
-            #         run_textbox.set_val(str(run_index + 1))
-            #         display_frame()
-            # elif event.key == 'down':
-            #     if run_index > 0:
-            #         run_index -= 1
-            #         start_frame = int(self.trial_starts[run_index])
-            #         end_frame = int(self.trial_ends[run_index])
-            #         frames = self.load_frames(video_file, start_frame, end_frame)
-            #         frame_index = 0
-            #         frame_slider.valmin = 0
-            #         frame_slider.valmax = len(frames) - 1
-            #         frame_slider.set_val(0)
-            #         run_textbox.set_val(str(run_index + 1))
-            #         display_frame()
 
         # Connect the key press event
         fig.canvas.mpl_connect('key_press_event', on_key_press)
 
-        plt.show()
+        # Initial display
+        display_frame()
+
+        # Start Tkinter main loop
+        root.mainloop()
 
     def load_frames(self, video_file, start_frame, end_frame):
         # Load frames from video file between start_frame and end_frame
@@ -477,123 +500,139 @@ class GetRuns:
             for paw in paws:
                 try:
                     SwSt = self.data.loc[actual_frame_number, (paw, 'SwSt')]
-                    if SwSt == 1:
-                        limb_boxes[paw].set_facecolor('green')  # Stance
-                    elif SwSt == 0:
-                        limb_boxes[paw].set_facecolor('red')  # Swing
-                    else:
-                        limb_boxes[paw].set_facecolor('grey')  # Unknown
+                    # Map labels to colors
+                    color_mapping = {'1.0': 'green', '0.0': 'red', 'unknown': 'grey'}
+                    limb_boxes[paw].set_facecolor(color_mapping.get(SwSt, 'grey'))
                 except KeyError:
                     limb_boxes[paw].set_facecolor('grey')
         else:
             for paw in paws:
                 limb_boxes[paw].set_facecolor('grey')
 
-    def classify_steps_in_run(self, r, run_bounds, run_data):
-        # load the model
-        model = self.model
+    def classify_steps_in_run(self, r, run_bounds):
+        # Compute start_frame and end_frame with buffer
+        start_frame = run_bounds[0] - self.buffer
+        end_frame = run_bounds[1] + self.buffer
 
-        # Use run_data instead of self.data
-        start_frame = run_bounds[0] - 100  # Adjust as needed
-        end_frame = run_bounds[1]
+        # Ensure frames are within self.data index range
+        start_frame = max(start_frame, self.data.index.min())
+        end_frame = min(end_frame, self.data.index.max())
 
-        # Ensure start_frame is not negative
-        start_frame = max(start_frame, run_data.index[0])
+        # Verify that frames exist in self.data
+        if not set(range(start_frame, end_frame + 1)).issubset(self.data.index):
+            print(f"Warning: Some frames from {start_frame} to {end_frame} are not in self.data index.")
 
-        # Extract features from the paws
-        paw_data = run_data.loc[start_frame:end_frame, (['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
-                                             'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
-                                             'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
-                                             'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL',
-                                             'Nose', 'Tail1', 'Tail12'], ['x','z'])]
-        # interpolate and smooth the data
-        limbparts = paw_data.columns.get_level_values('bodyparts').unique()
-        coords = paw_data.columns.get_level_values('coords').unique()
+        # Extract features from the paws directly from self.data
+        paw_columns = [
+            'ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
+            'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
+            'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
+            'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL',
+            'Nose', 'Tail1', 'Tail12'
+        ]
+        coords = ['x', 'z']
 
-        for limbpart in limbparts:
-            for coord in coords:
-                limbpart_coords = paw_data[(limbpart, coord)].copy()
+        # Fetch data from self.data to include buffer frames
+        paw_data = self.data.loc[start_frame:end_frame, (paw_columns, coords)]
+        paw_data.columns = ['{}_{}'.format(bp, coord) for bp, coord in paw_data.columns]
 
-                # Check if the Series is not all NaNs
-                if limbpart_coords.notnull().any():
-                    # Interpolate missing values
-                    interpolated = limbpart_coords.interpolate(
-                        method='spline',
-                        order=3,
-                        limit=20,
-                        limit_direction='both'
-                    )
+        # Interpolation
+        interpolated = paw_data.interpolate(
+            method='spline',
+            order=3,
+            limit=20,
+            limit_direction='both',
+            axis=0
+        )
 
-                    # Apply Gaussian smoothing
-                    smoothed = gaussian_filter1d(interpolated.values, sigma=2)
+        # Smoothing
+        data_array = interpolated.values
+        all_nan_cols = np.isnan(data_array).all(axis=0)
+        smoothed_array = np.empty_like(data_array)
+        smoothed_array[:, all_nan_cols] = np.nan
+        valid_cols = ~all_nan_cols
+        smoothed_array[:, valid_cols] = gaussian_filter1d(
+            data_array[:, valid_cols], sigma=2, axis=0, mode='nearest'
+        )
 
-                    # Assign back to group
-                    paw_data.loc[:, (limbpart, coord)] = smoothed
-                else:
-                    # If all values are NaN, keep them as NaN
-                    paw_data.loc[:, (limbpart, coord)] = np.nan
+        # Convert back to DataFrame
+        smoothed_paw_data = pd.DataFrame(smoothed_array, index=paw_data.index, columns=paw_data.columns)
 
-        # Extract features from the paws
-        feature_extractor = gfe.FeatureExtractor(data=paw_data, fps=fps)
-        frames_to_process = paw_data.index
+        # Restore MultiIndex columns
+        smoothed_paw_data.columns = pd.MultiIndex.from_tuples(
+            [tuple(col.rsplit('_', 1)) for col in smoothed_paw_data.columns],
+            names=['bodyparts', 'coords']
+        )
+
+        # Proceed with feature extraction using smoothed_paw_data
+        feature_extractor = gfe.FeatureExtractor(data=smoothed_paw_data, fps=fps)
+        frames_to_process = smoothed_paw_data.index
         feature_extractor.extract_features(frames_to_process)
         features_df = feature_extractor.features_df
-        estimator = model.estimators_[0]
-        paw_order = estimator.classes_
-        expected_features = estimator.get_booster().feature_names
-        features_df = features_df[expected_features]
-        features_df = features_df.astype(float)
 
-        stance_pred = model.predict(features_df)
+        # Ensure that features_df contains the same features used during training
+        features_df = features_df[self.feature_columns]
 
-        # add 4 columns to self.data for the stance/swing predictions (0,1) for each paw
-        # paw_labels = ['HindpawL', 'ForepawL', 'HindpawR', 'ForepawR']
+        # Predict stance/swing/unknown
+        stance_pred = self.model.predict(features_df)
+
+        # Decode predictions using label_encoders
+        decoded_predictions = {}
         paw_labels = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
-        #desired_paws = ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
-        # turn stance_pred into a DataFrame
-        stance_pred_df = pd.DataFrame(stance_pred, columns=paw_labels)
-        #stance_pred_df_ordered = stance_pred_df[paw_labels]
+        for idx, paw in enumerate(paw_labels):
+            y_pred_col = stance_pred[:, idx]
+            label_enc = self.label_encoders[paw]
+            decoded_labels = label_enc.inverse_transform(y_pred_col)
+            decoded_predictions[paw] = decoded_labels
+
+        # Convert decoded predictions to DataFrame
+        stance_pred_df = pd.DataFrame(decoded_predictions, index=features_df.index)
+
+        # Plot stances using decoded labels
         self.plot_stances(r, stance_pred_df)
 
-        # make and return a df with the indexes and the stance predictions
-        stance_pred_df_index = pd.DataFrame(stance_pred, index=features_df.index, columns=paw_labels)
-        return stance_pred_df_index
+        # Return the DataFrame with decoded predictions
+        return stance_pred_df
 
-        # for i, paw in enumerate(desired_paws):
-        #     self.data.loc[run_bounds[0]:run_bounds[1], (paw, 'SwSt')] = stance_pred_df_ordered[paw].values
-
-    def plot_stances(self, r, stance_pred):
-        # Get the number of frames (176)
-        frames = np.arange(stance_pred.shape[0])  # X-axis: Frames or time steps
+    def plot_stances(self, r, stance_pred_df):
+        # Map labels to numerical values for plotting
+        label_to_num = {'0.0': 0, '1.0': 1, 'unknown': np.nan}
+        frames = np.arange(stance_pred_df.shape[0])  # X-axis: Frames or time steps
 
         # Create a figure with two subplots: one for forepaws and one for hindpaws
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
         # Plot for Forepaws (ForepawR and ForepawL)
         for i, paw in enumerate(['ForepawR', 'ForepawL']):  # Loop through Forepaws
-            ax1.plot(frames, stance_pred[paw], label=paw, marker='o')
+            y_values = stance_pred_df[paw].map(label_to_num)
+            ax1.plot(frames, y_values, label=paw, marker='o')
 
         # Add labels, title, and legend for Forepaws
-        ax1.set_ylabel('Stance Period (0 or 1)')
-        ax1.set_title('Stance Periods for Forepaws')
+        ax1.set_ylabel('Stance/Swing')
+        ax1.set_title('Stance/Swing Periods for Forepaws')
         ax1.legend()
         ax1.grid(True)
 
         # Plot for Hindpaws (HindpawR and HindpawL)
-        for i, paw in enumerate(['HindpawR', 'HindpawL'], start=2):  # Loop through Hindpaws
-            ax2.plot(frames, stance_pred[paw], label=paw, marker='o')
+        for i, paw in enumerate(['HindpawR', 'HindpawL']):  # Loop through Hindpaws
+            y_values = stance_pred_df[paw].map(label_to_num)
+            ax2.plot(frames, y_values, label=paw, marker='o')
 
         # Add labels, title, and legend for Hindpaws
         ax2.set_xlabel('Frames')
-        ax2.set_ylabel('Stance Period (0 or 1)')
-        ax2.set_title('Stance Periods for Hindpaws')
+        ax2.set_ylabel('Stance/Swing')
+        ax2.set_title('Stance/Swing Periods for Hindpaws')
         ax2.legend()
         ax2.grid(True)
 
         # Show the plot
         plt.tight_layout()
-        # save plot to file
-        plt.savefig(os.path.join(paths['filtereddata_folder'] + '\LimbStuff\RunStances', 'stance_periods_run%s.png' % r))
+        # Save plot to file
+        plot_path = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'RunStances')
+        os.makedirs(plot_path, exist_ok=True)
+        plt.savefig(os.path.join(plot_path, f'stance_periods_run{r}.png'))
+        # Close the plot
+        plt.close()
 
     def visualize_run_steps(self, run_number, view='Front'):
         import matplotlib.pyplot as plt
@@ -731,9 +770,6 @@ class GetRuns:
         # Call update_frame with the delta value
         self.update_frame(delta=delta)
 
-
-
-
     def check_post_runs(self, forward_data, forward_chunks):
         post_transition_mask = forward_data.loc[:, ('Nose', 'x')] > 470
         post_transition = forward_data[post_transition_mask]
@@ -768,33 +804,7 @@ class GetRuns:
                     true_run.append(run)
             else:
                 # No backwards running detected in this snippet
-                raise ValueError("no runbacks or real runs detected, using old logic") #todo remove this
-                # # Check if 'Tail1' is invalid between current run end and next run start
-                # tail1_data = data.loc[run[1] + 1:next_run_start - 1, ('Tail1', 'x')] # check from frame after the chunk end to frame before next chunk start
-                #
-                # if tail1_data.empty or not tail1_data.notna().any():
-                #     # The current run is part of the next one; merge them
-                #     real_run_start = run[0]
-                #     real_run_end = next_run[1]
-                #     merged_run = (real_run_start, real_run_end)
-                #     # Update the upcoming run to the merged run
-                #     forward_chunks[i + 1] = merged_run
-                # else:
-                #     # Check for 'EarR' validity
-                #     earR_data = data.loc[run[1] + 1:next_run_start - 1, ('EarR', 'x')]
-                #
-                #     if earR_data.empty or not earR_data.notna().any():
-                #         # Merge runs
-                #         real_run_start = run[0]
-                #         real_run_end = next_run[1]
-                #         merged_run = (real_run_start, real_run_end)
-                #         # Update both runs to the merged run
-                #         forward_chunks[i] = merged_run
-                #         forward_chunks[i + 1] = merged_run
-                #     else:
-                #         # Valid data present; include the run
-                #         true_run.append(run)
-
+                raise ValueError("No backwards running detected in this snippet")
             i += 1
 
         true_run.append(forward_chunks[-1])
@@ -832,391 +842,238 @@ class GetRuns:
     #-------------------------------------------------------------------------------------------------------------------
 
 
-
     def find_run_stages(self):
-        for r in range(len(self.trial_starts)):
-           # run_bounds, runbacks = self.find_real_run_vs_rbs(r)
-            if len(run_bounds) == 1:
-                run_bounds = run_bounds[0]
-                runstart = self.find_run_start(r, run_bounds)
+        runs = self.data.index.get_level_values('Run').unique()
+        for r in runs:
+            step_data, limb_data, paw_touchdown = self.get_run_data(r)
+            self.find_run_start(r, paw_touchdown)
+            self.find_run_end(r, paw_touchdown)
+            self.find_transition(r, paw_touchdown, limb_data)
+        self.create_runstage_index()
+        self.find_taps(paw_touchdown, limb_data)
+
+    def get_run_data(self, r):
+        step_data = self.data.loc(axis=0)[r].loc(axis=1)[['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']]
+        limb_data = self.data.loc(axis=0)[r].loc(axis=1)[['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR', 'ForepawKneeR',
+                                                            'ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL', 'ForepawKneeL',
+                                                            'HindpawToeR', 'HindpawKnuckleR', 'HindpawAnkleR', 'HindpawKneeR',
+                                                            'HindpawToeL', 'HindpawKnuckleL', 'HindpawAnkleL', 'HindpawKneeL']]
+        step_data = step_data.replace(['unknown','1', '0'], [np.nan, 1, 0])
+
+        paw_labels=['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']
+        # check when all 4 paws are first on the belt - need x postion of all paws to be > 0 and paws to be in stance
+        paw_touchdown = self.detect_paw_touchdown(step_data, limb_data, paw_labels, x_threshold=0)
+
+        return step_data, limb_data, paw_touchdown
+
+    def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time):
+        # check all touchdown during running phase
+        # For each paw, find the first frame where touchdown occurs
+        touchdownx4 = {}
+        for paw in paw_labels:
+            touchdown_series = paw_touchdown[paw]
+            if touchdown_series.any():
+                timed_touchdown_frame_mask = touchdown_series == True
+                timed_touchdown_frame = []
+                if time == 'first':
+                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[0]
+                elif time == 'last':
+                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[-1]
+                elif time == 'transition':
+                    pass #todo for now
+                touchdownx4[paw] = timed_touchdown_frame
             else:
-                raise ValueError("More than one run detected in a trial (in find_run_stages)")
+                raise ValueError(f"No touchdown detected for {paw} in run {r}")
+        if time == 'first':
+            # Find last paw to touch down for first time
+            timed_touchdown = max(touchdownx4.values())
+        elif time == 'last':
+            # Find first paw to touch down for last time
+            timed_touchdown = min(touchdownx4.values())
 
+        if self.data.loc[(r, timed_touchdown + 1),'running'] == False:
+            raise ValueError(f"First touchdown for all paws in run {r} is not during running phase")
 
-    def find_run_ends(self):
-        # find the frame where the mouse crosses the finish line (x=600?) for the first time after the trial start
-        nose_in_front_of_tail = self.data.loc[:, ('Nose', 'x')] > self.data.loc[:, ('TailBase', 'x')]
+        return timed_touchdown
 
+    def find_run_start(self, r, paw_touchdown):
+        paw_labels = paw_touchdown.columns
 
+        first_touchdown_x4 = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first')
 
-    # def find_run_start(self, r, run_bounds):
-    #     # check back from run_bounds[0] to find the first frame where Nose appears (with a gap threshold of 40 frames)
-    #     nose_present_mask = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')].notna()
-    #     nose_present = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')][nose_present_mask]
-    #     nose_present_chunks = utils.Utils().find_blocks(nose_present.index, gap_threshold=15, block_min_size=10)
-    #     if len(nose_present_chunks) > 0:
-    #         run_bound_start = nose_present_chunks[-1][0]
-    #     else:
-    #         run_bound_start = self.trial_starts[r]
-    #         print(f"No nose detected before run start in trial {r}")
-    #
-    #
-    #
-    #     # Extract the right and left forepaw data into separate DataFrames
-    #     right = self.data.loc[run_bound_start:run_bounds[1], (['ForepawToeR', 'ForepawKnuckleR', 'ForepawAnkleR'])]
-    #     left = self.data.loc[run_bound_start:run_bounds[1], (['ForepawToeL', 'ForepawKnuckleL', 'ForepawAnkleL'])]
-    #
-    #     for coord in ['z', 'x']:
-    #         # Combine coordinates
-    #         right_combined = self.combine_paw_data(right.loc(axis=1)[:, coord], sigma=1)
-    #         left_combined = self.combine_paw_data(left.loc(axis=1)[:, coord], sigma=1)
-    #
-    #         # Add the combined coordinates to the right and left DataFrames
-    #         right[f'Combined{coord.upper()}'] = right_combined
-    #         left[f'Combined{coord.upper()}'] = left_combined
-    #     paw_data = pd.concat([right, left], axis=1, keys=['Right', 'Left'])
-    #
-    #     """
-    #     criteria to meet:
-    #     1. left or right paw is first to set down to belt level - ie z ~= 0 for several frames
-    #     2. this paw is beyond the start platform and in the belt area x > 0, x < ~200
-    #     3. this touchdown is followed by the other paw touching down and the whole body passing the start line
-    #     proposed approach:
-    #     1. look for where nose in front of tail and tail base is 0 < x < 10
-    #     2. look backwards from this frame to find the first frame where the paw is at belt level
-    #     """
-    #
-    #     # refine paw data by CombinedX > 0
-    #     x0_idx = paw_data.index[np.all(paw_data.loc(axis=1)[:, 'CombinedX'] > 0, axis=1)] # ensures paw data is only > start platform
-    #     paw_data_x0 = paw_data.loc[x0_idx]
-    #
-    #     # find z data where frame to frame difference is less than 0.1 and z is less than 1.5
-    #     stance_r = paw_data_x0.index[(abs(paw_data_x0.loc(axis=1)['Right', 'CombinedZ'].diff()) < 0.2) & (paw_data_x0.loc(axis=1)['Right', 'CombinedZ'] < 1.5)]
-    #     stance_l = paw_data_x0.index[(abs(paw_data_x0.loc(axis=1)['Left', 'CombinedZ'].diff()) < 0.2) & (paw_data_x0.loc(axis=1)['Left', 'CombinedZ'] < 1.5)]
-    #     swingend_r = paw_data_x0.index[(paw_data_x0.loc(axis=1)['Right', 'CombinedZ'].diff() < -0.5) & (paw_data_x0.loc(axis=1)['Right', 'CombinedZ'] > 1)]
-    #     swingend_l = paw_data_x0.index[(paw_data_x0.loc(axis=1)['Left', 'CombinedZ'].diff() < -0.5) & (paw_data_x0.loc(axis=1)['Left', 'CombinedZ'] > 1)]
-    #
-    #     stance_r_chunks = utils.Utils().find_blocks(stance_r, gap_threshold=2, block_min_size=4)
-    #     stance_l_chunks = utils.Utils().find_blocks(stance_l, gap_threshold=2, block_min_size=4)
-    #     swingend_r_chunks = utils.Utils().find_blocks(swingend_r, gap_threshold=3, block_min_size=1)
-    #     swingend_l_chunks = utils.Utils().find_blocks(swingend_l, gap_threshold=3, block_min_size=1)
-    #
-    #     # check alternating stance and swingend chunks (based on middle index for each chunk) for each paw
-    #     stance_r_middle = np.mean(stance_r_chunks, axis=1).astype(int)
-    #     swing_r_middle = np.mean(swingend_r_chunks, axis=1).astype(int)
-    #     stance_l_middle = np.mean(stance_l_chunks, axis=1).astype(int)
-    #     swing_l_middle = np.mean(swingend_l_chunks, axis=1).astype(int)
-    #
-    #     # Paw events
-    #     events_r = np.concatenate((
-    #         np.column_stack((stance_r_middle, np.full(len(stance_r_middle), 'stance'))),
-    #         np.column_stack((swing_r_middle, np.full(len(swing_r_middle), 'swing')))
-    #     ))
-    #     events_l = np.concatenate((
-    #         np.column_stack((stance_l_middle, np.full(len(stance_l_middle), 'stance'))),
-    #         np.column_stack((swing_l_middle, np.full(len(swing_l_middle), 'swing')))
-    #     ))
-    #
-    #     # Sort paw events
-    #     events_r_sorted = events_r[events_r[:, 0].astype(int).argsort()]
-    #     events_l_sorted = events_l[events_l[:, 0].astype(int).argsort()]
-    #
-    #     is_valid_r = self.check_alternating(events_r_sorted)
-    #     is_valid_l = self.check_alternating(events_l_sorted)
-    #
-    #     if is_valid_r and is_valid_l:
-    #         # Get the starting frame of the first stance chunk for each paw
-    #         first_stance_r_frame = stance_r_chunks[0][0] if len(stance_r_chunks) > 0 else None
-    #         first_stance_l_frame = stance_l_chunks[0][0] if len(stance_l_chunks) > 0 else None
-    #
-    #         # Determine which paw touches down first
-    #         if first_stance_r_frame is not None and first_stance_l_frame is not None:
-    #             if first_stance_r_frame <= first_stance_l_frame:
-    #                 runstart_frame = first_stance_r_frame
-    #                 runstart_side = 'r'
-    #             else:
-    #                 runstart_frame = first_stance_l_frame
-    #                 runstart_side = 'l'
-    #         elif first_stance_r_frame is not None:
-    #             runstart_frame = first_stance_r_frame
-    #             runstart_side = 'r'
-    #         elif first_stance_l_frame is not None:
-    #             runstart_frame = first_stance_l_frame
-    #             runstart_side = 'l'
-    #         else:
-    #             raise ValueError("No stance events found for either paw")
-    #
-    #         # Verify that the other 3 paws touch down shortly after
-    #
-    #
-    #     else:
-    #         raise ValueError("Swing stance detection failed, alternating pattern not detected")
-    #
-    #
-    #
-    #     return runstarts
+        # Find the first touchdown frame for each paw leading up to first_touchdown_x4
+        paw_first_touchdowns = {}
+        for paw in paw_labels:
+            # Get the touchdown Series for the paw
+            touchdown_series = paw_touchdown[paw]
 
-    def find_run_start(self, r, run_bounds):
-        # Step 1: Determine the initial run bound start based on nose detection
-        run_bound_start = self.determine_initial_run_bound_start(r, run_bounds)
+            # Extract frames where the paw is touching down before first_touchdown_x4
+            paw_touchdown_frames = touchdown_series[touchdown_series.index < first_touchdown_x4]
+            paw_touchdown_frames = paw_touchdown_frames[
+                paw_touchdown_frames]  # Only frames where the paw is touching down
 
-        # Step 2 & 3: Extract and combine data for all four paws
-        paw_data_combined = self.extract_and_combine_paw_data(run_bound_start, run_bounds[1])
+            # If there are no touchdown frames before first_touchdown_x4, skip
+            if paw_touchdown_frames.empty:
+                #print(f"No touchdown frames found for {paw} before frame {first_touchdown_x4}")
+                continue
 
-        # Step 4: Filter data where both forepaw 'x' positions are greater than 0
-        paw_data_x0 = self.filter_paw_data_beyond_start_platform(paw_data_combined)
+            # Use find_blocks to find continuous blocks of touchdown frames
+            blocks = utils.Utils().find_blocks(paw_touchdown_frames.index, gap_threshold=5, block_min_size=0)
 
-        # Step 5: Detect stance and swing events for each paw
-        stance_events = self.detect_stance_events(paw_data_x0)
+            # Find the block that ends at or just before first_touchdown_x4 for this paw #todo need something more sophisticated here, e.g. instead of looking for when there are all 4 paws in touchdown, look for 3 in touchdown and 1 (ie hindpaw) in swing and THEN look for the first touchdown of the forepaw preceding this
+            block_found = False
+            for block in reversed(blocks):
+                if block[0] <= first_touchdown_x4:
+                    # This block leads up to first_touchdown_x4
+                    first_touchdown_frame = block[0]
+                    paw_first_touchdowns[paw] = first_touchdown_frame
+                    block_found = True
+                    break  # Exit the loop once the block is found
+            if not block_found:
+                raise ValueError(f"No stepping sequence found leading up to {first_touchdown_x4} for {paw}, run {r}")
 
-        # Step 6: Check for alternating patterns for each paw
-        is_valid_paws = self.check_real_stance(stance_events)#, swing_events)
-        #is_valid_paws = self.check_alternating_patterns(stance_events)#, swing_events)
-
-        # Step 6.1: Filter stance events to include only valid paws
-        valid_stance_events = {
-            key: stances for key, stances in stance_events.items() if is_valid_paws.get(key, False)
-        }
-
-        if not valid_stance_events:
-            raise ValueError("No valid paws found after alternating pattern check.")
-
-        # Step 7: Determine run start frame based on the earliest stance event among all valid paws
-        runstart_frame, runstart_key, runstart_paw = self.determine_run_start_frame(valid_stance_events)
-
-        # Step 8: Verify that all valid paws touch down shortly after
-        self.verify_paws_touch_down(valid_stance_events, runstart_frame, runstart_key)
-
-        # Step 9: Additional checks (nose ahead of tail, etc.)
-        self.perform_additional_checks(runstart_frame)
-
-        # Step 10: Set the run start frame
-        self.run_start_frame = runstart_frame
-        print(f"Run starts at frame {runstart_frame}, paw: {runstart_paw}")
-
-        return runstart_frame
-
-    def determine_initial_run_bound_start(self, r, run_bounds):
-        utils_obj = utils.Utils()
-
-        nose_present_mask = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')].notna()
-        nose_present = self.data.loc[self.trial_starts[r]:run_bounds[0], ('Nose', 'x')][nose_present_mask]
-        nose_present_chunks = utils_obj.find_blocks(nose_present.index, gap_threshold=15, block_min_size=10)
-
-        if len(nose_present_chunks) > 0:
-            run_bound_start = nose_present_chunks[-1][0]
+        if paw_first_touchdowns:
+            # Find the earliest first touchdown frame among all paws
+            earliest_first_touchdown_frame = min(paw_first_touchdowns.values())
+            # Identify which paw(s) have this earliest frame
+            initiating_paws = [paw for paw, frame in paw_first_touchdowns.items() if
+                               frame == earliest_first_touchdown_frame]
+            if np.logical_and(len(initiating_paws) == 1, 'Hind' not in initiating_paws[0]):
+                self.run_starts.append(earliest_first_touchdown_frame)
+                # adjust 'running' column to start at the first touchdown frame
+                current_bound0 = self.data.loc(axis=0)[r].loc(axis=1)['running'].index[self.data.loc(axis=0)[r].loc(axis=1)['running'] == True][0]
+                for f in range(earliest_first_touchdown_frame,current_bound0):
+                    self.data.loc[(r,f),'running'] = True
         else:
-            run_bound_start = self.trial_starts[r]
-            print(f"No nose detected before run start in trial {r}")
+            raise ValueError("No valid stepping sequences found leading up to the all-paws touchdown in run {r}")
 
-        return run_bound_start
+    def find_run_end(self, r, paw_touchdown):
+        paw_labels = paw_touchdown.columns
 
-    def extract_and_combine_paw_data(self, run_bound_start, run_bound_end):
-        paw_sides = ['Right', 'Left']
-        paw_types = ['Forepaw', 'Hindpaw']
-        combined_coords = {}
+        # find frame where first paw touches down for the last time (end of stance)
+        last_touchdown_x4 = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='last')
 
-        for side in paw_sides:
-            for paw in paw_types:
-                # Define paw markers
-                if paw == 'Forepaw':
-                    paw_markers = [f'{paw}Toe{side[0]}', f'{paw}Knuckle{side[0]}', f'{paw}Ankle{side[0]}']
-                else:
-                    paw_markers = [f'{paw}Toe{side[0]}', f'{paw}Knuckle{side[0]}']
-                # Extract data for the paw
-                paw_data = self.data.loc[run_bound_start:run_bound_end, paw_markers]
-                # Combine coordinates for 'x' and 'z'
-                for coord in ['x', 'z']:
-                    combined_coord = self.combine_paw_data(paw_data.loc(axis=1)[:, coord], sigma=1)
-                    # Store in a dictionary for easy access
-                    combined_coords[(paw, side, coord)] = combined_coord
+        # find frame where mouse exits frame
+        tail_data = self.data.loc(axis=0)[r, last_touchdown_x4:].loc(axis=1)[['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7',
+                                                          'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12']]
+        tail_present = tail_data[tail_data.any(axis=1)]
+        tail_blocks = utils.Utils().find_blocks(tail_present.index.get_level_values('FrameIdx'), gap_threshold=100, block_min_size=20)
+        run_end = tail_blocks[0][-1]
 
-        # Create a MultiIndex DataFrame for all paws
-        paw_data_combined = pd.DataFrame(index=self.data.loc[run_bound_start:run_bound_end].index)
-        for (paw, side, coord), data in combined_coords.items():
-            paw_data_combined[(paw, side, coord)] = data
+        # adjust 'running' column to end at the run end frame
+        current_bound1 = self.data.loc(axis=0)[r].loc(axis=1)['running'].index[self.data.loc(axis=0)[r].loc(axis=1)['running'] == True][-1]
+        for f in range(current_bound1,run_end):
+            self.data.loc[(r,f),'running'] = True
 
-        return paw_data_combined
+        self.run_ends.append(run_end)
+        self.run_ends_steps.append(last_touchdown_x4)
 
-    def filter_paw_data_beyond_start_platform(self, paw_data_combined):
-        paw_sides = ['Right', 'Left']
-        x0_idx = paw_data_combined.index[
-            np.all(
-                [paw_data_combined[('Forepaw', side, 'x')] > 0 for side in paw_sides],
-                axis=0
-            )
-        ]
-        paw_data_x0 = paw_data_combined.loc[x0_idx]
+    def find_transition(self, r, paw_touchdown, limb_data):
+        # find first forepaw touchdown frame on to second belt, which is after the gap at 470mm x position
+        forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
 
-        return paw_data_x0
+        paw_touchdown_snippet = paw_touchdown.loc[self.run_starts[r]:self.run_ends[r], ['ForepawR', 'ForepawL']]
+        limb_data_snippet = limb_data.loc[self.run_starts[r]:self.run_ends[r], forepaw_labels]
 
-    def detect_stance(self, paw_data_x0):
-        utils_obj = utils.Utils()
-        paw_sides = ['Right', 'Left']
-        paw_types = ['Forepaw', 'Hindpaw']
-        stance_events = {}
-        #swing_events = {}
+        # get mean of each paw in paw_labels (comprised of toe, knuckle, ankle)
+        limb_x = limb_data_snippet.loc(axis=1)[:, 'x'].droplevel('coords', axis=1)
+        limb_x = limb_x.drop(columns=['ForepawKneeR', 'ForepawKneeL'])
+        limb_x.columns = pd.MultiIndex.from_tuples([(col, col[-1]) for col in limb_x.columns], names=['bodyparts', 'side'])
+        limb_x_mean = limb_x.groupby(axis=1,level='side').mean()
 
-        for paw in paw_types:
-            for side in paw_sides:
-                key = (paw, side)
-                combined_z = paw_data_x0[(paw, side, 'z')]
-                combined_z_diff = combined_z.diff()
+        post_transition_mask = limb_x_mean > 470
+        transition_mask = np.logical_and(post_transition_mask.values, paw_touchdown_snippet.values)
+        transition_frame = paw_touchdown_snippet[transition_mask].index[0]
+        self.transitions.append(transition_frame)
 
-                combined_x = paw_data_x0[(paw, side, 'x')]
-                combined_x_diff = combined_x.diff()
+    def create_runstage_index(self):
+        # instantiate RunStage column
+        self.data['RunStage'] = 'None'
+        # Fill in the stages 'RunStart', 'Transition', 'RunEnd' within the running == True period:
+        # runstart >= 'RunStart' > transition
+        # transition >= 'Transition' > runend_steps
+        # runend_steps > 'RunEnd'
+        for r in self.data.index.get_level_values('Run').unique():
+            run_start = self.run_starts[r]
+            transition = self.transitions[r]
+            run_end = self.run_ends[r]
+            run_end_steps = self.run_ends_steps[r]
+            for f in range(run_start, transition):
+                self.data.loc[(r,f),'RunStage'] = 'RunStart'
+            for f in range(transition, run_end_steps + 1):
+                self.data.loc[(r,f),'RunStage'] = 'Transition'
+            for f in range(run_end_steps + 1, run_end):
+                self.data.loc[(r,f),'RunStage'] = 'RunEnd'
+            # drop the rows after run_end for this run
+            self.data.drop(index=self.data.loc[(r,run_end+1):].index, inplace=True)
+        # make 'RunStage' part of index, ['Run', 'RunStage', 'FrameIdx']
+        self.data.set_index('RunStage', append=True, inplace=True)
+        self.data = self.data.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
 
-                # Detect stance: when z is low and stable
-                stance_idx = paw_data_x0.index[
-                    (combined_z < 1.5) & (combined_z_diff.abs() < 0.2)
-                    ]
+    def find_taps(self, paw_touchdown, limb_data):
+        # find taps and can measure this as a duration of time where mouse has a paw either hovering or touching the belt without stepping
+        pass
 
-                # # Detect swing end: when z decreases significantly
-                # swingend_idx = paw_data_x0.index[
-                #     (combined_z > 1) & (combined_z_diff < -0.5)
-                #     ]
 
-                # Find chunks of stance and swing events
-                if paw == 'Forepaw':
-                    stance_chunks = utils_obj.find_blocks(stance_idx, gap_threshold=2, block_min_size=4)
-                    #swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=3, block_min_size=1)
-                else:
-                    stance_chunks = utils_obj.find_blocks(stance_idx, gap_threshold=5, block_min_size=2)
-                   # swing_chunks = utils_obj.find_blocks(swingend_idx, gap_threshold=4, block_min_size=4)
 
-                # Calculate middle indices
-                stance_middle = np.mean(stance_chunks, axis=1).astype(int)
-                #swing_middle = np.mean(swing_chunks, axis=1).astype(int)
 
-                # Store events
-                stance_events[key] = stance_middle
-                #swing_events[key] = swing_middle
 
-        return stance_events #, swing_events
 
-    def check_real_stance(self, stance_events):
-        is_valid_paws = {}
-        paw_sides = ['Right', 'Left']
-        paw_types = ['Forepaw', 'Hindpaw']
-        for paw in paw_types:
-            for side in paw_sides:
-                key = (paw, side)
-                stances = stance_events.get(key, [])
-
-                if len(stances) == 0:
-                    is_valid_paws[key] = False
-                    continue
-
-                # check
-
-                is_valid_paws[key] = is_valid
-
-    def check_alternating_patterns(self, stance_events): #, swing_events):
-        is_valid_paws = {}
-        paw_sides = ['Right', 'Left']
-        paw_types = ['Forepaw', 'Hindpaw']
-
-        for paw in paw_types:
-            for side in paw_sides:
-                key = (paw, side)
-                stances = stance_events.get(key, [])
-                #swings = swing_events.get(key, [])
-
-                if len(stances) == 0: # and len(swings) == 0:
-                    is_valid_paws[key] = False
-                    continue
-
-                events = np.concatenate((
-                    np.column_stack((stances, np.full(len(stances), 'stance'))),
-                    #np.column_stack((swings, np.full(len(swings), 'swing')))
-                ))
-
-                # Sort events chronologically
-                events_sorted = events[events[:, 0].astype(int).argsort()]
-                # Check for alternating patterns
-                is_valid = self.check_alternating(events_sorted)
-                is_valid_paws[key] = is_valid
-
-        return is_valid_paws
-
-    def determine_run_start_frame(self, stance_events):
-        # Collect the first stance frames from valid paws
-        first_stance_frames = {key: stances[0] for key, stances in stance_events.items() if len(stances) > 0}
-
-        if not first_stance_frames:
-            raise ValueError("No stance events found for any valid paw")
-
-        # Find the earliest stance event
-        runstart_key = min(first_stance_frames, key=first_stance_frames.get)
-        runstart_frame = first_stance_frames[runstart_key]
-        runstart_paw = runstart_key
-
-        return runstart_frame, runstart_key, runstart_paw
-
-    def verify_paws_touch_down(self, stance_events, runstart_frame, runstart_key, max_allowed_gap=10):
-        first_stance_frames = {key: stances[0] for key, stances in stance_events.items() if len(stances) > 0}
-        for key, first_frame in first_stance_frames.items():
-            if key != runstart_key:
-                gap = first_frame - runstart_frame
-                if gap < 0 or gap > max_allowed_gap:
-                    raise ValueError(f"Paw {key} did not touch down shortly after the run start frame.")
-
-    def perform_additional_checks(self, runstart_frame):
-        nose_x = self.data.loc[runstart_frame, ('Nose', 'x')]
-        tail_base_x = self.data.loc[runstart_frame, ('TailBase', 'x')]
-
-        if np.isnan(nose_x) or np.isnan(tail_base_x):
-            raise ValueError(f"Nose or tail base data missing at run start frame {runstart_frame}")
-
-        if nose_x <= tail_base_x:
-            raise ValueError("Nose is not ahead of tail base at run start frame.")
-
-        if not (0 < tail_base_x < 10):
-            raise ValueError(
-                f"Tail base x position at run start frame {runstart_frame} is out of bounds: {tail_base_x}"
-            )
-    # def check_alternating(self, events):
-    #     states = events[:, 1]
-    #     # Check starting with 'swing'
-    #     is_alternating_swing = all(
-    #         states[i] != states[i + 1] for i in range(len(states) - 1)
-    #     ) and states[0] == 'swing'
-    #
-    #     # Check starting with 'stance'
-    #     is_alternating_stance = all(
-    #         states[i] != states[i + 1] for i in range(len(states) - 1)
-    #     ) and states[0] == 'stance'
-    #
-    #     return is_alternating_swing or is_alternating_stance
-
-    # def combine_paw_data(self, paw_df, sigma=2, interpolation_method='spline', limit=10): #limit=100, interpolated well but big effect pre data
-    #     # Identify rows where all values are NaN
-    #     all_nan_rows = np.isnan(paw_df.values).all(axis=1)
-    #     # Prepare an array to hold combined values
-    #     combined_z = np.full(paw_df.shape[0], np.nan)
-    #     # Compute nanmedian only for rows that are not all NaN
-    #     if not all_nan_rows.all():
-    #         combined_z[~all_nan_rows] = np.nanmedian(paw_df.values[~all_nan_rows], axis=1)
-    #     # Create a pandas Series to handle interpolation easily
-    #     combined_z_series = pd.Series(combined_z, index=paw_df.index)
-    #     # Interpolate missing values (NaNs)
-    #     interpolated_z = combined_z_series.interpolate(
-    #         method=interpolation_method,
-    #         order=3,
-    #         limit=limit,
-    #         limit_direction='backward'
-    #     ).values
-    #     # Apply Gaussian smoothing with the customizable sigma
-    #     smoothed_z = gaussian_filter1d(interpolated_z, sigma=sigma)
-    #     return smoothed_z
 
     ################################################# Helper functions #################################################
-    def detect_paw_touchdown(data, paw_labels, x_min, x_max, z_tolerance):
-        # Returns frames where paw touches down within x-range and z ≈ 0
-        paw_z = data.loc[:, (paw_labels, 'z')]
-        paw_x = data.loc[:, (paw_labels, 'x')]
-        touchdown_frames = (paw_z.abs() < z_tolerance) & (paw_x > x_min) & (paw_x < x_max)
-        return touchdown_frames.any(axis=1)
+    def detect_paw_touchdown(self, step_data, limb_data, paw_labels, x_threshold):
+        """
+        Detects paw touchdown frames for each paw individually based on:
+        - Paw is in stance phase (step_data).
+        - Paw's x-position is greater than x_threshold (limb_data).
+
+        Parameters:
+        - step_data: DataFrame with paw stance/swing data for each paw (values are 1.0 for stance, 0.0 for swing).
+        - limb_data: DataFrame with limb position data, must have x positions for paws.
+        - paw_labels: List of paw labels to check (e.g., ['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']).
+        - x_threshold: The x-position threshold (e.g., 0) to check if paw has crossed the start line.
+
+        Returns:
+        - touchdown_frames: DataFrame with index as frames and columns as paw_labels, values are True/False indicating if conditions are met.
+        """
+        # Ensure indices are aligned
+        common_index = step_data.index.intersection(limb_data.index)
+        step_data = step_data.loc[common_index]
+        limb_data = limb_data.loc[common_index]
+
+        # Initialize a DataFrame to hold the touchdown status for each paw
+        touchdown_frames = pd.DataFrame(index=common_index, columns=paw_labels)
+
+        for paw in paw_labels:
+            # Extract paw prefix and side
+            if 'Forepaw' in paw:
+                paw_prefix = 'Forepaw'
+            elif 'Hindpaw' in paw:
+                paw_prefix = 'Hindpaw'
+            else:
+                raise ValueError(f"Unknown paw label: {paw}")
+
+            side = paw[-1]  # 'R' or 'L'
+
+            # Check if paw is in stance (assuming stance is labeled as 1.0)
+            in_stance = step_data[paw] == 1
+
+            # Get markers for this paw
+            markers = [col for col in limb_data.columns if col[0].startswith(paw_prefix) and col[0].endswith(side)]
+
+            # Get x positions for the paw's markers
+            x_positions = limb_data.loc[:, markers]
+
+            # Calculate the mean x position for the paw
+            x_mean = x_positions.xs('x', level='coords', axis=1).mean(axis=1)
+
+            # Check if x position is greater than the threshold
+            x_condition = x_mean > x_threshold
+
+            # Combine conditions
+            touchdown_frames[paw] = np.logical_and(in_stance.values.flatten(), x_condition.values.flatten())
+
+        return touchdown_frames
 
     def confirm_body_movement(data, frame_idx, frames_ahead, x_threshold):
         # Checks if nose and tail base move onto the belt within frames_ahead
@@ -1324,7 +1181,7 @@ def main():
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
-                          overwrite=False, debug_steps=True).get_dirs()
+                          overwrite=False, debug_steps=False).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

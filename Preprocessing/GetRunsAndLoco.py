@@ -289,8 +289,6 @@ class GetRuns:
         import tkinter as tk
         from tkinter import ttk
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as patches
 
         # Create a list of runs
         num_runs = len(self.trial_starts)
@@ -311,7 +309,7 @@ class GetRuns:
         else:
             video_file = video_files[0]
 
-            # Initialize Tkinter window
+        # Initialize Tkinter window
         root = tk.Tk()
         root.title("Run Steps Visualization")
 
@@ -464,14 +462,21 @@ class GetRuns:
         return frames
 
     def update_limb_boxes(self, run_index, actual_frame_number, limb_boxes, paws):
-        indexer = (run_index, slice(None), actual_frame_number)
+        index_levels = self.data.index.names
+        if 'RunStage' in index_levels:
+            # Index levels are ['Run', 'RunStage', 'FrameIdx']
+            indexer = (run_index, slice(None), actual_frame_number)
+        else:
+            # Index levels are ['Run', 'FrameIdx']
+            indexer = (run_index, actual_frame_number)
+
         for paw in paws:
             try:
                 SwSt = self.data.loc[indexer, (paw, 'SwSt')]
                 if isinstance(SwSt, pd.Series):
                     SwSt = SwSt.iloc[0]
                 # Handle NaN or missing values
-                if pd.isnull(SwSt):
+                if pd.isnull(SwSt) or SwSt == 'unknown':
                     SwSt = 'unknown'
                 else:
                     SwSt = int(SwSt)
@@ -866,7 +871,7 @@ class GetRuns:
             # Use find_blocks to find continuous blocks of touchdown frames
             blocks = utils.Utils().find_blocks(paw_touchdown_frames.index, gap_threshold=5, block_min_size=0)
 
-            # Find the block that ends at or just before first_touchdown_x4 for this paw #todo need something more sophisticated here, e.g. instead of looking for when there are all 4 paws in touchdown, look for 3 in touchdown and 1 (ie hindpaw) in swing and THEN look for the first touchdown of the forepaw preceding this
+            # Find the block that ends at or just before first_touchdown_x4 for this paw
             block_found = False
             for block in reversed(blocks):
                 # check if the block ends at or before first_touchdown_x4
@@ -1015,6 +1020,7 @@ class GetRuns:
                         any([self.run_starts[r] - block[0] <= buffer, self.run_starts[r] - block[-1] <= buffer]),
                         np.any([np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx')), np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx') - buffer)])):
                     #print(f"Tap block removed from run {r} at {block}")
+                    pass
                 else:
                     tap_blocks_L_final.append(block)
         if len(tap_blocks_R) > 0:
@@ -1025,6 +1031,7 @@ class GetRuns:
                                 np.in1d(list(range(block[0], block[1])),
                                         runback_idxs.get_level_values('FrameIdx') - buffer)])):
                     #print(f"Tap block removed from run {r} at {block}")
+                    pass
                 else:
                     tap_blocks_R_final.append(block)
 

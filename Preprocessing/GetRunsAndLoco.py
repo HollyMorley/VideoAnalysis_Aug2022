@@ -21,7 +21,7 @@ class GetRuns:
         self.model, self.label_encoders, self.feature_columns = self.load_model()
         self.trial_starts, self.trial_ends = [], []
         self.run_starts, self.run_ends_steps, self.run_ends, self.transitions, self.taps = [], [], [], [], []
-        self.buffer = 250
+        self.buffer = 125
 
         # Always load the raw data
         self.data = self.get_data()
@@ -747,9 +747,27 @@ class GetRuns:
         # Call update_frame with the delta value
         self.update_frame(delta=delta)
 
+    def check_run_starts(self, forward_data, forward_chunks):
+        valid_forward_chunks = []
+        for chunk in forward_chunks:
+            # Extract data for the current chunk
+            chunk_data = forward_data.loc[chunk[0]:chunk[-1]]
+            # Get the x-coordinate of Tail1
+            tail1_x = chunk_data.loc[:, ('Tail1', 'x')]
+            # Check if any Tail1 x-coordinate is between 0 and 30
+            if ((tail1_x >= 0) & (tail1_x <= 30)).any():
+                # Include this chunk as it meets the condition
+                valid_forward_chunks.append(chunk)
+            else:
+                # Exclude the chunk and optionally log this action
+                print(f"Excluding chunk {chunk} as Tail1 x-coordinate is not between 0 and 30.")
+        return valid_forward_chunks
+
     def check_post_runs(self, forward_data, forward_chunks):
-        post_transition_mask = forward_data.loc[:, ('Nose', 'x')] > 470
-        post_transition = forward_data[post_transition_mask]
+        post_transition_mask = forward_data.loc[:, ('Tail6', 'x')] > 470
+        forward_post_mask = forward_data.loc[:, ('Nose', 'x')] > forward_data.loc[:, ('Tail1', 'x')] # added this in 21/11/2024
+        mask = post_transition_mask & forward_post_mask
+        post_transition = forward_data[mask]
         first_transition = post_transition.index[0]
         # drop runs that occur after the first transition
         correct_forward_chunks = [chunk for chunk in forward_chunks if chunk[0] < first_transition]
@@ -769,7 +787,7 @@ class GetRuns:
             runback_mask = run_data.loc(axis=1)['Nose', 'x'] < run_data.loc(axis=1)['Tail1', 'x']
             runback_data = run_data[runback_mask]
 
-            # check if mice step off the platform between this run and the next
+            # check if mice step off the platform between this run and the next # todo they dont have to step off??
             if len(runback_data) > 0:
                 step_off_mask = run_data.loc(axis=1)['Tail1', 'x'] < 0
                 step_off_data = run_data[step_off_mask]
@@ -801,13 +819,16 @@ class GetRuns:
         facing_forward = run_data[facing_forward_mask]
         forward_chunks = utils.Utils().find_blocks(facing_forward.index, gap_threshold=10, block_min_size=25)
         if len(forward_chunks) > 1:
-            forward_chunks = self.check_post_runs(facing_forward, forward_chunks)
+            # check all forward runs contain data from start of run
+            forward_chunks = self.check_run_starts(facing_forward, forward_chunks)
             if len(forward_chunks) > 1:
-                runbacks, forward_chunks = self.check_run_backs(run_data, forward_chunks)
+                forward_chunks = self.check_post_runs(facing_forward, forward_chunks)
                 if len(forward_chunks) > 1:
-                    raise ValueError("More than one run detected in a trial")
-            else:
-                runbacks = []
+                    runbacks, forward_chunks = self.check_run_backs(run_data, forward_chunks)
+                    if len(forward_chunks) > 1:
+                        raise ValueError("More than one run detected in a trial")
+                else:
+                    runbacks = []
         elif len(forward_chunks) == 0:
             raise ValueError("No runs detected in a trial")
         else:
@@ -824,8 +845,8 @@ class GetRuns:
         for r in runs:
             try:
                 step_data, limb_data, paw_touchdown = self.get_run_data(r)
-                self.find_run_start(r, paw_touchdown)
-                self.find_run_end(r, paw_touchdown)
+                self.find_run_start(r, paw_touchdown, limb_data)
+                self.find_run_end(r, paw_touchdown, limb_data)
                 self.find_transition(r, paw_touchdown, limb_data)
                 self.find_taps(r, limb_data)
             except Exception as e:
@@ -848,18 +869,18 @@ class GetRuns:
 
         return step_data, limb_data, paw_touchdown
 
-    def find_run_start(self, r, paw_touchdown):
+    def find_run_start(self, r, paw_touchdown, limb_data):
         paw_labels = paw_touchdown.columns
-        first_touchdown_x4 = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first')
+        first_touchdown_x4, paw_x4, valid_touchdown = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first', limb_data=limb_data)
 
         # Find the first touchdown frame for each paw leading up to first_touchdown_x4
         paw_first_touchdowns = {}
         for paw in paw_labels:
             # Get the touchdown Series for the paw
-            touchdown_series = paw_touchdown[paw]
+            touchdown_series = valid_touchdown[paw]
 
             # Extract frames where the paw is touching down before first_touchdown_x4
-            paw_touchdown_frames = touchdown_series[touchdown_series.index < first_touchdown_x4]
+            paw_touchdown_frames = touchdown_series[touchdown_series.index < first_touchdown_x4 + 1]
             paw_touchdown_frames = paw_touchdown_frames[
                 paw_touchdown_frames]  # Only frames where the paw is touching down
 
@@ -871,13 +892,16 @@ class GetRuns:
             # Use find_blocks to find continuous blocks of touchdown frames
             blocks = utils.Utils().find_blocks(paw_touchdown_frames.index, gap_threshold=5, block_min_size=0)
 
+            if len(blocks) == 0 and paw_x4 == paw:
+                continue
+
             # Find the block that ends at or just before first_touchdown_x4 for this paw
             block_found = False
             for block in reversed(blocks):
                 # check if the block ends at or before first_touchdown_x4
                 if block[0] <= first_touchdown_x4:
                     # Also check if hindpaw has touched down before this block
-                    hindpaw_touchdowns = paw_touchdown[['HindpawR', 'HindpawL']]
+                    hindpaw_touchdowns = valid_touchdown[['HindpawR', 'HindpawL']]
                     hindpaw_preceding_touchdown = hindpaw_touchdowns[hindpaw_touchdowns.index < block[0]]
                     hind_paw_preceding_present = hindpaw_preceding_touchdown.any(axis=0).any()
                     if hind_paw_preceding_present and len(blocks) > 1:
@@ -910,11 +934,11 @@ class GetRuns:
         else:
             raise ValueError(f"No valid stepping sequences found leading up to the all-paws touchdown in run {r}")
 
-    def find_run_end(self, r, paw_touchdown):
+    def find_run_end(self, r, paw_touchdown, limb_data):
         paw_labels = paw_touchdown.columns
 
         # find frame where first paw touches down for the last time (end of stance)
-        last_touchdown_x4 = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='last')
+        last_touchdown_x4, valid_touchdown = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='last', limb_data=limb_data)
 
         # find frame where mouse exits frame
         tail_data = self.data.loc(axis=0)[r, last_touchdown_x4:].loc(axis=1)[['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7',
@@ -947,9 +971,22 @@ class GetRuns:
         limb_x = limb_data_snippet.loc(axis=1)[:, 'x'].droplevel('coords', axis=1)
         limb_x = limb_x.drop(columns=['ForepawKneeR', 'ForepawKneeL', 'ForepawAnkleR', 'ForepawAnkleL'])
         limb_x.columns = pd.MultiIndex.from_tuples([(col, col[-1]) for col in limb_x.columns], names=['bodyparts', 'side'])
-        limb_x_mean = limb_x.groupby(axis=1,level='side').mean()
 
-        post_transition_mask = limb_x_mean > 470
+        # interpolate limb_x
+        limb_x_interp = limb_x.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
+
+        limb_x_mean = limb_x_interp.groupby(axis=1,level='side').mean()
+
+        # # interpolate and smooth limb_x_mean
+        # limb_x_mean_interp = limb_x_mean.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
+        # #smooth
+        # limb_x_mean_interp_smooth = gaussian_filter1d(limb_x_mean_interp, sigma=1, axis=0, mode='nearest')
+        # # restore index
+        # limb_x_mean_smooth = pd.DataFrame(limb_x_mean_interp_smooth, index=limb_x_mean_interp.index)
+
+
+        post_transition_mask = np.logical_and(limb_x_mean > 470, limb_x_mean.shift(-1) > 470)
+        #post_transition_mask = limb_x_mean_interp > 470
         # check 'L' and 'ForepawL' are the first column and 'R' and 'ForepawR' are the second column
         if not np.logical_and(post_transition_mask.columns[0] == 'L', paw_touchdown_snippet.columns[0] == 'ForepawL'):
             raise ValueError("Columns are not in the expected order!!")
@@ -960,14 +997,41 @@ class GetRuns:
         transition_frame = paw_touchdown_snippet[transition_mask].index[0]
         transition_frame_step = paw_touchdown_snippet[transition_step_mask].index[0]
 
+        # Check which paw is initiating the transition by checking if it is in stance for the next 5 frames
         transition_paw_mask = np.all(paw_touchdown_snippet[transition_mask].iloc[1:5] == True, axis=0)
         # check paw continues in stance as other paw may still be in its stance phase
         transition_paws = paw_touchdown_snippet[transition_mask].iloc[0][transition_paw_mask].index
         if len(transition_paws) > 1:
-            raise ValueError("More than one paw detected in transition frame")
+            if transition_frame == transition_frame_step:
+                position = np.where(transition_step_mask)[0][0]
+                paw_mask = transition_step_mask[position]
+                transition_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[paw_mask].index[0]
+                other_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[~paw_mask].index[0]
+                self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
+            else:
+                # first check if one slid and the other stepped
+                if len(transition_paws) == 2:
+                    position = np.where(transition_step_mask)[0][0]
+                    paw_mask = transition_step_mask[position]
+                    transition_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[paw_mask].index[0]
+                    other_paw = paw_touchdown_snippet.loc[transition_frame].loc[~paw_mask].index[0]
+                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
+                else:
+                    raise ValueError("More than one paw detected in transition frame")
+
         elif len(transition_paws) == 0:
-            # raise ValueError("No paw detected in transition frame")
-            transition_paw = []
+            # check if transition_frame is a slide by checking if the paw was in stance for the last 10 frames
+            if transition_frame != transition_frame_step:
+                slide_mask = np.all(paw_touchdown_snippet.loc[:transition_frame].iloc[-10:] == True, axis=0)
+                slide_paws = paw_touchdown_snippet.columns[slide_mask]
+                if len(slide_paws) == 1:
+                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{slide_paws[0]}_slid"
+                else:
+                    raise ValueError("No or multiple paws detected during slide resolution")
+
+            else:
+                transition_paw = []
+                print(f"No paw detected in transition frame for run {r}")
         else:
             transition_paw = transition_paws[0]
 
@@ -1105,36 +1169,78 @@ class GetRuns:
 
 
     ################################################# Helper functions #################################################
-    def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time):
-        # check all touchdown during running phase
-        # For each paw, find the first frame where touchdown occurs
+    def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time, limb_data):
+        # Check all touchdown during running phase
         touchdownx4 = {}
+        valid_touchdown = pd.DataFrame(columns=paw_touchdown.columns, index=paw_touchdown.index)
         for paw in paw_labels:
             touchdown_series = paw_touchdown[paw]
             if touchdown_series.any():
+                # Frames where the paw is in touchdown
                 timed_touchdown_frame_mask = touchdown_series == True
-                timed_touchdown_frame = []
-                if time == 'first':
-                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[0]
-                elif time == 'last':
-                    timed_touchdown_frame = touchdown_series[timed_touchdown_frame_mask].index[-1]
-                elif time == 'transition':
-                    pass #todo for now
-                touchdownx4[paw] = timed_touchdown_frame
+
+                # Get paw prefix and side
+                if 'Forepaw' in paw:
+                    paw_prefix = 'Forepaw'
+                elif 'Hindpaw' in paw:
+                    paw_prefix = 'Hindpaw'
+                else:
+                    raise ValueError(f"Unknown paw label: {paw}")
+
+                side = paw[-1]  # 'R' or 'L'
+
+                # Get markers for this paw (only toe and knuckle markers)
+                markers = [col for col in limb_data.columns
+                           if col[0].startswith(paw_prefix) and col[0].endswith(side)
+                           and ('Toe' in col[0] or 'Knuckle' in col[0])]
+
+                # Get x positions for the paw's markers
+                limb_positions = limb_data.loc[:, markers]
+
+                # Calculate the mean x and z position for the paw
+                x = limb_positions.xs('x', level='coords', axis=1)
+                z = limb_positions.xs('z', level='coords', axis=1)
+
+                x_interp = x.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
+                z_interp = z.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
+
+                x_mean = x_interp.mean(axis=1)
+                z_mean = z_interp.mean(axis=1)
+
+                # Further filter touchdown_series to only include frames where x_mean > 0
+                x_condition = x_mean > 1 # changed 5/12/24 to fit 243 06 run 22 better
+                z_condition = z_mean < 2
+
+                # Combine with touchdown_series
+                valid_touchdown_series = touchdown_series[timed_touchdown_frame_mask & x_condition & z_condition]
+                valid_touchdown[paw].loc(axis=0)[valid_touchdown_series.index] = valid_touchdown_series
+
+                # Now find the first or last valid touchdown frame
+                if valid_touchdown_series.empty:
+                    raise ValueError(f"No valid touchdown frames found for {paw} in run {r}")
+                else:
+                    if time == 'first':
+                        # check
+                        timed_touchdown_frame = valid_touchdown_series.index[0]
+                    elif time == 'last':
+                        timed_touchdown_frame = valid_touchdown_series.index[-1]
+                    touchdownx4[paw] = timed_touchdown_frame
             else:
                 raise ValueError(f"No touchdown detected for {paw} in run {r}")
+
+        # fill nans in valid_touchdown with False
+        valid_touchdown.fillna(False, inplace=True)
+
         if time == 'first':
             # Find last paw to touch down for first time
             timed_touchdown = max(touchdownx4.values())
+            stepping_paw = [paw for paw, frame in touchdownx4.items() if frame == timed_touchdown][0]
+            return timed_touchdown, stepping_paw, valid_touchdown
+
         elif time == 'last':
             # Find first paw to touch down for last time
             timed_touchdown = min(touchdownx4.values())
-
-        # if self.data.loc[(r, timed_touchdown + 1),'running'] == False:
-        #     # warn that first touchdown is not during running phase
-        #     print(f"First touchdown for all paws is not during running phase in run {r}")
-
-        return timed_touchdown
+            return timed_touchdown, valid_touchdown
 
     def detect_paw_touchdown(self, step_data, limb_data, paw_labels, x_threshold):
         """
@@ -1236,7 +1342,8 @@ class GetRuns:
             raise ValueError("Experiment condition not found in the file path.")
 
         # Create the directory to save images
-        save_dir = os.path.join('check_runstages', f"{experiment_condition}\\{run_stage}\\_{mouse_id}")
+        base_dir = os.path.join(paths['filtereddata_folder'], 'LimbStuff\\check_runstages')
+        save_dir = os.path.join(base_dir, f"{experiment_condition}\\{run_stage}\\_{mouse_id}")
         os.makedirs(save_dir, exist_ok=True)
 
         # Function to save the first frame for a single run

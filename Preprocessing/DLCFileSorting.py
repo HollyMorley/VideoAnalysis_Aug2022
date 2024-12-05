@@ -4,8 +4,13 @@ import shutil
 
 from Helpers.Config_23 import *
 
-dlc_dir = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2"  # Adjust if needed
-dlc_dest = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24"
+# Specify directories for each camera type
+dirs = {
+    'side': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round3",
+    'front': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2",
+    'overhead': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2"
+}
+dlc_dest = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round5_Dec24"
 
 MouseIDs = micestuff['mice_IDs']
 
@@ -17,7 +22,7 @@ def ensure_dir_exists(path):
 
 
 # Function to find and copy files recursively based on exp_cats and MouseIDs
-def copy_files_recursive(src_dir, dest_dir, current_dict, current_path, MouseIDs, overwrite):
+def copy_files_recursive(dest_dir, current_dict, current_path, MouseIDs, overwrite):
     if isinstance(current_dict, dict):
         # Check if we are at the level where 'A' and 'B' keys are present
         if 'A' in current_dict and 'B' in current_dict:
@@ -27,7 +32,7 @@ def copy_files_recursive(src_dir, dest_dir, current_dict, current_path, MouseIDs
                     for date in current_dict[mouse_group]:
                         try:
                             print(f'Processing: {current_path}, {mouse_group}, {date}')
-                            copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, date, MouseIDs,
+                            copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseIDs,
                                                        overwrite)
                         except:
                             print(f"No file found for {current_path}, {mouse_group}, {date}")
@@ -35,25 +40,29 @@ def copy_files_recursive(src_dir, dest_dir, current_dict, current_path, MouseIDs
             # Continue recursion if we haven't reached 'A'/'B' level yet
             for key, value in current_dict.items():
                 new_path = os.path.join(current_path, key)
-                copy_files_recursive(src_dir, dest_dir, value, new_path, MouseIDs, overwrite)
+                copy_files_recursive(dest_dir, value, new_path, MouseIDs, overwrite)
     else:
         # If current_dict is not a dict, something is wrong, as we should not reach here
         raise ValueError("Unexpected structure in experiment categories.")
 
 
 # Function to find and copy files for a specific mouse group and date, stitching if needed
-def copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, date, MouseIDs, overwrite):
+def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseIDs, overwrite):
     final_dest_dir = os.path.join(dest_dir, current_path)  # Keep experiment structure, but no A/B in folder path
     ensure_dir_exists(final_dest_dir)
 
+    current_src_dir = {'side': [], 'front': [], 'overhead': []}
+    for cam, cam_dir in dirs.items():
+        current_src_dir[cam] = os.path.join(cam_dir, date)
+
     file_found = False
     for mouse_id in MouseIDs[mouse_group]:
-        current_src_dir = os.path.join(src_dir, date)
-
         # Gather all files for this mouse_id on this date, ignoring directories (e.g., calibration)
-        relevant_files = [file_name for file_name in os.listdir(current_src_dir)
-                          if file_name.endswith('.h5') and f"FAA-{mouse_id}" in file_name and os.path.isfile(
-                os.path.join(current_src_dir, file_name))]
+        relevant_files = []
+        for cam, cam_dir in current_src_dir.items():
+            relevant_files.extend([file_name for file_name in os.listdir(cam_dir)
+                                   if cam in file_name and file_name.endswith('.h5') and f"FAA-{mouse_id}" in file_name and os.path.isfile(
+                    os.path.join(cam_dir, file_name))])
 
         # Organize them by segments ('', '_2', '_3', etc.)
         relevant_files.sort()  # This will ensure '' comes first, followed by '_2', '_3'
@@ -77,7 +86,7 @@ def copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, dat
                     # stitch all available files for the current camera
                     cam_dfs = []
                     for file_name in cam_files:
-                        src_file = os.path.join(current_src_dir, file_name)
+                        src_file = os.path.join(current_src_dir[cam], file_name)
                         df = pd.read_hdf(src_file)
                         cam_dfs.append(df)
                     stitched_dfs[cam] = pd.concat(cam_dfs, ignore_index=True)
@@ -90,10 +99,14 @@ def copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, dat
                 else:
                     print(f'Skipped stitching {cam_files} (already exists in {final_dest_dir})')
                     file_found = True
+            # check that all three files in stitched_dfs have the same number of rows
+            if not all([len(stitched_dfs[cam]) == len(stitched_dfs['side']) for cam in stitched_dfs.keys()]):
+                raise ValueError(f"Error: Files have different number of rows for {mouse_id} on {date}")
         else:
             # Only 3 files (one each for side, front and overhead), no need to stitch. Just copy the 3 files.
-            for file_name in relevant_files:
-                src_file = os.path.join(current_src_dir, file_name)
+            for cam in current_src_dir.keys():
+                file_name = [file_name for file_name in relevant_files if cam in file_name][0]
+                src_file = os.path.join(current_src_dir[cam], file_name)
                 dest_file = os.path.join(final_dest_dir, file_name)
                 if overwrite or not os.path.exists(dest_file):
                     print(f'Copying {src_file} to {dest_file}')
@@ -102,6 +115,9 @@ def copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, dat
                 else:
                     print(f'Skipped copying {file_name} (already exists in {final_dest_dir})')
                     file_found = True
+            # check that all three files have the same number of rows
+            if not all([len(pd.read_hdf(os.path.join(final_dest_dir, file_name))) == len(pd.read_hdf(os.path.join(final_dest_dir, relevant_files[0]))) for file_name in relevant_files]):
+                raise ValueError(f"Error: Files have different number of rows for {mouse_id} on {date}")
     if not file_found:
         print(f"No files found for {mouse_group} on {date}")
 
@@ -109,7 +125,6 @@ def copy_files_for_mouse_group(src_dir, dest_dir, current_path, mouse_group, dat
 def manual_changes():
     # Define the paths for destination (where modifications occur) and source (where new files are copied from)
     highlow_dir = os.path.join(dlc_dest, 'APAChar_HighLow', 'Extended')
-    source_dir = dlc_dir  # This is the directory where the un-copied files are
 
     # Define mouse ID for the changes
     mouse_id = '1035243'
@@ -146,51 +161,58 @@ def manual_changes():
                     shutil.move(src_file, dst_file)
 
         elif change['action'] == 'copy':
-            # Copy files from dlc_dir (source) to the appropriate destination day
-            src_day = os.path.join(source_dir, change['src_day'])  # Source is dlc_dir with the date
-            dst_day = os.path.join(highlow_dir, change['dst_day'])  # Destination is within dlc_dest
+            for cam, source_dir_cam in dirs.items():
+                # Copy files from dlc_dir (source) to the appropriate destination day
+                src_day = os.path.join(source_dir_cam, change['src_day'])  # Source is dlc_dir with the date
+                dst_day = os.path.join(highlow_dir, change['dst_day'])  # Destination is within dlc_dest
 
-            # Ensure destination directory exists
-            ensure_dir_exists(dst_day)
+                # Ensure destination directory exists
+                ensure_dir_exists(dst_day)
 
-            for file in os.listdir(src_day):
-                if f"{change['mouse_id']}_{change['date']}" in file:
-                    src_file = os.path.join(src_day, file)
-                    dst_file = os.path.join(dst_day, file)
-                    print(f"Copying {src_file} to {dst_file}")
-                    shutil.copy(src_file, dst_file)
+                for file in os.listdir(src_day):
+                    if f"{change['mouse_id']}_{change['date']}" in file:
+                        src_file = os.path.join(src_day, file)
+                        dst_file = os.path.join(dst_day, file)
+                        print(f"Copying {src_file} to {dst_file}")
+                        shutil.copy(src_file, dst_file)
 
 
 def final_checks():
-    # List all directories in the source folder (dlc_dir)
-    all_folders = os.listdir(dlc_dir)
+    # Check each camera's directory separately
+    excluded_folders = {}
 
-    # Flatten the exp_cats dictionary to get all the dates
-    included_dates = []
-    for category, subcats in exp_cats.items():
-        for subcat, phases in subcats.items():
-            for phase, days in phases.items():
-                if isinstance(days, dict):
-                    for day, mice_dates in days.items():
-                        for mouse_group, dates in mice_dates.items():
-                            included_dates.extend(dates)
+    for cam, cam_dir in dirs.items():
+        all_folders = os.listdir(cam_dir)
 
-    # Exclude manually handled days
-    manual_dates = ['20230329', '20230330']
+        # Flatten the exp_cats dictionary to get all the dates
+        included_dates = []
+        for category, subcats in exp_cats.items():
+            for subcat, phases in subcats.items():
+                for phase, days in phases.items():
+                    if isinstance(days, dict):
+                        for day, mice_dates in days.items():
+                            for mouse_group, dates in mice_dates.items():
+                                included_dates.extend(dates)
 
-    # Check which folders are not included in exp_cats or manually handled
-    excluded_folders = [folder for folder in all_folders if folder not in included_dates and folder not in manual_dates]
+        # Exclude manually handled days
+        manual_dates = ['20230329', '20230330']
 
-    # Print the excluded folders
-    if excluded_folders:
-        print(f"The following folders are not included in the experiment categories or manual changes: {excluded_folders}")
-    else:
-        print("All folders are accounted for in exp_cats or manual changes.")
+        # Check which folders are not included in exp_cats or manually handled
+        excluded_folders[cam] = [
+            folder for folder in all_folders if folder not in included_dates and folder not in manual_dates
+        ]
+
+    # Print the excluded folders for each camera
+    for cam, folders in excluded_folders.items():
+        if folders:
+            print(f"{cam.capitalize()} camera: The following folders are not included in the experiment categories or manual changes: {folders}")
+        else:
+            print(f"All {cam} camera folders are accounted for in exp_cats or manual changes.")
 
 
 # Example usage
 overwrite = False  # Set this to True if you want to overwrite files
-copy_files_recursive(dlc_dir, dlc_dest, exp_cats, '', MouseIDs, overwrite)
+copy_files_recursive(dlc_dest, exp_cats, '', MouseIDs, overwrite)
 
 # Perform manual changes
 manual_changes()

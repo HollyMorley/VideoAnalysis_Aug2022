@@ -1498,14 +1498,22 @@ def main():
     # Get all data
     #GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
+
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
+                                   overwrite=False).get_dirs()
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2',
+                          overwrite=False).get_dirs()
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3',
+                          overwrite=False).get_dirs()
+
     # print("Analysing LowHigh...")
     # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
     # print("Analysing LowMid...")
     # GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
-    print("Analysing HighLow...")
-    GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
-    print("Analysing PerceptionTest...")
-    GetDirsFromConditions(exp='PerceptionTest', overwrite=False).get_dirs()
+    # print("Analysing HighLow...")
+    # GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
+    # print("Analysing PerceptionTest...")
+    # GetDirsFromConditions(exp='PerceptionTest', overwrite=False).get_dirs()
 
     # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', day='Day2', overwrite=False).get_dirs()
 

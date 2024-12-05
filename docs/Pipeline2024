@@ -1,0 +1,92 @@
+############################################################################################################################################
+                                                   Labelling & DLC
+############################################################################################################################################
+
+1. Create DLC project for 'Side', 'Front' and 'Overhead' views
+
+2. Run Labelling/MultiClassLabeling.py
+    - 'Extract Frames from Videos'
+        - Select a video file and extract frames for labelling
+    - 'Calibrate Camera Positions'
+        - Select a video file and label the calibration points for camera calibration
+        - Gives the option to load the 'default' calibration points
+        - N.B. label 'Door' in its down position
+    - 'Label Frames'
+        - Select a calibration file (ensures this step can only been done once calibration is completed) and label the bodyparts for the extracted frames in all 3 camera views
+        - When a label is added in one view, projection lines are displayed in the other views to aid labelling (depending on the combination of 'Labelling view' and 'Projection view' selected)
+        - Option to 'Optimize Calibration' based on selected frames with labels. This iteratively finds the calibration coordinates with the lowest reprojection error in the labeled frames. Calibration coordinates are
+            kept static in 'Side' and adjusted in 'Front' and 'Overhead' views to keep them as close to truth as possible.
+        - Controls:
+            - Right-click to add a label
+            - Left-click to move a label
+            - Right-click + shift to delete a label
+            - Left-click + tab to get label name
+    - 'Replace Calibration':
+        - Replaces the optimized calibration coordinates with the original labeled coordinates for all labeled video files and also adjusts some basic formatting to keep compliance with the DLC format
+
+3. Add data to DLC projects
+    - Add the relevant videos to each DLC project
+    - Transfer the coordinate files from manual labelling location to the DLC project location under 'labeled-data'
+    - In DLC gui, select 'label' to check over manual labels to ensure they have imported correctly and to remove where calibration labels are obscured by the bodyparts
+    - 'Check labels' with skeleton (set in config file) to ensure all labels are present and correct
+    - If adding to already existing DLC project, 'merge' the new data with the existing data
+    - 'Create training dataset' to create the training dataset for the DLC model
+
+4. Train the DLC models
+    - I have set training fraction to 1.0 in the config file so that all data is used for training
+    - Side video is very large so set 'max_input_size' to 1920 in the pose_cfg file
+
+5. Analyse videos and transfer to main computer
+
+6. Evaluate the DLC models
+    - Run View_DLC_Labels.py to view labels imposed on the video
+
+7. Optional: Extract bad frames and load data into MultiClassLabeling.py to re-label
+    - Run 'DLC_evaluation' and go through video frame by frame to identify bad frames and press 'Extract' to save the frame for re-labelling
+    - Re-run steps 2-6
+
+8. Optional: Compare two models
+    - Run 'CompareDLCModels.py' to compare the labels of two models on the same video in a frame range.
+
+
+############################################################################################################################################
+                                                   Preprocessing
+############################################################################################################################################
+
+1. Run Preprocessing/DLCFileSorting.py
+    - Sorts data files into folders organised by experimental condition
+    - Stitches together any broken up recordings into single files
+    - Moves the odd case where one mouse had to be recorded separately to the correct folder
+
+-------------------------------------------------------------------------------------------------------------------------------------------
+  Mapping to 3D space
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+2. Run Preprocessing/MappingRealWorld_V3.py
+    - N.B. need to specify the experimental parameters in the script
+    - Maps the 2D DLC coordinates to 3D space and saves as a '_mapped3D.h5' file
+    - Also save calibration data and visualisation of the optimisations made to the mapping (in Helpers/OptimizeCalibration.py)
+
+-------------------------------------------------------------------------------------------------------------------------------------------
+  Step Detection
+-------------------------------------------------------------------------------------------------------------------------------------------
+N.B. don't need to re-run this section if re-run the previous steps, though can do incase the tracking significantly changes
+
+3. Preprocessing/GaitLabelling.py
+    - Uses a specified selection (in the script) of extracted frames from MultiCamLabelling.py
+    - Label each frame as 'stance', 'swing' or 'unidentified' for each limb
+
+4. Preprocessing/GaitFeatureExtraction.py
+    - Extracts features from the 3D data extracted frames
+
+5. Preprocessing/GaitClassification.py
+    - Creates a classifier to classify data as 'stance' or 'swing' in the next steps, based on the features extracted from the data
+
+-------------------------------------------------------------------------------------------------------------------------------------------
+  Categorisation of trials
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+6. GetRunsAndLoco.py
+    - Trims data into trials (door open -> door close)
+    - Classifies each frame into 'TrialStart', 'RunStart', 'Transition', 'RunEnd', 'TrialEnd' and 'RunBack'
+    - Classifies each limb into 'stance' or 'swing' for each frame based on the classifier created in GaitClassification.py

@@ -6,7 +6,7 @@ import numpy as np
 vidstuff = {
     'cams': ['side','front','overhead'],
     'scorers': {
-        'side': "DLC_resnet50_DLC_DualBeltAug2shuffle1_1000000",
+        'side': "DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000", #todo changed 03/12/24 from 1000000
         'overhead': "DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000",
         'front': "DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000"
     }
@@ -157,10 +157,10 @@ settings = {
 #         'plotting_destfolder': r'M:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Nov23'
 # }
 paths = {
-        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round4_Oct24',
+        'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round5_Dec24', #todo changed 03/12/24 Round4_Oct24
         'plotting_destfolder': r'H:\Dual-belt_APAs\Plots\Mar24',
         'video_folder': r"X:\hmorley\Dual-belt_APAs\videos\Round_3",
-        'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles" #todo maybe change this to Margrie ceph dir
+        'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles"
 }
 
 micestuff = {

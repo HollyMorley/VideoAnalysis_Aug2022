@@ -90,3 +90,10 @@ N.B. don't need to re-run this section if re-run the previous steps, though can 
     - Trims data into trials (door open -> door close)
     - Classifies each frame into 'TrialStart', 'RunStart', 'Transition', 'RunEnd', 'TrialEnd' and 'RunBack'
     - Classifies each limb into 'stance' or 'swing' for each frame based on the classifier created in GaitClassification.py
+
+
+ NEXT STEPS:
+ - Identify runs where mouse sits on the belt
+ - Cross-check number of runs in each file with notes
+ - Quantify quality of run detection by randomly manually labelling runstart and transition frames/paws and checking against my data
+    - This can also show the accuracy of my step detection, or I also extract/label non start/transition frames

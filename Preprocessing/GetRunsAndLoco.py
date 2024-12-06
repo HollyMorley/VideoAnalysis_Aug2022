@@ -829,6 +829,8 @@ class GetRuns:
                         raise ValueError("More than one run detected in a trial")
                 else:
                     runbacks = []
+            else:
+                runbacks = []
         elif len(forward_chunks) == 0:
             raise ValueError("No runs detected in a trial")
         else:
@@ -1021,14 +1023,25 @@ class GetRuns:
 
         elif len(transition_paws) == 0:
             # check if transition_frame is a slide by checking if the paw was in stance for the last 10 frames
-            if transition_frame != transition_frame_step:
+            if transition_frame != transition_frame_step: # todo - added in this step, can remove again 5/12/24
                 slide_mask = np.all(paw_touchdown_snippet.loc[:transition_frame].iloc[-10:] == True, axis=0)
                 slide_paws = paw_touchdown_snippet.columns[slide_mask]
                 if len(slide_paws) == 1:
-                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{slide_paws[0]}_slid"
+                    transition_paw = slide_paws[0]
+                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid" # todo NOW CONFIRM THE TRANSITION PAW!!!
+                    # transition_paw_mask = paw_touchdown_snippet.loc[transition_frame_step]
+                    # transition_paws = paw_touchdown_snippet.columns[transition_paw_mask]
+                    # if len(transition_paws) == 1:
+                    #     transition_paw_step = transition_paws[0]
+                    #     if transition_paw_step == slide_paws[0]:
+                    #         raise ValueError("Slide paw is the same as the stepping transition paw")
+                    # if len(transition_paws) == 2:
+                    #     # other paw to sliding paw
+                    #     transition_paw = [paw for paw in transition_paws if paw != slide_paws[0]][0]
+                    # else:
+                    #     raise ValueError("No or multiple paws detected during slide resolution")
                 else:
                     raise ValueError("No or multiple paws detected during slide resolution")
-
             else:
                 transition_paw = []
                 print(f"No paw detected in transition frame for run {r}")

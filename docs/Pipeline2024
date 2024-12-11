@@ -93,6 +93,7 @@ N.B. don't need to re-run this section if re-run the previous steps, though can 
 
 
  NEXT STEPS:
+ - Manage cases where door goes down a little but not end of trial, just jerry managing the mouse. Is there a way if not manual..?
  - Identify runs where mouse sits on the belt
  - Cross-check number of runs in each file with notes
  - Quantify quality of run detection by randomly manually labelling runstart and transition frames/paws and checking against my data

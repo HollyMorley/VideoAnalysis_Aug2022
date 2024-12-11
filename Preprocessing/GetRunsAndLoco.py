@@ -14,10 +14,11 @@ import time
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Preprocessing import GaitFeatureExtraction as gfe
+from Helpers import ManualRunAdjustment as mra
 
 class GetRuns:
-    def __init__(self, file):
-        self.file = file
+    def __init__(self, file, mouseID, date):
+        self.file, self.mouseID, self.date = file, mouseID, date
         self.model, self.label_encoders, self.feature_columns = self.load_model()
         self.trial_starts, self.trial_ends = [], []
         self.run_starts, self.run_ends_steps, self.run_ends, self.transitions, self.taps = [], [], [], [], []
@@ -127,6 +128,7 @@ class GetRuns:
         self.find_steps()
         self.index_by_run()
         print("Runs extracted successfully")
+        print("Extracted runs: ", len(self.trial_starts))
         self.find_run_stages()
         self.save_data()
 
@@ -191,7 +193,15 @@ class GetRuns:
         if sum((door_close - door_open) < 0) > 0:
             raise ValueError("Miscalculated trial start and end times!!!")
 
-        return door_open, door_close
+        # Replace dropped runs with placeholders
+        if self.date in mra.runs_to_drop and self.mouseID in mra.runs_to_drop[self.date]:
+            runs_to_drop = mra.runs_to_drop[self.date][self.mouseID]
+            for idx in runs_to_drop:
+                if 0 <= idx < len(door_open):
+                    door_open[idx] = None
+                    door_close[idx] = None
+
+        return np.array(door_open), np.array(door_close)
 
     def find_forward_facing_bool(self, data, xthreshold, zthreshold):
         # filter by when mouse facing forward
@@ -282,7 +292,7 @@ class GetRuns:
             else:
                 raise ValueError("More than one run detected in a trial (in find_steps)")
         except Exception as e:
-            print(f"Error processing run {r}: {e}")
+            print(f"Error processing trial at run {r}: {e}")
             return pd.DataFrame()
 
     def show_steps_in_videoframes(self, view='Side'):
@@ -852,7 +862,7 @@ class GetRuns:
                 self.find_transition(r, paw_touchdown, limb_data)
                 self.find_taps(r, limb_data)
             except Exception as e:
-                print(f"Error processing run {r}: {e}")
+                print(f"Error processing runstages at run {r}: {e}")
         self.create_runstage_index()
         self.plot_run_stage_frames('Transition', 'Side')
         self.plot_run_stage_frames('RunStart', 'Side')
@@ -1435,11 +1445,12 @@ class GetAllFiles:
             mouseID = match.group(1)
             pattern = "*%s*_Runs.h5" % mouseID
             dir = os.path.dirname(files[j])
+            date = files[j].split(os.sep)[-1].split('_')[1]
 
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
                 print(f"###############################################################"
                       f"\nFinding runs and extracting gait for {mouseID}...\n###############################################################")
-                get_runs = GetRuns(files[j])
+                get_runs = GetRuns(files[j], mouseID, date)
                 get_runs.get_runs()
             else:
                 print(f"Data for {mouseID} already exists. Skipping...")

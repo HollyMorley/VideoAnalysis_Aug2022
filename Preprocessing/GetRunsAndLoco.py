@@ -184,16 +184,8 @@ class GetRuns:
         if door_close[-1] < door_open[-1]:
             door_close.append(self.data.index[-1])
 
-        # sort and convert to np array
-        door_open = np.sort(np.array(door_open))
-        door_close = np.sort(np.array(door_close))
+        door_open, door_close = np.sort(np.array(door_open)), np.sort(np.array(door_close))
 
-        if len(door_open) != len(door_close):
-            raise ValueError("Number of trial starts and ends do not match!!!")
-        if sum((door_close - door_open) < 0) > 0:
-            raise ValueError("Miscalculated trial start and end times!!!")
-
-        # Replace dropped runs with placeholders
         if self.date in mra.runs_to_drop and self.mouseID in mra.runs_to_drop[self.date]:
             runs_to_drop = mra.runs_to_drop[self.date][self.mouseID]
             for idx in runs_to_drop:
@@ -201,7 +193,11 @@ class GetRuns:
                     door_open[idx] = None
                     door_close[idx] = None
 
-        return np.array(door_open), np.array(door_close)
+        # # Filter out None values for downstream processes, if needed
+        # valid_door_open = [frame for frame in door_open if frame is not None]
+        # valid_door_close = [frame for frame in door_close if frame is not None]
+
+        return door_open, door_close
 
     def find_forward_facing_bool(self, data, xthreshold, zthreshold):
         # filter by when mouse facing forward
@@ -230,17 +226,22 @@ class GetRuns:
         return mouse_on_belt_index
 
     def index_by_run(self):
-        # create multiindex for self.data with run number as level 0 and frame number as level 1
         run_idx = []
+        frame_idx = []
+
         for r, (start, end) in enumerate(zip(self.trial_starts, self.trial_ends)):
+            if start is None or end is None:  # Skip missing runs
+                print(f"Skipping run {r} due to missing data: start={start}, end={end}")
+                continue
+
             run_idx.extend([r] * (end - start + 1))
-        frame_idx = np.concatenate([np.arange(start, end + 1) for start, end in zip(self.trial_starts, self.trial_ends)])
+            frame_idx.extend(range(start, end + 1))
+
+        # Create MultiIndex only for valid runs
         new_data_idx = pd.MultiIndex.from_arrays([run_idx, frame_idx], names=['Run', 'FrameIdx'])
         data_snippet = self.data.loc[frame_idx]
         data_snippet.index = new_data_idx
         self.data = data_snippet
-
-
 
     #-------------------------------------------------------------------------------------------------------------------
     #-------------------------------------------- Finding steps --------------------------------------------------------
@@ -279,6 +280,11 @@ class GetRuns:
             # Create a copy of the data relevant to this trial
             trial_start = self.trial_starts[r]
             trial_end = self.trial_ends[r]
+            if trial_start is None or trial_end is None:
+                print(f"Skipping run {r} due to missing data: start={trial_start}, end={trial_end}")
+                return pd.DataFrame()
+
+            # Calculate the run data
             run_data = self.data.loc[trial_start:trial_end].copy()
 
             # Pass run_data to methods that should operate within trial bounds

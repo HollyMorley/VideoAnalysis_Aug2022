@@ -16,6 +16,8 @@ from Helpers.Config_23 import *
 from Preprocessing import GaitFeatureExtraction as gfe
 from Helpers import ManualRunAdjustment as mra
 
+SENTINEL_VALUE = -1
+
 class GetRuns:
     def __init__(self, file, mouseID, date):
         self.file, self.mouseID, self.date = file, mouseID, date
@@ -128,7 +130,7 @@ class GetRuns:
         self.find_steps()
         self.index_by_run()
         print("Runs extracted successfully")
-        print("Extracted runs: ", len(self.trial_starts))
+        print("Extracted runs: ", len(self.data.index.get_level_values('Run').unique()))
         self.find_run_stages()
         self.save_data()
 
@@ -142,17 +144,20 @@ class GetRuns:
 
         door_open_checked = []
         door_close_checked = []
-        # check if the mouse is present between all the door open and close frames
-        for open_frame, close_frame in zip(door_open, door_close):            # Check if any mouse_present frames fall between open and close frame
-            present_frames = mouse_present[(mouse_present >= open_frame) & (mouse_present <= close_frame)]
-
-            # Add the result for this door open-close pair
-            if len(present_frames) > 0:
-                door_open_checked.append(open_frame)
-                door_close_checked.append(close_frame)
 
         self.trial_starts = door_open
         self.trial_ends = door_close
+
+        # Filter only valid trials
+        valid_trials = [(start, end) for start, end in zip(door_open, door_close)
+                        if start != SENTINEL_VALUE and end != SENTINEL_VALUE]
+
+        # Check for mouse presence within valid trials
+        for open_frame, close_frame in valid_trials:
+            present_frames = mouse_present[(mouse_present >= open_frame) & (mouse_present <= close_frame)]
+            if len(present_frames) > 0:
+                door_open_checked.append(open_frame)
+                door_close_checked.append(close_frame)
 
     def door_opn_cls(self):
         # Extract the rolling window
@@ -190,12 +195,8 @@ class GetRuns:
             runs_to_drop = mra.runs_to_drop[self.date][self.mouseID]
             for idx in runs_to_drop:
                 if 0 <= idx < len(door_open):
-                    door_open[idx] = None
-                    door_close[idx] = None
-
-        # # Filter out None values for downstream processes, if needed
-        # valid_door_open = [frame for frame in door_open if frame is not None]
-        # valid_door_close = [frame for frame in door_close if frame is not None]
+                    door_open[idx] = SENTINEL_VALUE
+                    door_close[idx] = SENTINEL_VALUE
 
         return door_open, door_close
 
@@ -226,21 +227,28 @@ class GetRuns:
         return mouse_on_belt_index
 
     def index_by_run(self):
+        # Initialize empty lists for run indices and frame indices
         run_idx = []
         frame_idx = []
 
+        # Iterate through each run's trial starts and ends
         for r, (start, end) in enumerate(zip(self.trial_starts, self.trial_ends)):
-            if start is None or end is None:  # Skip missing runs
-                print(f"Skipping run {r} due to missing data: start={start}, end={end}")
+            if start == SENTINEL_VALUE or end == SENTINEL_VALUE:
+                # Skip invalid runs represented by SENTINEL_VALUE
                 continue
 
+            # Append run index and corresponding frame indices
             run_idx.extend([r] * (end - start + 1))
             frame_idx.extend(range(start, end + 1))
 
-        # Create MultiIndex only for valid runs
+        # Create a MultiIndex for valid runs
         new_data_idx = pd.MultiIndex.from_arrays([run_idx, frame_idx], names=['Run', 'FrameIdx'])
+
+        # Trim self.data to include only the valid frames (as in the original behavior)
         data_snippet = self.data.loc[frame_idx]
         data_snippet.index = new_data_idx
+
+        # Update self.data to include only trimmed and indexed data
         self.data = data_snippet
 
     #-------------------------------------------------------------------------------------------------------------------
@@ -252,6 +260,9 @@ class GetRuns:
         RunBounds = []
         Runbacks = []
         for r in range(len(self.trial_starts)):
+            if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
+                print(f"Skipping run {r} due to manual exclusion.")
+                continue
             steps, run_bounds, runbacks = self.process_run(r)
             Steps.append(steps)
             RunBounds.append(run_bounds)
@@ -280,9 +291,9 @@ class GetRuns:
             # Create a copy of the data relevant to this trial
             trial_start = self.trial_starts[r]
             trial_end = self.trial_ends[r]
-            if trial_start is None or trial_end is None:
-                print(f"Skipping run {r} due to missing data: start={trial_start}, end={trial_end}")
-                return pd.DataFrame()
+            if trial_start == SENTINEL_VALUE or trial_end == SENTINEL_VALUE:
+                print(f"Skipping run {r} due to sentinel value.")
+                return pd.DataFrame(), None, None  # Return placeholders for skipped runs
 
             # Calculate the run data
             run_data = self.data.loc[trial_start:trial_end].copy()
@@ -306,13 +317,20 @@ class GetRuns:
         from tkinter import ttk
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-        # Create a list of runs
-        num_runs = len(self.trial_starts)
-        if num_runs == 0:
-            raise ValueError("No runs available to display.")
+        # Extract valid runs and their start/end frames from self.data
+        valid_runs = []
+        for run in self.data.index.get_level_values('Run').unique():
+            run_frames = self.data.loc[run].index.get_level_values('FrameIdx')
+            if len(run_frames) > 0:
+                start_frame = run_frames.min()
+                end_frame = run_frames.max()
+                valid_runs.append((run, start_frame, end_frame))
 
-        # Prepare run numbers for the dropdown menu
-        run_numbers = [f"Run {i}" for i in range(num_runs)]  # Labels for runs
+        if not valid_runs:
+            raise ValueError("No valid runs available to display.")
+
+        # Prepare run numbers for dropdown menu
+        run_numbers = [f"Run {run}" for run, _, _ in valid_runs]
 
         # Load the video file
         day = os.path.basename(self.file).split('_')[1]
@@ -320,7 +338,7 @@ class GetRuns:
         video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
         if len(video_files) > 1:
             raise ValueError("Multiple video files found for the same view. Please check the video files.")
-        elif len(video_files) == 0:
+        elif not video_files:
             raise ValueError("No video file found for the specified view.")
         else:
             video_file = video_files[0]
@@ -329,61 +347,31 @@ class GetRuns:
         root = tk.Tk()
         root.title("Run Steps Visualization")
 
-        # Create a frame for the dropdown menu
+        # Create dropdown menu for valid runs
         top_frame = tk.Frame(root)
-        top_frame.pack(side=tk.TOP, fill=tk.X)  # Use fill=tk.X to prevent vertical expansion
-
-        # Create the dropdown menu
+        top_frame.pack(side=tk.TOP, fill=tk.X)
         selected_run = tk.StringVar(value=run_numbers[0])
         run_dropdown = ttk.OptionMenu(top_frame, selected_run, run_numbers[0], *run_numbers,
                                       command=lambda _: update_run())
-        run_dropdown.pack(side=tk.LEFT, padx=1, pady=2)
+        run_dropdown.pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Create a frame for the Matplotlib figure
+        # Create figure and canvas
         bottom_frame = tk.Frame(root)
         bottom_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        # Create Matplotlib figure and canvas
         fig = plt.Figure()
         ax = fig.add_subplot(111)
         canvas = FigureCanvasTkAgg(fig, master=bottom_frame)
         canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # Initialize variables
-        run_index = 0
-        start_frame = int(self.trial_starts[run_index])
-        end_frame = int(self.trial_ends[run_index])
-
-        # Load frames for the initial run
-        frames = self.load_frames(video_file, start_frame, end_frame)
-
-        if not frames:
-            raise ValueError("No frames were loaded. Cannot proceed with visualization.")
-
-        # Set initial frame and index setup
-        frame_index = 0
-        actual_frame_number = start_frame + frame_index
-
-        # Display the first frame
-        frame_image = ax.imshow(frames[frame_index])
-        ax.axis('off')
-
-        # Add frame number text at the top
-        frame_text = ax.text(0.5, 1.02, f'Run: {run_index}, Frame: {actual_frame_number}',
-                             transform=ax.transAxes, ha='center', fontsize=12)
-
         # Define paws and limb boxes
         paws = ['HindpawR', 'HindpawL', 'ForepawR', 'ForepawL']
         limb_boxes = {}
-
-        # Set limb box positions
         box_positions = {
             'HindpawR': [0.1, 0.05, 0.35, 0.08],
             'HindpawL': [0.1, 0.15, 0.35, 0.08],
             'ForepawR': [0.55, 0.05, 0.35, 0.08],
             'ForepawL': [0.55, 0.15, 0.35, 0.08],
         }
-
         for paw in paws:
             left, bottom, width, height = box_positions[paw]
             ax_box = fig.add_axes([left, bottom, width, height])
@@ -395,72 +383,75 @@ class GetRuns:
             ax_box.set_title(paw, fontsize=10)
             limb_boxes[paw] = rect
 
-        # Create frame slider
+        # Initialize variables
+        run_index = 0
+        start_frame, end_frame = valid_runs[run_index][1], valid_runs[run_index][2]
+        frames = self.load_frames(video_file, start_frame, end_frame)
+        if not frames:
+            raise ValueError(f"No frames loaded for Run {run_index}.")
+
+        frame_index = 0
+        actual_frame_number = start_frame + frame_index
+
+        # Display initial frame
+        frame_image = ax.imshow(frames[frame_index])
+        ax.axis('off')
+        frame_text = ax.text(0.5, 1.02, f'Run: {run_index}, Frame: {actual_frame_number}',
+                             transform=ax.transAxes, ha='center', fontsize=12)
+
+        # Slider setup
         slider_ax = fig.add_axes([0.15, 0.85, 0.7, 0.03])
         frame_slider = Slider(slider_ax, 'Frame', 0, len(frames) - 1, valinit=0, valfmt='%d')
 
-        # Function to display the frame
+        # Function to display frames
         def display_frame():
-            nonlocal frame_index, actual_frame_number, run_index
+            nonlocal frame_index, actual_frame_number
             frame_image.set_data(frames[frame_index])
             actual_frame_number = start_frame + frame_index
             frame_text.set_text(f'Run: {run_index}, Frame: {actual_frame_number}')
             self.update_limb_boxes(run_index, actual_frame_number, limb_boxes, paws)
             canvas.draw_idle()
 
-        # Update functions
+        # Update slider and frames
         def update_frame(val):
             nonlocal frame_index
             frame_index = int(frame_slider.val)
             display_frame()
 
         def update_run():
-            nonlocal run_index, start_frame, end_frame, frames, frame_index, actual_frame_number
-            run_index = run_numbers.index(selected_run.get())
-            start_frame = int(self.trial_starts[run_index])
-            end_frame = int(self.trial_ends[run_index])
+            nonlocal run_index, start_frame, end_frame, frames, frame_index
+            run_index = int(selected_run.get().split(" ")[1])
+            _, start_frame, end_frame = next((r for r in valid_runs if r[0] == run_index), None)
 
-            # Load frames for the selected run
-            frames_new = self.load_frames(video_file, start_frame, end_frame)
-            if not frames_new:
-                print(f"No frames loaded for run {run_index}")
-                return
-
+            # Load frames for the new run
             frames.clear()
-            frames.extend(frames_new)
-            frame_index = 0
+            new_frames = self.load_frames(video_file, start_frame, end_frame)
+            if not new_frames:
+                print(f"No frames loaded for Run {run_index}. Skipping...")
+                return
+            frames.extend(new_frames)
 
-            # Update frame slider
+            frame_index = 0
             frame_slider.valmin = 0
             frame_slider.valmax = len(frames) - 1
             frame_slider.set_val(0)
-            frame_slider.ax.set_xlim(frame_slider.valmin, frame_slider.valmax)
             display_frame()
 
-        # Connect slider to update function
+        # Connect slider and keyboard events
         frame_slider.on_changed(update_frame)
 
-        # Keyboard event handling
         def on_key_press(event):
             nonlocal frame_index
-            if event.key == 'right':
-                if frame_index < len(frames) - 1:
-                    frame_index += 1
-                    frame_slider.set_val(frame_index)
-                    display_frame()
-            elif event.key == 'left':
-                if frame_index > 0:
-                    frame_index -= 1
-                    frame_slider.set_val(frame_index)
-                    display_frame()
+            if event.key == 'right' and frame_index < len(frames) - 1:
+                frame_index += 1
+            elif event.key == 'left' and frame_index > 0:
+                frame_index -= 1
+            frame_slider.set_val(frame_index)
 
-        # Connect the key press event
         fig.canvas.mpl_connect('key_press_event', on_key_press)
 
-        # Initial display
+        # Start display
         display_frame()
-
-        # Start Tkinter main loop
         root.mainloop()
 
     def load_frames(self, video_file, start_frame, end_frame):
@@ -828,6 +819,9 @@ class GetRuns:
         # Use run_data instead of self.data
         trial_start = self.trial_starts[r]
         trial_end = self.trial_ends[r]
+        if trial_start == SENTINEL_VALUE or trial_end == SENTINEL_VALUE:
+            raise ValueError(f"Cannot process run {r} due to sentinel value.")
+
         run_data = run_data.loc[trial_start:trial_end]
 
         # filter by when mouse facing forward
@@ -861,6 +855,10 @@ class GetRuns:
         # Intanstiate column to store the initiating limb for each run stage
         self.data['initiating_limb'] = np.nan
         for r in runs:
+            if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
+                print(f"Skipping run {r} due to sentinel value.")
+                continue
+
             try:
                 step_data, limb_data, paw_touchdown = self.get_run_data(r)
                 self.find_run_start(r, paw_touchdown, limb_data)
@@ -887,9 +885,24 @@ class GetRuns:
 
         return step_data, limb_data, paw_touchdown
 
+    def find_first_touchdown_paw_block(self, touchdown_series, first_touchdown_x4):
+        # Extract frames where the paw is touching down before first_touchdown_x4
+        paw_touchdown_frames = touchdown_series[touchdown_series.index < first_touchdown_x4 + 1]
+        paw_touchdown_frames = paw_touchdown_frames[
+            paw_touchdown_frames]  # Only frames where the paw is touching down
+
+        # If there are no touchdown frames before first_touchdown_x4, skip
+        if paw_touchdown_frames.empty:
+            # print(f"No touchdown frames found for {paw} before frame {first_touchdown_x4}")
+            return
+
+        # Use find_blocks to find continuous blocks of touchdown frames
+        blocks = utils.Utils().find_blocks(paw_touchdown_frames.index, gap_threshold=5, block_min_size=0)
+        return blocks
+
     def find_run_start(self, r, paw_touchdown, limb_data):
         paw_labels = paw_touchdown.columns
-        first_touchdown_x4, paw_x4, valid_touchdown = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first', limb_data=limb_data)
+        first_touchdown_x4, paw_x4, valid_touchdown, valid_touchdown_lenient = self.find_touchdown_all4s(paw_touchdown, paw_labels, r, time='first', limb_data=limb_data)
 
         # Find the first touchdown frame for each paw leading up to first_touchdown_x4
         paw_first_touchdowns = {}
@@ -897,21 +910,14 @@ class GetRuns:
             # Get the touchdown Series for the paw
             touchdown_series = valid_touchdown[paw]
 
-            # Extract frames where the paw is touching down before first_touchdown_x4
-            paw_touchdown_frames = touchdown_series[touchdown_series.index < first_touchdown_x4 + 1]
-            paw_touchdown_frames = paw_touchdown_frames[
-                paw_touchdown_frames]  # Only frames where the paw is touching down
-
-            # If there are no touchdown frames before first_touchdown_x4, skip
-            if paw_touchdown_frames.empty:
-                #print(f"No touchdown frames found for {paw} before frame {first_touchdown_x4}")
-                continue
-
-            # Use find_blocks to find continuous blocks of touchdown frames
-            blocks = utils.Utils().find_blocks(paw_touchdown_frames.index, gap_threshold=5, block_min_size=0)
+            blocks = self.find_first_touchdown_paw_block(touchdown_series, first_touchdown_x4)
 
             if len(blocks) == 0 and paw_x4 == paw:
                 continue
+            elif len(blocks) == 0 and paw_x4 != paw:
+                # use lenient touchdown detection
+                touchdown_series = valid_touchdown_lenient[paw]
+                blocks = self.find_first_touchdown_paw_block(touchdown_series, first_touchdown_x4)
 
             # Find the block that ends at or just before first_touchdown_x4 for this paw
             block_found = False
@@ -985,26 +991,17 @@ class GetRuns:
         current_frame_stance_mask = paw_touchdown_snippet == True
         swing_to_stance_mask = np.logical_and(last_frame_swing_mask, current_frame_stance_mask)
 
-        # get mean of each paw in paw_labels (comprised of toe, knuckle, ankle)
+        # get mean of each paw in paw_labels (comprised of toe, knuckle)
         limb_x = limb_data_snippet.loc(axis=1)[:, 'x'].droplevel('coords', axis=1)
         limb_x = limb_x.drop(columns=['ForepawKneeR', 'ForepawKneeL', 'ForepawAnkleR', 'ForepawAnkleL'])
         limb_x.columns = pd.MultiIndex.from_tuples([(col, col[-1]) for col in limb_x.columns], names=['bodyparts', 'side'])
 
-        # interpolate limb_x
+        # interpolate limb_x and get mean
         limb_x_interp = limb_x.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
-
         limb_x_mean = limb_x_interp.groupby(axis=1,level='side').mean()
 
-        # # interpolate and smooth limb_x_mean
-        # limb_x_mean_interp = limb_x_mean.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
-        # #smooth
-        # limb_x_mean_interp_smooth = gaussian_filter1d(limb_x_mean_interp, sigma=1, axis=0, mode='nearest')
-        # # restore index
-        # limb_x_mean_smooth = pd.DataFrame(limb_x_mean_interp_smooth, index=limb_x_mean_interp.index)
-
-
         post_transition_mask = np.logical_and(limb_x_mean > 470, limb_x_mean.shift(-1) > 470)
-        #post_transition_mask = limb_x_mean_interp > 470
+
         # check 'L' and 'ForepawL' are the first column and 'R' and 'ForepawR' are the second column
         if not np.logical_and(post_transition_mask.columns[0] == 'L', paw_touchdown_snippet.columns[0] == 'ForepawL'):
             raise ValueError("Columns are not in the expected order!!")
@@ -1036,7 +1033,6 @@ class GetRuns:
                     self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
                 else:
                     raise ValueError("More than one paw detected in transition frame")
-
         elif len(transition_paws) == 0:
             # check if transition_frame is a slide by checking if the paw was in stance for the last 10 frames
             if transition_frame != transition_frame_step: # todo - added in this step, can remove again 5/12/24
@@ -1045,17 +1041,6 @@ class GetRuns:
                 if len(slide_paws) == 1:
                     transition_paw = slide_paws[0]
                     self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid" # todo NOW CONFIRM THE TRANSITION PAW!!!
-                    # transition_paw_mask = paw_touchdown_snippet.loc[transition_frame_step]
-                    # transition_paws = paw_touchdown_snippet.columns[transition_paw_mask]
-                    # if len(transition_paws) == 1:
-                    #     transition_paw_step = transition_paws[0]
-                    #     if transition_paw_step == slide_paws[0]:
-                    #         raise ValueError("Slide paw is the same as the stepping transition paw")
-                    # if len(transition_paws) == 2:
-                    #     # other paw to sliding paw
-                    #     transition_paw = [paw for paw in transition_paws if paw != slide_paws[0]][0]
-                    # else:
-                    #     raise ValueError("No or multiple paws detected during slide resolution")
                 else:
                     raise ValueError("No or multiple paws detected during slide resolution")
             else:
@@ -1155,6 +1140,8 @@ class GetRuns:
         frame_levels = self.data.index.get_level_values('FrameIdx')
 
         for r in run_levels.unique():
+            if r == SENTINEL_VALUE:
+                continue # skip sentinel-valued runs
             run_start = self.run_starts[r]
             transition = self.transitions[r]
             run_end = self.run_ends[r]
@@ -1202,6 +1189,7 @@ class GetRuns:
         # Check all touchdown during running phase
         touchdownx4 = {}
         valid_touchdown = pd.DataFrame(columns=paw_touchdown.columns, index=paw_touchdown.index)
+        valid_touchdown_lenient = pd.DataFrame(columns=paw_touchdown.columns, index=paw_touchdown.index)
         for paw in paw_labels:
             touchdown_series = paw_touchdown[paw]
             if touchdown_series.any():
@@ -1244,6 +1232,9 @@ class GetRuns:
                 valid_touchdown_series = touchdown_series[timed_touchdown_frame_mask & x_condition & z_condition]
                 valid_touchdown[paw].loc(axis=0)[valid_touchdown_series.index] = valid_touchdown_series
 
+                valid_touchdown_series_lenient = touchdown_series[timed_touchdown_frame_mask & x_condition]
+                valid_touchdown_lenient[paw].loc(axis=0)[valid_touchdown_series_lenient.index] = valid_touchdown_series_lenient
+
                 # Now find the first or last valid touchdown frame
                 if valid_touchdown_series.empty:
                     raise ValueError(f"No valid touchdown frames found for {paw} in run {r}")
@@ -1251,6 +1242,7 @@ class GetRuns:
                     if time == 'first':
                         # check
                         timed_touchdown_frame = valid_touchdown_series.index[0]
+
                     elif time == 'last':
                         timed_touchdown_frame = valid_touchdown_series.index[-1]
                     touchdownx4[paw] = timed_touchdown_frame
@@ -1259,12 +1251,13 @@ class GetRuns:
 
         # fill nans in valid_touchdown with False
         valid_touchdown.fillna(False, inplace=True)
+        valid_touchdown_lenient.fillna(False, inplace=True)
 
         if time == 'first':
             # Find last paw to touch down for first time
             timed_touchdown = max(touchdownx4.values())
             stepping_paw = [paw for paw, frame in touchdownx4.items() if frame == timed_touchdown][0]
-            return timed_touchdown, stepping_paw, valid_touchdown
+            return timed_touchdown, stepping_paw, valid_touchdown, valid_touchdown_lenient
 
         elif time == 'last':
             # Find first paw to touch down for last time

@@ -1,5 +1,5 @@
 import numpy as np
-import os, glob, re
+import os, glob, re, csv
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
@@ -28,6 +28,10 @@ class GetRuns:
 
         # Always load the raw data
         self.data = self.get_data()
+
+        # Error logging
+        self.error_log_file = os.path.join(paths['filtereddata_folder'], 'error_log.csv')
+
 
     def load_model(self):
         model_filename = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'limb_classification_model.pkl')
@@ -125,7 +129,28 @@ class GetRuns:
 
         return data
 
+    def _remove_existing_error_entries_for_file(self):
+        """
+        Removes any existing error log entries for the current file (self.file).
+        """
+        if not os.path.exists(self.error_log_file):
+            # No existing log file to clean
+            return
+
+        # Read existing entries
+        error_df = pd.read_csv(self.error_log_file)
+
+        # Keep only rows that do NOT match the current file
+        error_df = error_df[error_df['File'] != self.file]
+
+        # Write back to the log file
+        error_df.to_csv(self.error_log_file, index=False)
+        print(f"Cleared old error log entries for {self.file}")
+
     def get_runs(self):
+        # Remove old entries for this file from the error log
+        self._remove_existing_error_entries_for_file()
+
         self.find_trials()
         self.find_steps()
         self.index_by_run()
@@ -212,9 +237,16 @@ class GetRuns:
         back_median = pd.Series(gaussian_filter1d(back_median, sigma=1), index=back_median.index)
         tail_median = pd.Series(gaussian_filter1d(tail_median, sigma=1), index=tail_median.index)
         back_tail_mask = back_median - tail_median > xthreshold
-        nose_tail_x_mask = data.loc[:, ('Nose', 'x')] > data.loc[:, ('Tail1', 'x')]
-        nose_tail_z_mask = data.loc[:, ('Nose', 'z')] - data.loc[:, ('Tail1', 'z')] < zthreshold
-        #belt1_mask = data.loc[:, ('Nose', 'x')] < 470
+
+        # interpolate and smooth nose and tail to avoid short gaps
+        interp = data.loc(axis=1)[['Nose','Tail1'], ['x','z']].interpolate(method='linear', axis=0)
+
+        nose_tail_x_mask = interp['Nose','x'] > interp['Tail1','x']
+        nose_tail_z_mask = interp['Nose','z'] - interp['Tail1','z'] < zthreshold
+
+        # nose_tail_x_mask = data.loc[:, ('Nose', 'x')] > data.loc[:, ('Tail1', 'x')]
+        # nose_tail_z_mask = data.loc[:, ('Nose', 'z')] - data.loc[:, ('Tail1', 'z')] < zthreshold
+        # #belt1_mask = data.loc[:, ('Nose', 'x')] < 470
         facing_forward_mask = back_tail_mask & nose_tail_x_mask & nose_tail_z_mask #& belt1_mask
         return facing_forward_mask
 
@@ -851,9 +883,15 @@ class GetRuns:
     #------------------------------------------ Finding runstages ------------------------------------------------------
     #-------------------------------------------------------------------------------------------------------------------
     def find_run_stages(self):
+        # Ensure the error log file has headers
+        if not os.path.exists(self.error_log_file):
+            with open(self.error_log_file, 'w', newline='') as log_file:
+                writer = csv.writer(log_file)
+                writer.writerow(['ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber'])
+
         runs = self.data.index.get_level_values('Run').unique()
-        # Intanstiate column to store the initiating limb for each run stage
         self.data['initiating_limb'] = np.nan
+
         for r in runs:
             if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
                 print(f"Skipping run {r} due to sentinel value.")
@@ -861,15 +899,60 @@ class GetRuns:
 
             try:
                 step_data, limb_data, paw_touchdown = self.get_run_data(r)
-                self.find_run_start(r, paw_touchdown, limb_data)
+
+                # 1. RunStart
+                try:
+                    self.find_run_start(r, paw_touchdown, limb_data)
+                except Exception as e:
+                    self.run_starts.append([])  # Fill with blank value
+                    self._log_error('RunStart', str(e), r, overwrite=False)
+
+                # 2. RunEnd
                 self.find_run_end(r, paw_touchdown, limb_data)
-                self.find_transition(r, paw_touchdown, limb_data)
+
+                # 3. Transition
+                try:
+                    self.find_transition(r, paw_touchdown, limb_data)
+                except Exception as e:
+                    self.transitions.append([])  # Fill with blank value
+                    self._log_error('Transition', str(e), r, overwrite=False)
+
+                # 4. Taps
                 self.find_taps(r, limb_data)
             except Exception as e:
-                print(f"Error processing runstages at run {r}: {e}")
+                print(f"Error processing run stages at run {r}: {e}")
+
         self.create_runstage_index()
         self.plot_run_stage_frames('Transition', 'Side')
         self.plot_run_stage_frames('RunStart', 'Side')
+
+
+
+    def _log_error(self, error_type, error_message, run_number, overwrite=False):
+        """
+        Logs an error message to the error log file.
+
+        Args:
+            error_type (str): The type of error (e.g., 'RunStart', 'Transition').
+            error_message (str): A detailed error message.
+            run_number (int): The run number associated with the error.
+            overwrite (bool): Whether to overwrite the log file (default: False).
+        """
+        mode = 'w' if overwrite else 'a'  # Set mode to 'w' for overwrite or 'a' for append
+
+        # Write to the log file
+        try:
+            with open(self.error_log_file, mode, newline='') as log_file:
+                writer = csv.writer(log_file)
+
+                # Add headers if overwriting the log file
+                if overwrite:
+                    writer.writerow(['ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber'])
+
+                # Log the error
+                writer.writerow([error_type, error_message, self.file, self.mouseID, run_number])
+        except Exception as e:
+            print(f"Failed to write to the error log file: {e}")
 
     def get_run_data(self, r):
         step_data = self.data.loc(axis=0)[r].loc(axis=1)[['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']]
@@ -980,43 +1063,61 @@ class GetRuns:
         self.run_ends_steps.append(last_touchdown_x4)
 
     def find_transition(self, r, paw_touchdown, limb_data):
-        # find first forepaw touchdown frame on to second belt, which is after the gap at 470mm x position
+        """
+        Identifies the transition phase in a run by focusing on forepaws and their movements.
+
+        Parameters:
+            r (int): Run index.
+            paw_touchdown (DataFrame): Frame-by-frame touchdown status (swing, stance) for each limb.
+            limb_data (DataFrame): Raw x/y/z coordinate data for each limb marker.
+
+        Updates:
+            - `self.transitions`: List of transition frames.
+            - `self.data['initiating_limb']`: Marks the initiating limb for transitions in `self.data`.
+        """
+
+        # Step 1: Focus on forepaws
         forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
 
+        # Step 2: Trim paw_touchdown and limb_data to the run's start and end (touchdown)
         paw_touchdown_snippet = paw_touchdown.loc[self.run_starts[r]:self.run_ends[r], ['ForepawL', 'ForepawR']]
         limb_data_snippet = limb_data.loc[self.run_starts[r]:self.run_ends[r], forepaw_labels]
 
-        # create mask of where True in limb touchdown succeeds False
+        # Step 3: Find frames where forepaws enter touchdown (swing to stance)
         last_frame_swing_mask = paw_touchdown_snippet.shift(1) == False
         current_frame_stance_mask = paw_touchdown_snippet == True
         swing_to_stance_mask = np.logical_and(last_frame_swing_mask, current_frame_stance_mask)
 
-        # get mean of each paw in paw_labels (comprised of toe, knuckle)
+        # Step 4: Get mean of interpolated x in toe and knuckle for each frame
         limb_x = limb_data_snippet.loc(axis=1)[:, 'x'].droplevel('coords', axis=1)
         limb_x = limb_x.drop(columns=['ForepawKneeR', 'ForepawKneeL', 'ForepawAnkleR', 'ForepawAnkleL'])
-        limb_x.columns = pd.MultiIndex.from_tuples([(col, col[-1]) for col in limb_x.columns], names=['bodyparts', 'side'])
+        limb_x.columns = pd.MultiIndex.from_tuples([(col, col[-1]) for col in limb_x.columns],
+                                                   names=['bodyparts', 'side'])
 
-        # interpolate limb_x and get mean
         limb_x_interp = limb_x.interpolate(method='spline', order=3, limit=20, limit_direction='both', axis=0)
-        limb_x_mean = limb_x_interp.groupby(axis=1,level='side').mean()
+        limb_x_mean = limb_x_interp.groupby(axis=1, level='side').mean()
 
+        # Step 5: Find frames where the limb is past the transition point in f0 and f+1 (post-transition position)
         post_transition_mask = np.logical_and(limb_x_mean > 470, limb_x_mean.shift(-1) > 470)
 
-        # check 'L' and 'ForepawL' are the first column and 'R' and 'ForepawR' are the second column
+        # Step 6: Verify column order (ensure alignment of masks)
         if not np.logical_and(post_transition_mask.columns[0] == 'L', paw_touchdown_snippet.columns[0] == 'ForepawL'):
             raise ValueError("Columns are not in the expected order!!")
 
-        transition_mask = np.logical_and(post_transition_mask.values, paw_touchdown_snippet.values)
-        transition_step_mask = np.logical_and(post_transition_mask.values, swing_to_stance_mask.values)
+        # Step 7: Create transition masks
+        transition_mask = np.logical_and(post_transition_mask.values, paw_touchdown_snippet.values)  # Basic transition
+        transition_step_mask = np.logical_and(post_transition_mask.values, swing_to_stance_mask.values)  # Backup
 
+        # Step 8: Find first frame for each mask
         transition_frame = paw_touchdown_snippet[transition_mask].index[0]
         transition_frame_step = paw_touchdown_snippet[transition_step_mask].index[0]
 
-        # Check which paw is initiating the transition by checking if it is in stance for the next 5 frames
+        # Step 9: Determine initiating paw for the transition (basic or sliding)
         transition_paw_mask = np.all(paw_touchdown_snippet[transition_mask].iloc[1:5] == True, axis=0)
-        # check paw continues in stance as other paw may still be in its stance phase
         transition_paws = paw_touchdown_snippet[transition_mask].iloc[0][transition_paw_mask].index
+
         if len(transition_paws) > 1:
+            # Case 1: Both paws are detected in the transition frame
             if transition_frame == transition_frame_step:
                 position = np.where(transition_step_mask)[0][0]
                 paw_mask = transition_step_mask[position]
@@ -1024,38 +1125,36 @@ class GetRuns:
                 other_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[~paw_mask].index[0]
                 self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
             else:
-                # first check if one slid and the other stepped
-                if len(transition_paws) == 2:
-                    position = np.where(transition_step_mask)[0][0]
-                    paw_mask = transition_step_mask[position]
-                    transition_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[paw_mask].index[0]
-                    other_paw = paw_touchdown_snippet.loc[transition_frame].loc[~paw_mask].index[0]
-                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
-                else:
-                    raise ValueError("More than one paw detected in transition frame")
+                # Case 1a: One paw slides, and the other steps
+                position = np.where(transition_step_mask)[0][0]
+                paw_mask = transition_step_mask[position]
+                transition_paw = paw_touchdown_snippet.loc[transition_frame_step].loc[paw_mask].index[0]
+                other_paw = paw_touchdown_snippet.loc[transition_frame].loc[~paw_mask].index[0]
+                self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{other_paw}_slid"
         elif len(transition_paws) == 0:
-            # check if transition_frame is a slide by checking if the paw was in stance for the last 10 frames
-            if transition_frame != transition_frame_step: # todo - added in this step, can remove again 5/12/24
+            # Case 2: No paws meet the criteria for the transition frame
+            if transition_frame != transition_frame_step:
                 slide_mask = np.all(paw_touchdown_snippet.loc[:transition_frame].iloc[-10:] == True, axis=0)
                 slide_paws = paw_touchdown_snippet.columns[slide_mask]
                 if len(slide_paws) == 1:
                     transition_paw = slide_paws[0]
-                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid" # todo NOW CONFIRM THE TRANSITION PAW!!!
+                    self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid"
                 else:
                     raise ValueError("No or multiple paws detected during slide resolution")
             else:
                 transition_paw = []
                 print(f"No paw detected in transition frame for run {r}")
         else:
+            # Case 3: Single paw meets the criteria
             transition_paw = transition_paws[0]
 
-
+        # Step 10: Handle stepping transitions
         if transition_frame == transition_frame_step:
             self.data.loc[(r, transition_frame), 'initiating_limb'] = transition_paw
             self.transitions.append(transition_frame)
         else:
-            transition_paw_mask_step = np.all(paw_touchdown_snippet.loc[transition_frame_step:].iloc[1:10] == True, axis=0)
-            # check paw continues in stance as other paw may still be in its stance phase
+            transition_paw_mask_step = np.all(paw_touchdown_snippet.loc[transition_frame_step:].iloc[1:10] == True,
+                                              axis=0)
             transition_paw_step = paw_touchdown_snippet[transition_step_mask].iloc[0][transition_paw_mask_step].index
             if len(transition_paw_step) > 1:
                 raise ValueError("More than one paw detected in transition frame")
@@ -1064,7 +1163,6 @@ class GetRuns:
             else:
                 transition_paw_step = transition_paw_step[0]
                 self.data.loc[(r, transition_frame_step), 'initiating_limb'] = transition_paw_step
-                # add the step frame to the 'initiating_limb' column as '[paw]_slid'
                 self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid"
             self.transitions.append(transition_frame_step)
 
@@ -1129,7 +1227,7 @@ class GetRuns:
             for tap in taps[1]:
                 self.data.loc[(r, tap), 'TapsR'] = True
 
-        # instantiate RunStage column
+        # Instantiate RunStage column
         self.data['RunStage'] = 'None'
 
         # Prepare to collect indices to drop after 'run_end' for each run
@@ -1141,16 +1239,23 @@ class GetRuns:
 
         for r in run_levels.unique():
             if r == SENTINEL_VALUE:
-                continue # skip sentinel-valued runs
+                continue  # Skip sentinel-valued runs
+
+            # Retrieve run stage bounds; skip if any are missing
             run_start = self.run_starts[r]
             transition = self.transitions[r]
             run_end = self.run_ends[r]
             run_end_steps = self.run_ends_steps[r]
 
+            # Skip runs with missing data
+            if not run_start or not transition:
+                print(f"Skipping run {r} due to missing stage bounds.")
+                continue
+
             # Boolean mask for the current run
             is_current_run = (run_levels == r)
 
-            # TrailStart stage
+            # TrialStart stage
             trialstart_mask = is_current_run & (frame_levels < run_start)
             self.data.loc[trialstart_mask, 'RunStage'] = 'TrialStart'
 
@@ -1181,8 +1286,6 @@ class GetRuns:
         # Set 'RunStage' as part of the index and reorder
         self.data.set_index('RunStage', append=True, inplace=True)
         self.data = self.data.reorder_levels(['Run', 'RunStage', 'FrameIdx'])
-
-
 
     ################################################# Helper functions #################################################
     def find_touchdown_all4s(self, paw_touchdown, paw_labels, r, time, limb_data):
@@ -1323,112 +1426,80 @@ class GetRuns:
     def plot_run_stage_frames(self, run_stage, view='Side'):
         """
         Save the first video frame for a specified run stage across all runs.
-
         Parameters:
         - run_stage: str, the run stage to visualize ('RunStart', 'Transition', 'RunEnd')
-        - view: str, the camera view to use ('Side', 'Front', etc.)
+        - view: str, the camera view to use ('Side', 'Front', etc.')
         """
-        # Get unique runs
         runs = self.data.index.get_level_values('Run').unique()
 
-        # Load video file(s)
+        # Video file selection
         day = os.path.basename(self.file).split('_')[1]
         filename_pattern = '_'.join(os.path.basename(self.file).split('_')[:-1])
         video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
-
         if not video_files:
             raise ValueError(f"No video files found for view '{view}'.")
-        elif len(video_files) > 1:
-            print(f"Multiple video files found for view '{view}'. Using the first one.")
         video_file = video_files[0]
 
-        # Extract mouse ID and experiment condition from the file path
-        # Adjust based on your actual file path structure
+        # Mouse ID and experiment condition extraction
         file_path_parts = self.file.split(os.sep)
-        mouse_id = None
-        experiment_condition = []
+        mouse_id, experiment_condition = None, []
         for i, part in enumerate(file_path_parts):
             if 'Round' in file_path_parts[i - 1]:
                 experiment_condition.append(part)
-                continue
-            if 'FAA-' in part:
+            elif 'FAA-' in part:
                 mouse_id = part
-            elif len(experiment_condition) > 0:
+            elif experiment_condition:
                 experiment_condition.append(part)
         experiment_condition = '_'.join(experiment_condition)
+        if not mouse_id or not experiment_condition:
+            raise ValueError("Mouse ID or experiment condition not found in the file path.")
 
-        if not mouse_id:
-            raise ValueError("Mouse ID not found in the file path.")
-
-        if not experiment_condition:
-            raise ValueError("Experiment condition not found in the file path.")
-
-        # Create the directory to save images
-        base_dir = os.path.join(paths['filtereddata_folder'], 'LimbStuff\\check_runstages')
-        save_dir = os.path.join(base_dir, f"{experiment_condition}\\{run_stage}\\_{mouse_id}")
+        save_dir = os.path.join(paths['filtereddata_folder'], 'LimbStuff', 'check_runstages',
+                                f"{experiment_condition}\\{run_stage}\\_{mouse_id}")
         os.makedirs(save_dir, exist_ok=True)
 
-        # Function to save the first frame for a single run
+        # Frame saving function
         def save_run_frame(r):
-            # Open the video file
             cap = cv2.VideoCapture(video_file)
-
-            # Get frames for the specified run stage
             try:
+                # Ensure the run and run stage exist
+                if run_stage not in self.data.loc[r].index.get_level_values('RunStage'):
+                    cap.release()
+                    return
+
                 run_stage_idxs = self.data.loc[r].loc[run_stage].index.get_level_values('FrameIdx')
+                if run_stage_idxs.empty:
+                    cap.release()
+                    return
 
-                run_stage_data =self.data.loc(axis=0)[r,:,run_stage_idxs]
-                run_stage_data = run_stage_data.droplevel(['Run', 'RunStage'])
+                # Extract run stage data
+                run_stage_data = self.data.loc(axis=0)[r, :, run_stage_idxs].droplevel(['Run', 'RunStage'])
             except KeyError:
-                print(f"No data for run {r} and run stage '{run_stage}'.")
-                cap.release()
-                return
-
-            if run_stage_data.empty:
-                print(f"No data for run {r} and run stage '{run_stage}'.")
+                print(f"Run {r} missing data for stage '{run_stage}'. Skipping.")
                 cap.release()
                 return
 
             # Get the first frame index
             frame_idx = run_stage_idxs[0]
-            paw = run_stage_data.loc[frame_idx, 'initiating_limb'][0][-1]
-
-            # Set the video capture to the first frame index
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
-                print(f"Could not read frame {frame_idx} from video.")
+                print(f"Could not read frame {frame_idx} from video for run {r}. Skipping.")
                 cap.release()
                 return
 
-            # Optionally, overlay the title on the image
-            # If you want to add text, you can use OpenCV functions
-            # Add text to the image
-            text = f"Run {r}, RunStage: {run_stage}, Frame: {frame_idx}, Paw: {paw}"
+            # Add text to the frame
+            text = f"Run {r}, RunStage: {run_stage}, Frame: {frame_idx}"
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 1
-            thickness = 2
-            text_size, baseline = cv2.getTextSize(text, font, font_scale, thickness)
-            text_x = 10  # Position from the left
-            text_y = 30  # Position from the top
-
-            # Draw text background rectangle for better readability
-            cv2.rectangle(frame, (text_x - 5, text_y - text_size[1] - 5),
-                          (text_x + text_size[0] + 5, text_y + baseline + 5),
-                          (0, 0, 0), -1)
-
-            cv2.putText(frame, text, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
-
-            # Save the image directly using OpenCV
+            cv2.putText(frame, text, (10, 30), font, 1, (255, 255, 255), 2)
             save_path = os.path.join(save_dir, f"Run_{r}_Stage_{run_stage}_Frame_{frame_idx}.png")
             cv2.imwrite(save_path, frame)
             cap.release()
 
-        # Iterate over runs and save frames
         for r in runs:
             save_run_frame(r)
 
-        print(f"Images saved in directory: {save_dir}")
+        print(f"Images saved in: {save_dir}")
 
 
 class GetAllFiles:

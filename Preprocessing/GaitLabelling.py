@@ -462,6 +462,7 @@ def main():
     # List of subdirectories to include
     subdirectories_to_include = [
         "HM_20230306_APACharRepeat_FAA-1035243_None_side_1",
+        "HM_20230306_APACharRepeat_FAA-1035245_R_side_1"
         "HM_20230309_APACharRepeat_FAA-1035297_R_side_1",
         "HM_20230306_APACharRepeat_FAA-1035244_L_side_1",
         "HM_20230307_APAChar_FAA-1035302_LR_side_1",

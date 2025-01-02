@@ -53,7 +53,7 @@ In GetRunsAndLoco.py:
     - Find frames where the limb is past transition point in f0 and f+1 (post transition position)
     - Create two masks:
         - transition (basic): post transition position + touchdown  --> captures stepping transition and/or sliding transition
-        - transition step (backup): post transition + swing to stance transition --> captures stepping transition when sliding
+        - transition step (backup): post transition position + swing to stance transition --> captures stepping transition when sliding
            occured first
     - find first frame for each mask
     - Start with transition frame (basic):
@@ -76,6 +76,17 @@ In GetRunsAndLoco.py:
               paw/frame as the sliding transition
     - N.B. whenever there is a sliding transition logged in the df, there will always be a (stepping) transition also
       logged, which is considered the true transition frame in this experiment
+
+    - temp notes to self: PROBLEM IS WHEN THERE IS MISSING DATA, EVEN IF I HAVE RETAINED THE SWING/STANCE DETECTION, I HAVE NO POSITION DATA.
+      CAN ALSO INTERPOLATE THIS BUT THIS FEELS LIKE A PROBLEM THAT WILL POP UP AGAIN
+    - temp notes to self: Retrain gait classifier to include where hand excludes view (06 245 130360)
+
+***N.B. WHERE CANNOT FIND EITHER RUNSTART OR TRANSITION, THIS RUN IS SKIPPED AND NO RUNSTAGES ARE CATEGORISED/RUN IS NOT
+ TRIMMED TO BEFORE RUNEND. ERROR IS LOGGED IN 'error_log.csv' under filterdata_folder
+
+
+
+
 
 
 

@@ -1,13 +1,66 @@
 '''
 Specifies which files and runs need to be dropped or adjusted for position
 '''
-runs_to_drop = { # first = 0, last = 40 + 2/5
+runs_to_drop_placeholder = { # first = 0, last = 40 + 2/5
     '20230306': {
-        '1035245': [40,41,42,43], # failed last 2 due to getting stuck and jerry attempted + 2 attempts for destress/attempt
-    }
+        '1035245': [40,41], # failed last 2 due to getting stuck (and jerry attempted + 2 attempts for destress/attempt)
+    },
+    '20230309': {
+        '1035298': [27], # mouse climbed out and back on to belt mid-way so not normal run
+    },
+    '20230310': {
+        '1035245': [28,29,30,31], # mouse got distressed and all these runs were a mess (extras have also been removed)
+    },
 }
 
+runs_to_drop_completely = {
+    '20230306': {
+        '1035245': [42,43], # (failed last 2 due to getting stuck) and jerry attempted + 2 attempts for destress/attempt
+        '1035249': [24], # belt was accidentally off on r24 so jerry re-attempted
+        '1035250': [21], # mouse sat across the transition so jerry re-attempted r21
+    },
+    '20230308': {
+        '1035244': [24], # belt was off at 0
+        '1035249': [9], # belt was off at 5:32 (this was the 'extra')
+    },
+    '20230309': {
+        '1035299': [42], # mouse was being difficult, seems like an accidental extra run
+        '1035301': [6], # belt was off at 4:42 so jerry re-attempted
+    },
+    '20230310': {
+        '1035243': [12], # jerry forgot to change the belt speed at 6:02 (this was the 'extra')
+        '1035245': [32,33,34,35,36,37,38,39,40,41,42,43,44,45], # mouse got distressed so there were several extra runs in APA phase. Also removing the rest (>= 36) as it was too much disruption
+        '1035249': [31], # !!!*** not sure if this door open was detected but mouse stood up and climbed (this was the 'extra') !!!*** todo: check if this was detected
+    },
+    '20230312': {
+        '1035297': [32,41], # 1) extra run as messed up the first run, 2) failed run attempt but had runbacks so was captured on belt (!! possible this wasnt registered though)
+        '1035298': [34], # mouse climbed out and back on to belt mid-way so not normal run, so jerry re-attempted
+    },
 
+}
+
+missing_runs = {
+    '20230306': {
+        '1035246': [27,28,29,30,31], # missing the last 5 runs of APA phase
+        '1035249': [32,33,34,35,36,37,38,39,40,41] # missing last 10 runs of washout phase (missing side video_2)
+    },
+    '20230308': {
+        '1035246': [0, 1],  # missing the 2 habituation runs
+    },
+    '20230309': {
+            '1035298': [0,1], # missing the 2 habituation runs
+        }
+}
+
+'''
+## Possible issues:
+
+20230308 - 1035244: escaped under moving door at 4:51
+20230309 - 1035299: slid under door at 3:31/after r6, also slight incorrect door close at 9:40/after r16 and 14:46/after
+ r23, door close and mouse slip under at 20:43/after r31
+20230309 - 1035302: slid under door at 3:07/after r5
+
+'''
 
 
 

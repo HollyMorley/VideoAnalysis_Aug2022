@@ -19,8 +19,21 @@ from Helpers import ManualRunAdjustment as mra
 SENTINEL_VALUE = -1
 
 class GetRuns:
-    def __init__(self, file, mouseID, date):
+    def __init__(self, file, mouseID, date,
+                 exp=None, speed=None, repeat_extend=None, exp_wash=None,
+                 day=None, vmt_type=None, vmt_level=None, prep=None):
         self.file, self.mouseID, self.date = file, mouseID, date
+
+        # store the experiment details for error logging
+        self.exp = exp
+        self.speed = speed
+        self.repeat_extend = repeat_extend
+        self.exp_wash = exp_wash
+        self.day = day
+        self.vmt_type = vmt_type
+        self.vmt_level = vmt_level
+        self.prep = prep
+
         self.model, self.label_encoders, self.feature_columns = self.load_model()
         self.trial_starts, self.trial_ends = [], []
         self.run_starts, self.run_ends_steps, self.run_ends, self.transitions, self.taps = [], [], [], [], []
@@ -28,6 +41,7 @@ class GetRuns:
 
         # Always load the raw data
         self.data = self.get_data()
+        self._write_run_summary()
 
         # Error logging
         self.error_log_file = os.path.join(paths['filtereddata_folder'], 'error_log.csv')
@@ -58,6 +72,60 @@ class GetRuns:
         filename = self.get_saved_data_filename()
         self.data.to_hdf(filename, key='real_world_coords_runs')
         print(f"Saved self.data to {filename}")
+
+    def _write_run_summary(self):
+        """
+        Writes summary of runs to a CSV log, rewriting any existing entry for the same file.
+          - File
+          - MouseID
+          - # Registered (including sentinel placeholders)
+          - # Recorded (actual data runs in self.data)
+          - # Missing
+          - # Dropped
+        """
+        summary_log_file = os.path.join(paths['filtereddata_folder'], 'run_summary_log.csv')
+
+        # Calculate the run statistics
+        n_registered_runs = len(self.trial_starts)
+        n_recorded_runs = sum(start != SENTINEL_VALUE for start in self.trial_starts)
+
+        n_missing_runs = 0
+        if self.date in mra.missing_runs and self.mouseID in mra.missing_runs[self.date]:
+            n_missing_runs = len(mra.missing_runs[self.date][self.mouseID])
+
+        n_dropped_runs = 0
+        if self.date in mra.runs_to_drop and self.mouseID in mra.runs_to_drop[self.date]:
+            n_dropped_runs = len(mra.runs_to_drop[self.date][self.mouseID])
+
+        # Columns for the CSV
+        columns = [
+            'File', 'MouseID',
+            'RegisteredRuns', 'RecordedRuns',
+            'MissingRuns', 'DroppedRuns'
+        ]
+
+        # 1) Read existing CSV (if it exists) into a DataFrame
+        if os.path.exists(summary_log_file):
+            summary_df = pd.read_csv(summary_log_file)
+        else:
+            summary_df = pd.DataFrame(columns=columns)
+
+        # 2) Remove any existing entry for this file (so we can overwrite)
+        summary_df = summary_df[summary_df['File'] != self.file]
+
+        # 3) Add the new entry
+        new_row = {
+            'File': self.file,
+            'MouseID': self.mouseID,
+            'RegisteredRuns': n_registered_runs,
+            'RecordedRuns': n_recorded_runs,
+            'MissingRuns': n_missing_runs,
+            'DroppedRuns': n_dropped_runs
+        }
+        summary_df = summary_df.append(new_row, ignore_index=True)
+
+        # 4) Write the updated DataFrame back to CSV
+        summary_df.to_csv(summary_log_file, index=False)
 
     def visualise_video_frames(self, view, start_frame, end_frame):
         day = os.path.basename(self.file).split('_')[1]
@@ -155,8 +223,10 @@ class GetRuns:
         self.find_steps()
         self.index_by_run()
         print("Runs extracted successfully")
-        print("Extracted runs: ", len(self.data.index.get_level_values('Run').unique()))
+        print("Extracted runs (real): ", len(self.data.index.get_level_values('Run').unique()))
+        print("Extracted runs: (symbolic)", len(self.trial_starts))
         self.find_run_stages()
+
         self.save_data()
 
     #-------------------------------------------------------------------------------------------------------------------
@@ -216,12 +286,27 @@ class GetRuns:
 
         door_open, door_close = np.sort(np.array(door_open)), np.sort(np.array(door_close))
 
-        if self.date in mra.runs_to_drop and self.mouseID in mra.runs_to_drop[self.date]:
-            runs_to_drop = mra.runs_to_drop[self.date][self.mouseID]
-            for idx in runs_to_drop:
+        # 1) Insert placeholders for missing runs
+        if self.date in mra.missing_runs and self.mouseID in mra.missing_runs[self.date]:
+            for idx in sorted(mra.missing_runs[self.date][self.mouseID]):
+                # Safely insert SENTINEL_VALUE at the position where a run was missing
+                if idx <= len(door_open):
+                    door_open = np.insert(door_open, idx, SENTINEL_VALUE)
+                    door_close = np.insert(door_close, idx, SENTINEL_VALUE)
+
+        # 2) Then blank out the runs that need to be dropped (but keep as placeholders)
+        if self.date in mra.runs_to_drop_placeholder and self.mouseID in mra.runs_to_drop_placeholder[self.date]:
+            for idx in mra.runs_to_drop_placeholder[self.date][self.mouseID]:
                 if 0 <= idx < len(door_open):
                     door_open[idx] = SENTINEL_VALUE
                     door_close[idx] = SENTINEL_VALUE
+
+        # 3) Finally, drop the runs that need to be dropped completely
+        if self.date in mra.runs_to_drop_completely and self.mouseID in mra.runs_to_drop_completely[self.date]:
+            for idx in sorted(mra.runs_to_drop_completely[self.date][self.mouseID], reverse=True):
+                if 0 <= idx < len(door_open):
+                    door_open = np.delete(door_open, idx)
+                    door_close = np.delete(door_close, idx)
 
         return door_open, door_close
 
@@ -294,6 +379,9 @@ class GetRuns:
         for r in range(len(self.trial_starts)):
             if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
                 print(f"Skipping run {r} due to manual exclusion.")
+                Steps.append(pd.DataFrame())  # or whatever placeholder you like
+                RunBounds.append(None)
+                Runbacks.append(None)
                 continue
             steps, run_bounds, runbacks = self.process_run(r)
             Steps.append(steps)
@@ -307,13 +395,15 @@ class GetRuns:
             self.data[(paw, 'SwSt')] = StepsALL[paw].values
 
         # fill in 'running' column in self.data between run start and end values with 1's
-        self.data['running'] = False # todo just changed to running from run
-        for start, end in RunBounds:
-                self.data.loc[start:end, 'running'] = True
+        valid_RunBounds = [rb for rb in RunBounds if rb is not None] # todo check this (and below) if correct for conserving run positions
+        self.data['running'] = False
+        for start, end in valid_RunBounds:
+            self.data.loc[start:end, 'running'] = True
 
         # fill in 'rb' column in self.data between runback start and end values with 1's
+        valid_RunBacks = [rb for rb in Runbacks if rb is not None]
         self.data['rb'] = False
-        for rb in Runbacks:
+        for rb in valid_RunBacks:
             for start, end in rb:
                 self.data.loc[start:end, 'rb'] = True
 
@@ -338,8 +428,11 @@ class GetRuns:
                 steps = self.classify_steps_in_run(r, run_bounds)
                 #print(f"Run {r} completed")
                 return steps, run_bounds, runbacks
-            else:
+            elif len(run_bounds) > 1:
                 raise ValueError("More than one run detected in a trial (in find_steps)")
+            elif len(run_bounds) == 0:
+                print(f"No run detected in trial {r}")
+                return pd.DataFrame(), None, None
         except Exception as e:
             print(f"Error processing trial at run {r}: {e}")
             return pd.DataFrame()
@@ -797,9 +890,9 @@ class GetRuns:
             if ((tail1_x >= 0) & (tail1_x <= 30)).any():
                 # Include this chunk as it meets the condition
                 valid_forward_chunks.append(chunk)
-            else:
+            #else:
                 # Exclude the chunk and optionally log this action
-                print(f"Excluding chunk {chunk} as Tail1 x-coordinate is not between 0 and 30.")
+               # print(f"Excluding chunk {chunk} as Tail1 x-coordinate is not between 0 and 30.")
         return valid_forward_chunks
 
     def check_post_runs(self, forward_data, forward_chunks):
@@ -892,6 +985,13 @@ class GetRuns:
         runs = self.data.index.get_level_values('Run').unique()
         self.data['initiating_limb'] = np.nan
 
+        # Initialize lists to store run stages
+        self.run_starts = [None] * len(self.trial_starts)
+        self.run_ends = [None] * len(self.trial_starts)
+        self.run_ends_steps = [None] * len(self.trial_starts)
+        self.transitions = [None] * len(self.trial_starts)
+        self.taps = [None] * len(self.trial_starts)
+
         for r in runs:
             if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
                 print(f"Skipping run {r} due to sentinel value.")
@@ -904,7 +1004,7 @@ class GetRuns:
                 try:
                     self.find_run_start(r, paw_touchdown, limb_data)
                 except Exception as e:
-                    self.run_starts.append([])  # Fill with blank value
+                    self.run_starts[r] = [] # Fill with blank value
                     self._log_error('RunStart', str(e), r, overwrite=False)
 
                 # 2. RunEnd
@@ -914,7 +1014,7 @@ class GetRuns:
                 try:
                     self.find_transition(r, paw_touchdown, limb_data)
                 except Exception as e:
-                    self.transitions.append([])  # Fill with blank value
+                    self.transitions[r] = []  # Fill with blank value
                     self._log_error('Transition', str(e), r, overwrite=False)
 
                 # 4. Taps
@@ -945,12 +1045,20 @@ class GetRuns:
             with open(self.error_log_file, mode, newline='') as log_file:
                 writer = csv.writer(log_file)
 
-                # Add headers if overwriting the log file
+                # If overwriting, write a header row including the new columns:
                 if overwrite:
-                    writer.writerow(['ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber'])
+                    writer.writerow([
+                        'ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber',
+                        'exp', 'speed', 'repeat_extend', 'exp_wash', 'day',
+                        'vmt_type', 'vmt_level', 'prep'
+                    ])
 
-                # Log the error
-                writer.writerow([error_type, error_message, self.file, self.mouseID, run_number])
+                # Write the row with optional columns (None if not provided):
+                writer.writerow([
+                    error_type, error_message, self.file, self.mouseID, run_number,
+                    self.exp, self.speed, self.repeat_extend, self.exp_wash,
+                    self.day, self.vmt_type, self.vmt_level, self.prep
+                ])
         except Exception as e:
             print(f"Failed to write to the error log file: {e}")
 
@@ -1029,7 +1137,8 @@ class GetRuns:
             initiating_paws = [paw for paw, frame in paw_first_touchdowns.items() if
                                frame == earliest_first_touchdown_frame]
             if np.logical_and(len(initiating_paws) == 1, 'Hind' not in initiating_paws[0]):
-                self.run_starts.append(earliest_first_touchdown_frame)
+                #self.run_starts.append(earliest_first_touchdown_frame)
+                self.run_starts[r] = earliest_first_touchdown_frame
                 # adjust 'running' column to start at the first touchdown frame
                 current_bound0 = self.data.loc(axis=0)[r].loc(axis=1)['running'].index[self.data.loc(axis=0)[r].loc(axis=1)['running'] == True][0]
                 for f in range(earliest_first_touchdown_frame,current_bound0):
@@ -1059,8 +1168,11 @@ class GetRuns:
         for f in range(current_bound1,run_end):
             self.data.loc[(r,f),'running'] = True
 
-        self.run_ends.append(run_end)
-        self.run_ends_steps.append(last_touchdown_x4)
+        self.run_ends[r] = run_end
+        self.run_ends_steps[r] = last_touchdown_x4
+
+        # self.run_ends.append(run_end)
+        # self.run_ends_steps.append(last_touchdown_x4)
 
     def find_transition(self, r, paw_touchdown, limb_data):
         """
@@ -1151,7 +1263,7 @@ class GetRuns:
         # Step 10: Handle stepping transitions
         if transition_frame == transition_frame_step:
             self.data.loc[(r, transition_frame), 'initiating_limb'] = transition_paw
-            self.transitions.append(transition_frame)
+            self.transitions[r] = transition_frame
         else:
             transition_paw_mask_step = np.all(paw_touchdown_snippet.loc[transition_frame_step:].iloc[1:10] == True,
                                               axis=0)
@@ -1164,68 +1276,76 @@ class GetRuns:
                 transition_paw_step = transition_paw_step[0]
                 self.data.loc[(r, transition_frame_step), 'initiating_limb'] = transition_paw_step
                 self.data.loc[(r, transition_frame), 'initiating_limb'] = f"{transition_paw}_slid"
-            self.transitions.append(transition_frame_step)
+            self.transitions[r] = transition_frame_step
 
     def find_taps(self, r, limb_data):
-        # find taps and can measure this as a duration of time where mouse has a paw either hovering or touching the belt without stepping
-        pre_run_data = self.data.loc(axis=0)[r, :self.run_starts[r]]
-        forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
+        if self.run_starts[r]:
+            # find taps and can measure this as a duration of time where mouse has a paw either hovering or touching the belt without stepping
+            pre_run_data = self.data.loc(axis=0)[r, :self.run_starts[r]]
+            forepaw_labels = pd.unique([paw for paw in limb_data.columns.get_level_values(level=0) if 'Forepaw' in paw])
 
-        limb_data_snippet = limb_data.loc[pre_run_data.index.get_level_values('FrameIdx'), forepaw_labels]
+            limb_data_snippet = limb_data.loc[pre_run_data.index.get_level_values('FrameIdx'), forepaw_labels]
 
-        # Get y of forepaw toes
-        toe_z = limb_data_snippet.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'z'].droplevel('coords', axis=1)
-        toe_x = limb_data_snippet.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'x'].droplevel('coords', axis=1)
+            # Get y of forepaw toes
+            toe_z = limb_data_snippet.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'z'].droplevel('coords', axis=1)
+            toe_x = limb_data_snippet.loc(axis=1)[['ForepawToeL', 'ForepawToeR'], 'x'].droplevel('coords', axis=1)
 
-        tap_mask = np.logical_and(toe_z < 1, toe_x > 0, toe_x < 50)
-        taps_L = toe_x['ForepawToeL'][tap_mask['ForepawToeL']]
-        taps_R = toe_x['ForepawToeR'][tap_mask['ForepawToeR']]
+            tap_mask = np.logical_and(toe_z < 1, toe_x > 0, toe_x < 50)
+            taps_L = toe_x['ForepawToeL'][tap_mask['ForepawToeL']]
+            taps_R = toe_x['ForepawToeR'][tap_mask['ForepawToeR']]
 
-        # find blocks of taps
-        tap_blocks_L = utils.Utils().find_blocks(taps_L.index, gap_threshold=5, block_min_size=5)
-        tap_blocks_R = utils.Utils().find_blocks(taps_R.index, gap_threshold=5, block_min_size=5)
+            # find blocks of taps
+            tap_blocks_L = utils.Utils().find_blocks(taps_L.index, gap_threshold=5, block_min_size=5)
+            tap_blocks_R = utils.Utils().find_blocks(taps_R.index, gap_threshold=5, block_min_size=5)
 
-        # ensure taps are not too close to the start of the run or a runback
-        runback_idxs = self.data.loc(axis=1)['rb'].index[self.data.loc(axis=1)['rb'] == True]
-        tap_blocks_L_final = []
-        tap_blocks_R_final = []
-        buffer = 50
-        if len(tap_blocks_L) > 0:
-            for block in tap_blocks_L:
-                if np.logical_or(
-                        any([self.run_starts[r] - block[0] <= buffer, self.run_starts[r] - block[-1] <= buffer]),
-                        np.any([np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx')), np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx') - buffer)])):
-                    #print(f"Tap block removed from run {r} at {block}")
-                    pass
-                else:
-                    tap_blocks_L_final.append(block)
-        if len(tap_blocks_R) > 0:
-            for block in tap_blocks_R:
-                if np.logical_or(
-                        any([self.run_starts[r] - block[0] <= buffer, self.run_starts[r] - block[-1] <= buffer]),
-                        np.any([np.in1d(list(range(block[0], block[1])), runback_idxs.get_level_values('FrameIdx')),
-                                np.in1d(list(range(block[0], block[1])),
-                                        runback_idxs.get_level_values('FrameIdx') - buffer)])):
-                    #print(f"Tap block removed from run {r} at {block}")
-                    pass
-                else:
-                    tap_blocks_R_final.append(block)
+            # ensure taps are not too close to the start of the run or a runback
+            runback_idxs = self.data.loc(axis=1)['rb'].index[self.data.loc(axis=1)['rb'] == True]
+            tap_blocks_L_final = []
+            tap_blocks_R_final = []
+            buffer = 50
+            if len(tap_blocks_L) > 0:
+                for block in tap_blocks_L:
+                    if np.logical_or(
+                            any([self.run_starts[r] - block[0] <= buffer, self.run_starts[r] - block[-1] <= buffer]),
+                            np.any([np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx')), np.in1d(list(range(block[0],block[1])), runback_idxs.get_level_values('FrameIdx') - buffer)])):
+                        #print(f"Tap block removed from run {r} at {block}")
+                        pass
+                    else:
+                        tap_blocks_L_final.append(block)
+            if len(tap_blocks_R) > 0:
+                for block in tap_blocks_R:
+                    if np.logical_or(
+                            any([self.run_starts[r] - block[0] <= buffer, self.run_starts[r] - block[-1] <= buffer]),
+                            np.any([np.in1d(list(range(block[0], block[1])), runback_idxs.get_level_values('FrameIdx')),
+                                    np.in1d(list(range(block[0], block[1])),
+                                            runback_idxs.get_level_values('FrameIdx') - buffer)])):
+                        #print(f"Tap block removed from run {r} at {block}")
+                        pass
+                    else:
+                        tap_blocks_R_final.append(block)
 
-        # return list of frames contained within tap blocks (ie the range between block ends) as list for each side
-        tap_frames_L = [list(range(block[0], block[-1])) for block in tap_blocks_L_final]
-        tap_frames_R = [list(range(block[0], block[-1])) for block in tap_blocks_R_final]
+            # return list of frames contained within tap blocks (ie the range between block ends) as list for each side
+            tap_frames_L = [list(range(block[0], block[-1])) for block in tap_blocks_L_final]
+            tap_frames_R = [list(range(block[0], block[-1])) for block in tap_blocks_R_final]
 
-        self.taps.append((tap_frames_L, tap_frames_R))
+            self.taps[r] = (tap_frames_L, tap_frames_R)
+        else:
+            self.taps[r] = ([], [])
 
     def create_runstage_index(self):
         # First add in a 'TapsL' and 'TapsR' column
         self.data['TapsL'] = False
         self.data['TapsR'] = False
         for r, taps in enumerate(self.taps):
-            for tap in taps[0]:
-                self.data.loc[(r, tap), 'TapsL'] = True
-            for tap in taps[1]:
-                self.data.loc[(r, tap), 'TapsR'] = True
+            if taps is None:
+                # means we never stored any tap info for run r
+                continue
+            # Now taps is guaranteed to be something like ([], [])
+            left_taps, right_taps = taps  # or taps[0], taps[1]
+            for tap_idx in left_taps:
+                self.data.loc[(r, tap_idx), 'TapsL'] = True
+            for tap_idx in right_taps:
+                self.data.loc[(r, tap_idx), 'TapsR'] = True
 
         # Instantiate RunStage column
         self.data['RunStage'] = 'None'
@@ -1503,9 +1623,21 @@ class GetRuns:
 
 
 class GetAllFiles:
-    def __init__(self, directory=None, overwrite=False):
+    def __init__(self, directory=None, overwrite=False,
+                 exp=None, speed=None, repeat_extend=None, exp_wash=None,
+                 day=None, vmt_type=None, vmt_level=None, prep=None):
         self.directory = directory
         self.overwrite = overwrite
+
+        # store experiment conditions for error logging
+        self.exp = exp
+        self.speed = speed
+        self.repeat_extend = repeat_extend
+        self.exp_wash = exp_wash
+        self.day = day
+        self.vmt_type = vmt_type
+        self.vmt_level = vmt_level
+        self.prep = prep
 
     def GetFiles(self):
         files = utils.Utils().GetListofMappedFiles(self.directory)  # gets dictionary of side, front and overhead 3D files
@@ -1520,7 +1652,15 @@ class GetAllFiles:
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
                 print(f"###############################################################"
                       f"\nFinding runs and extracting gait for {mouseID}...\n###############################################################")
-                get_runs = GetRuns(files[j], mouseID, date)
+                get_runs = GetRuns(files[j], mouseID, date,
+                               exp=self.exp,
+                               speed=self.speed,
+                               repeat_extend=self.repeat_extend,
+                               exp_wash=self.exp_wash,
+                               day=self.day,
+                               vmt_type=self.vmt_type,
+                               vmt_level=self.vmt_level,
+                               prep=self.prep)
                 get_runs.get_runs()
             else:
                 print(f"Data for {mouseID} already exists. Skipping...")
@@ -1576,7 +1716,18 @@ class GetConditionFiles:
             # No more subdirectories, assume this is the final directory with data
             print(f"Final directory: {current_path}")
             try:
-                GetAllFiles(directory=current_path, overwrite=self.overwrite).GetFiles()
+                GetAllFiles(
+                    directory=current_path,
+                    overwrite=self.overwrite,
+                    exp=self.exp,
+                    speed=self.speed,
+                    repeat_extend=self.repeat_extend,
+                    exp_wash=self.exp_wash,
+                    day=self.day,
+                    vmt_type=self.vmt_type,
+                    vmt_level=self.vmt_level,
+                    prep=self.prep
+                ).GetFiles()
             except Exception as e:
                 print(f"Error processing directory {current_path}: {e}")
 
@@ -1585,8 +1736,7 @@ def main():
     # Get all data
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
-                          overwrite=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=True).get_dirs() # should do all 3 days
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

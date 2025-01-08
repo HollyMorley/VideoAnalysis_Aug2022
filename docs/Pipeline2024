@@ -65,6 +65,8 @@
 2. Run Preprocessing/MappingRealWorld_V3.py
     - N.B. need to specify the experimental parameters in the script
     - Maps the 2D DLC coordinates to 3D space and saves as a '_mapped3D.h5' file
+    - Before mapping, checks if the camera moved
+    - Optimises the DLC-tracking-based calibration of the cameras based on the labelled frames (uses reprojection error as the metric)
     - Also save calibration data and visualisation of the optimisations made to the mapping (in Helpers/OptimizeCalibration.py)
 
 -------------------------------------------------------------------------------------------------------------------------------------------

@@ -504,7 +504,8 @@ class GetSingleExpData:
         return df
 
     def load_timestamps(self, view):
-        timestamp_path = utils.Utils().Get_timestamps_from_analyse_file(self.files[view], view)
+        timestamp_path = self.files[view].replace(vidstuff['scorers'][view], '_Timestamps').replace('.h5', '.csv')
+        # timestamp_path = utils.Utils().Get_timestamps_from_analyse_file(self.files[view], view)
         timestamps = pd.read_csv(timestamp_path)
         return timestamps
 
@@ -1499,21 +1500,23 @@ def main():
     #GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
 
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
-                                   overwrite=False).get_dirs()
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2',
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1',
+    #                       overwrite=False).get_dirs()
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2',
+    #                       overwrite=False).get_dirs()
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3',
+    #                       overwrite=False).get_dirs()
+    print("Analysing Repeats...")
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',
                           overwrite=False).get_dirs()
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3',
-                          overwrite=False).get_dirs()
-
-    # print("Analysing LowHigh...")
-    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
-    # print("Analysing LowMid...")
-    # GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
-    # print("Analysing HighLow...")
-    # GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
-    # print("Analysing PerceptionTest...")
-    # GetDirsFromConditions(exp='PerceptionTest', overwrite=False).get_dirs()
+    print("Analysing Extended: LowHigh...")
+    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
+    print("Analysing Extended: LowMid...")
+    GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
+    print("Analysing Extended: HighLow...")
+    GetDirsFromConditions(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
+    print("Analysing PerceptionTest...")
+    GetDirsFromConditions(exp='PerceptionTest', overwrite=False).get_dirs()
 
     # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', day='Day2', overwrite=False).get_dirs()
 

@@ -1,0 +1,606 @@
+C:\Users\hmorl\miniconda3\envs\VideoAnalysis_XPSrecovered\python.exe C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp
+Subdirectories found in H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp: ['Day1', 'Day2', 'Day3']
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1
+Files to be analysed are:
+11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035243_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035244_L_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035245_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035246_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035249_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035250_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035297_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035298_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035299_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035301_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035302_LR_mapped3D.h5']
+###############################################################
+Finding runs and extracting gait for 1035243...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035243_None_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035243_None_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035244...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035244_L_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035244_L_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035245...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Skipping run 40 due to manual exclusion.
+Skipping run 41 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  40
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 18 due to missing stage bounds.
+Skipping run 39 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035245_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035245_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035246...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Skipping run 27 due to manual exclusion.
+Skipping run 28 due to manual exclusion.
+Skipping run 29 due to manual exclusion.
+Skipping run 30 due to manual exclusion.
+Skipping run 31 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  37
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 7 due to missing stage bounds.
+Skipping run 15 due to missing stage bounds.
+Skipping run 24 due to missing stage bounds.
+Could not read frame 325624 from video for run 32. Skipping.
+Could not read frame 376157 from video for run 33. Skipping.
+Could not read frame 383329 from video for run 34. Skipping.
+Could not read frame 395863 from video for run 35. Skipping.
+Could not read frame 403094 from video for run 36. Skipping.
+Could not read frame 411328 from video for run 37. Skipping.
+Could not read frame 427128 from video for run 38. Skipping.
+Could not read frame 438912 from video for run 39. Skipping.
+Could not read frame 444965 from video for run 40. Skipping.
+Could not read frame 450204 from video for run 41. Skipping.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Could not read frame 325073 from video for run 32. Skipping.
+Could not read frame 375828 from video for run 33. Skipping.
+Could not read frame 382967 from video for run 34. Skipping.
+Could not read frame 395449 from video for run 35. Skipping.
+Could not read frame 402673 from video for run 36. Skipping.
+Could not read frame 410976 from video for run 37. Skipping.
+Could not read frame 426649 from video for run 38. Skipping.
+Could not read frame 438282 from video for run 39. Skipping.
+Could not read frame 444547 from video for run 40. Skipping.
+Could not read frame 449913 from video for run 41. Skipping.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035246_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035249...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Skipping run 31 due to manual exclusion.
+Skipping run 32 due to manual exclusion.
+Skipping run 33 due to manual exclusion.
+Skipping run 34 due to manual exclusion.
+Skipping run 35 due to manual exclusion.
+Skipping run 36 due to manual exclusion.
+Skipping run 37 due to manual exclusion.
+Skipping run 38 due to manual exclusion.
+Skipping run 39 due to manual exclusion.
+Skipping run 40 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  32
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 12 due to missing stage bounds.
+Skipping run 16 due to missing stage bounds.
+Skipping run 29 due to missing stage bounds.
+Skipping run 30 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035249_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035249_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035250...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 18 due to missing stage bounds.
+Skipping run 30 due to missing stage bounds.
+Skipping run 31 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230306_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230306_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230306_APACharRepeat_FAA-1035250_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035297...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230309_APACharRepeat_FAA-1035297_R_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+No paw detected in transition frame for run 7
+No paw detected in transition frame for run 40
+Skipping run 7 due to missing stage bounds.
+Skipping run 14 due to missing stage bounds.
+Skipping run 15 due to missing stage bounds.
+Skipping run 19 due to missing stage bounds.
+Skipping run 40 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230309_APACharRepeat_FAA-1035297_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230309_APACharRepeat_FAA-1035297_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230309_APACharRepeat_FAA-1035297_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035298...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230309_APACharRepeat_FAA-1035298_LR_mapped3D.h5
+Skipping run 0 due to manual exclusion.
+Skipping run 1 due to manual exclusion.
+Skipping run 27 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  39
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Run 33: Multiple or no initiating paws found.
+Skipping run 15 due to missing stage bounds.
+Skipping run 16 due to missing stage bounds.
+Skipping run 20 due to missing stage bounds.
+Skipping run 33 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\Transition\_HM_20230309_APACharRepeat_FAA-1035298_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day1\RunStart\_HM_20230309_APACharRepeat_FAA-1035298_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230309_APACharRepeat_FAA-1035298_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035299...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1\HM_20230309_APACharRepeat_FAA-1035299_None_mapped3D.h5
+Error processing trial at run 33: No backwards running detected in this snippet
+Error processing directory H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1: not enough values to unpack (expected 3, got 0)
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2
+Files to be analysed are:
+11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035243_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035244_L_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035245_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035246_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035249_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035250_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035297_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035298_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035299_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035301_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035302_LR_mapped3D.h5']
+###############################################################
+Finding runs and extracting gait for 1035243...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 35 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035243_None_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035243_None_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035244...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  41
+Extracted runs: (symbolic) 41
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 0 due to missing stage bounds.
+Skipping run 6 due to missing stage bounds.
+Skipping run 14 due to missing stage bounds.
+Skipping run 30 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035244_L_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035244_L_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035245...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  43
+Extracted runs: (symbolic) 43
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Run 32: Multiple or no initiating paws found.
+Skipping run 14 due to missing stage bounds.
+Skipping run 21 due to missing stage bounds.
+Skipping run 32 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035245_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035245_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035246...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Skipping run 0 due to manual exclusion.
+Skipping run 1 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  40
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 4 due to missing stage bounds.
+Skipping run 11 due to missing stage bounds.
+Skipping run 12 due to missing stage bounds.
+Skipping run 14 due to missing stage bounds.
+Skipping run 22 due to missing stage bounds.
+Skipping run 23 due to missing stage bounds.
+Skipping run 28 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035246_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035249...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  43
+Extracted runs: (symbolic) 43
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 18 due to missing stage bounds.
+Skipping run 28 due to missing stage bounds.
+Skipping run 32 due to missing stage bounds.
+Skipping run 36 due to missing stage bounds.
+Skipping run 39 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035249_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035249_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035250...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+No run detected in trial 11
+Runs extracted successfully
+Extracted runs (real):  43
+Extracted runs: (symbolic) 43
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Error processing run stages at run 11: No touchdown detected for ForepawR in run 11
+No paw detected in transition frame for run 18
+Skipping run 9 due to missing stage bounds.
+Skipping run 11 due to missing stage bounds.
+Skipping run 17 due to missing stage bounds.
+Skipping run 18 due to missing stage bounds.
+Skipping run 21 due to missing stage bounds.
+Skipping run 23 due to missing stage bounds.
+Skipping run 28 due to missing stage bounds.
+Skipping run 29 due to missing stage bounds.
+Skipping run 32 due to missing stage bounds.
+Skipping run 34 due to missing stage bounds.
+Skipping run 36 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\Transition\_HM_20230308_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day2\RunStart\_HM_20230308_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230308_APACharRepeat_FAA-1035250_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035297...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2\HM_20230312_APACharRepeat_FAA-1035297_R_mapped3D.h5
+Error processing trial at run 3: (m>k) failed for hidden m: fpcurf0:m=1
+Error processing directory H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2: not enough values to unpack (expected 3, got 0)
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3
+Files to be analysed are:
+11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035243_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035244_L_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035245_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035246_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035249_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035250_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035297_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035298_LR_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035299_None_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035301_R_mapped3D.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035302_LR_mapped3D.h5']
+###############################################################
+Finding runs and extracting gait for 1035243...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 24 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035243_None_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035243_None_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035243_None_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035244...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+No paw detected in transition frame for run 25
+Skipping run 25 due to missing stage bounds.
+Skipping run 33 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035244_L_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035244_L_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035244_L_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035245...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Skipping run 28 due to manual exclusion.
+Skipping run 29 due to manual exclusion.
+Skipping run 30 due to manual exclusion.
+Skipping run 31 due to manual exclusion.
+Runs extracted successfully
+Extracted runs (real):  28
+Extracted runs: (symbolic) 32
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 0 due to missing stage bounds.
+Skipping run 1 due to missing stage bounds.
+Skipping run 24 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035245_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035245_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035245_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035246...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 4 due to missing stage bounds.
+Skipping run 31 due to missing stage bounds.
+Skipping run 34 due to missing stage bounds.
+Skipping run 39 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035246_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035246_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035249...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  42
+Extracted runs: (symbolic) 42
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+Skipping run 14 due to missing stage bounds.
+Skipping run 17 due to missing stage bounds.
+Skipping run 24 due to missing stage bounds.
+Skipping run 27 due to missing stage bounds.
+Skipping run 34 due to missing stage bounds.
+Skipping run 37 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035249_R_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035249_R_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035249_R_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035250...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+Runs extracted successfully
+Extracted runs (real):  41
+Extracted runs: (symbolic) 41
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:133: FutureWarning: The frame.append method is deprecated and will be removed from pandas in a future version. Use pandas.concat instead.
+  summary_df = summary_df.append(new_row, ignore_index=True)
+No paw detected in transition frame for run 14
+Skipping run 5 due to missing stage bounds.
+Skipping run 14 due to missing stage bounds.
+Skipping run 18 due to missing stage bounds.
+Skipping run 19 due to missing stage bounds.
+Skipping run 22 due to missing stage bounds.
+Skipping run 23 due to missing stage bounds.
+Skipping run 27 due to missing stage bounds.
+Skipping run 32 due to missing stage bounds.
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\Transition\_HM_20230310_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+Images saved in: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\LimbStuff\check_runstages\APAChar_LowHigh_Repeats_Wash_Exp_Day3\RunStart\_HM_20230310_APACharRepeat_FAA-1035250_LR_mapped3D.h5
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\GetRunsAndLoco.py:72: PerformanceWarning:
+your performance may suffer as PyTables will pickle object types that it cannot
+map directly to c-types [inferred_type->mixed,key->block2_values] [items->MultiIndex([(       'ForepawR', 'SwSt'),
+            (       'ForepawL', 'SwSt'),
+            (       'HindpawR', 'SwSt'),
+            (       'HindpawL', 'SwSt'),
+            ('initiating_limb',     '')],
+           names=['bodyparts', 'coords'])]
+
+  self.data.to_hdf(filename, key='real_world_coords_runs')
+Saved self.data to H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230310_APACharRepeat_FAA-1035250_LR_mapped3D_Runs.h5
+###############################################################
+Finding runs and extracting gait for 1035297...
+###############################################################
+Cleared old error log entries for H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230314_APACharRepeat_FAA-1035297_R_mapped3D.h5
+Error processing trial at run 0: No backwards running detected in this snippet
+Error processing directory H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3: not enough values to unpack (expected 3, got 0)
+
+Process finished with exit code 0

@@ -9615,3 +9615,923 @@ Traceback (most recent call last):
 KeyboardInterrupt
 
 Process finished with exit code -1073741510 (0xC000013A: interrupted by Ctrl+C)
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+C:\Users\hmorl\miniconda3\envs\VideoAnalysis_XPSrecovered\python.exe C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\MappingRealWorld_V3.py
+Analysing Repeats...
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp
+Subdirectories found in H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp: ['Day1', 'Day2', 'Day3']
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day1
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230306_APACharRepeat_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day1\\HM_20230309_APACharRepeat_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day2
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230308_APACharRepeat_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day2\\HM_20230312_APACharRepeat_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230310_APACharRepeat_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Repeats\\Wash\\Exp\\Day3\\HM_20230314_APACharRepeat_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Analysing Extended: LowHigh...
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended
+Subdirectories found in H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended: ['Day1', 'Day2', 'Day3', 'Day4']
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended\Day1
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230316_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day1\\HM_20230403_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended\Day2
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230317_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day2\\HM_20230404_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended\Day3
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230318_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day3\\HM_20230405_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+###############################################################
+Mapping data for 1035302...
+###############################################################
+Error processing 1035302: polyorder must be less than window_length.
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Extended\Day4
+Files to be analysed are:
+Side: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035249_R_2_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035249_R_2_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 11 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035249_R_2_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230319_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowHigh\\Extended\\Day4\\HM_20230406_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035249 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Analysing Extended: LowMid...
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended
+Subdirectories found in H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended: ['Day1', 'Day2', 'Day3', 'Day4']
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day1
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230320_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day1\\HM_20230407_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+###############################################################
+Mapping data for 1035301...
+###############################################################
+No camera movement detected. Processing data as a single segment.
+Processing segment 1/1: frames 0 to 369244
+Initial total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3972.5753328588416
+Optimizing calibration points...
+RUNNING THE L-BFGS-B CODE
+
+           * * *
+
+Machine precision = 2.220D-16
+ N =           28     M =           10
+
+At X0         0 variables are exactly at the bounds
+
+At iterate    0    f=  3.97258D+03    |proj g|=  5.00000D+00
+
+At iterate    1    f=  3.71294D+03    |proj g|=  5.49843D+00
+
+At iterate    2    f=  3.68795D+03    |proj g|=  6.60290D+00
+
+At iterate    3    f=  3.63595D+03    |proj g|=  6.13872D+00
+
+At iterate    4    f=  3.62187D+03    |proj g|=  5.63682D+00
+
+At iterate    5    f=  3.60296D+03    |proj g|=  5.51230D+00
+
+At iterate    6    f=  3.59245D+03    |proj g|=  6.13269D+00
+
+ Bad direction in the line search;
+   refresh the lbfgs memory and restart the iteration.
+
+           * * *
+
+Tit   = total number of iterations
+Tnf   = total number of function evaluations
+Tnint = total number of segments explored during Cauchy searches
+Skip  = number of BFGS updates skipped
+Nact  = number of active bounds at final generalized Cauchy point
+Projg = norm of the final projected gradient
+F     = final function value
+
+           * * *
+
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+   28      7     48     49     0    17   6.133D+00   3.592D+03
+  F =   3592.4549601467438
+
+ABNORMAL_TERMINATION_IN_LNSRCH
+Optimization completed in 224.20 seconds.
+
+ Line search cannot locate an adequate point after MAXLS
+  function and gradient evaluations.
+  Previous x, f and g restored.
+ Possible causes: 1 error in function or gradient evaluation;
+                  2 rounding error dominate computation.
+New total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3592.454960146744
+Reprojection error improvement: 380.12037271209783, as a percentage: 9.57%
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 510.97 seconds
+---------------------------------------------------------------
+Data saved to HDF5 file at H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day1\HM_20230320_APACharExt_FAA-1035301_R_mapped3D.h5
+Data for 1035302 already exists. Skipping...
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day2
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230321_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day2\\HM_20230408_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+###############################################################
+Mapping data for 1035301...
+###############################################################
+No camera movement detected. Processing data as a single segment.
+Processing segment 1/1: frames 0 to 477267
+Initial total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3924.922588647195
+Optimizing calibration points...
+RUNNING THE L-BFGS-B CODE
+
+           * * *
+
+Machine precision = 2.220D-16
+ N =           28     M =           10
+
+At X0         0 variables are exactly at the bounds
+
+At iterate    0    f=  3.92492D+03    |proj g|=  5.00000D+00
+
+At iterate    1    f=  3.55374D+03    |proj g|=  5.88423D+00
+
+At iterate    2    f=  3.53760D+03    |proj g|=  6.38098D+00
+
+At iterate    3    f=  3.53493D+03    |proj g|=  6.45719D+00
+
+At iterate    4    f=  3.52983D+03    |proj g|=  5.20497D+00
+
+At iterate    5    f=  3.51759D+03    |proj g|=  6.02574D+00
+
+At iterate    6    f=  3.51530D+03    |proj g|=  6.01395D+00
+
+At iterate    7    f=  3.51506D+03    |proj g|=  6.55919D+00
+
+At iterate    8    f=  3.51418D+03    |proj g|=  6.66970D+00
+
+At iterate    9    f=  3.51238D+03    |proj g|=  6.75997D+00
+
+At iterate   10    f=  3.50857D+03    |proj g|=  6.69787D+00
+
+At iterate   11    f=  3.50418D+03    |proj g|=  6.10872D+00
+
+At iterate   12    f=  3.50416D+03    |proj g|=  6.94656D+00
+
+At iterate   13    f=  3.50294D+03    |proj g|=  5.78211D+00
+
+At iterate   14    f=  3.50288D+03    |proj g|=  5.85508D+00
+
+At iterate   15    f=  3.50287D+03    |proj g|=  6.52519D+00
+
+           * * *
+
+Tit   = total number of iterations
+Tnf   = total number of function evaluations
+Tnint = total number of segments explored during Cauchy searches
+Skip  = number of BFGS updates skipped
+Nact  = number of active bounds at final generalized Cauchy point
+Projg = norm of the final projected gradient
+F     = final function value
+
+           * * *
+
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+   28     15     23     35     0     0   6.525D+00   3.503D+03
+  F =   3502.8744376941568
+
+CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH
+Optimization completed in 111.73 seconds.
+New total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3502.8744376941568
+Reprojection error improvement: 422.0481509530382, as a percentage: 10.75%
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 622.90 seconds
+---------------------------------------------------------------
+Data saved to HDF5 file at H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day2\HM_20230321_APACharExt_FAA-1035301_R_mapped3D.h5
+Data for 1035302 already exists. Skipping...
+###############################################################
+Mapping data for 1035243...
+###############################################################
+Error processing 1035243: polyorder must be less than window_length.
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+###############################################################
+Mapping data for 1035246...
+###############################################################
+Error processing 1035246: polyorder must be less than window_length.
+Data for 1035250 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day3
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230322_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day3\\HM_20230409_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+###############################################################
+Mapping data for 1035297...
+###############################################################
+No camera movement detected. Processing data as a single segment.
+Processing segment 1/1: frames 0 to 424813
+Initial total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3521.1212365780043
+Optimizing calibration points...
+RUNNING THE L-BFGS-B CODE
+
+           * * *
+
+Machine precision = 2.220D-16
+ N =           28     M =           10
+
+At X0         0 variables are exactly at the bounds
+
+At iterate    0    f=  3.52112D+03    |proj g|=  5.00000D+00
+
+At iterate    1    f=  3.05959D+03    |proj g|=  5.87084D+00
+
+At iterate    2    f=  2.95295D+03    |proj g|=  6.16525D+00
+
+At iterate    3    f=  2.92883D+03    |proj g|=  7.10684D+00
+
+At iterate    4    f=  2.90226D+03    |proj g|=  5.91962D+00
+
+At iterate    5    f=  2.87963D+03    |proj g|=  6.42250D+00
+
+At iterate    6    f=  2.87435D+03    |proj g|=  7.84066D+00
+
+At iterate    7    f=  2.85599D+03    |proj g|=  7.61451D+00
+
+At iterate    8    f=  2.85025D+03    |proj g|=  7.11524D+00
+
+At iterate    9    f=  2.83788D+03    |proj g|=  6.21237D+00
+
+At iterate   10    f=  2.83459D+03    |proj g|=  6.57430D+00
+
+ Bad direction in the line search;
+   refresh the lbfgs memory and restart the iteration.
+
+ Line search cannot locate an adequate point after MAXLS
+  function and gradient evaluations.
+  Previous x, f and g restored.
+ Possible causes: 1 error in function or gradient evaluation;
+                  2 rounding error dominate computation.
+
+           * * *
+
+Tit   = total number of iterations
+Tnf   = total number of function evaluations
+Tnint = total number of segments explored during Cauchy searches
+Skip  = number of BFGS updates skipped
+Nact  = number of active bounds at final generalized Cauchy point
+Projg = norm of the final projected gradient
+F     = final function value
+
+           * * *
+
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+   28     11     54     48     0    15   6.574D+00   2.835D+03
+  F =   2834.5901414721393
+
+ABNORMAL_TERMINATION_IN_LNSRCH
+Optimization completed in 263.67 seconds.
+New total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+2834.5901414721393
+Reprojection error improvement: 686.531095105865, as a percentage: 19.50%
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 556.42 seconds
+---------------------------------------------------------------
+Data saved to HDF5 file at H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day3\HM_20230322_APACharExt_FAA-1035297_R_mapped3D.h5
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+Data for 1035243 already exists. Skipping...
+###############################################################
+Mapping data for 1035244...
+###############################################################
+Error processing 1035244: polyorder must be less than window_length.
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+###############################################################
+Mapping data for 1035250...
+###############################################################
+Error processing 1035250: polyorder must be less than window_length.
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day4
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230323_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_LowMid\\Extended\\Day4\\HM_20230410_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+###############################################################
+Mapping data for 1035301...
+###############################################################
+No camera movement detected. Processing data as a single segment.
+Processing segment 1/1: frames 0 to 450492
+Initial total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3696.3063851767165
+Optimizing calibration points...
+RUNNING THE L-BFGS-B CODE
+
+           * * *
+
+Machine precision = 2.220D-16
+ N =           28     M =           10
+
+At X0         0 variables are exactly at the bounds
+
+At iterate    0    f=  3.69631D+03    |proj g|=  5.00000D+00
+
+At iterate    1    f=  2.97525D+03    |proj g|=  6.22837D+00
+
+At iterate    2    f=  2.78637D+03    |proj g|=  6.54596D+00
+
+At iterate    3    f=  2.75824D+03    |proj g|=  7.96718D+00
+
+At iterate    4    f=  2.73413D+03    |proj g|=  7.91672D+00
+
+At iterate    5    f=  2.73183D+03    |proj g|=  5.93067D+00
+
+At iterate    6    f=  2.72639D+03    |proj g|=  6.56096D+00
+
+At iterate    7    f=  2.71661D+03    |proj g|=  5.83073D+00
+
+At iterate    8    f=  2.71138D+03    |proj g|=  6.51406D+00
+
+At iterate    9    f=  2.71095D+03    |proj g|=  8.24469D+00
+
+At iterate   10    f=  2.70387D+03    |proj g|=  8.23422D+00
+
+At iterate   11    f=  2.69958D+03    |proj g|=  7.33607D+00
+
+At iterate   12    f=  2.69928D+03    |proj g|=  6.91942D+00
+
+At iterate   13    f=  2.69912D+03    |proj g|=  7.00153D+00
+
+At iterate   14    f=  2.69868D+03    |proj g|=  5.41409D+00
+
+At iterate   15    f=  2.69851D+03    |proj g|=  6.33167D+00
+
+At iterate   16    f=  2.69851D+03    |proj g|=  6.81967D+00
+
+At iterate   17    f=  2.69810D+03    |proj g|=  7.34287D+00
+
+At iterate   18    f=  2.69779D+03    |proj g|=  7.23973D+00
+
+At iterate   19    f=  2.69778D+03    |proj g|=  6.92013D+00
+
+At iterate   20    f=  2.69778D+03    |proj g|=  6.91646D+00
+
+At iterate   21    f=  2.69775D+03    |proj g|=  5.68808D+00
+
+At iterate   22    f=  2.69757D+03    |proj g|=  7.62529D+00
+
+At iterate   23    f=  2.69753D+03    |proj g|=  8.09513D+00
+
+At iterate   24    f=  2.69736D+03    |proj g|=  5.77006D+00
+
+At iterate   25    f=  2.69731D+03    |proj g|=  6.44212D+00
+
+At iterate   26    f=  2.69701D+03    |proj g|=  8.10698D+00
+
+At iterate   27    f=  2.69660D+03    |proj g|=  8.14062D+00
+
+At iterate   28    f=  2.69660D+03    |proj g|=  7.67865D+00
+
+At iterate   29    f=  2.69654D+03    |proj g|=  8.16496D+00
+
+At iterate   30    f=  2.69647D+03    |proj g|=  8.17318D+00
+
+At iterate   31    f=  2.69642D+03    |proj g|=  8.15305D+00
+
+At iterate   32    f=  2.69639D+03    |proj g|=  7.67262D+00
+
+At iterate   33    f=  2.69635D+03    |proj g|=  6.92791D+00
+
+At iterate   34    f=  2.69606D+03    |proj g|=  7.28664D+00
+
+At iterate   35    f=  2.69572D+03    |proj g|=  7.66146D+00
+
+At iterate   36    f=  2.69557D+03    |proj g|=  8.15335D+00
+
+At iterate   37    f=  2.69488D+03    |proj g|=  8.04025D+00
+
+At iterate   38    f=  2.69459D+03    |proj g|=  6.28061D+00
+
+At iterate   39    f=  2.69427D+03    |proj g|=  8.07011D+00
+
+At iterate   40    f=  2.69427D+03    |proj g|=  6.67533D+00
+
+ Warning:  more than 10 function and gradient
+   evaluations in the last line search.  Termination
+   may possibly be caused by a bad search direction.
+
+At iterate   41    f=  2.69427D+03    |proj g|=  6.70835D+00
+
+           * * *
+
+Tit   = total number of iterations
+Tnf   = total number of function evaluations
+Tnint = total number of segments explored during Cauchy searches
+Skip  = number of BFGS updates skipped
+Nact  = number of active bounds at final generalized Cauchy point
+Projg = norm of the final projected gradient
+F     = final function value
+
+           * * *
+
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+   28     41     75     64     0     0   6.708D+00   2.694D+03
+  F =   2694.2651243356145
+
+CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH
+Optimization completed in 344.02 seconds.
+Error: Could not read frame 444366 from the video for side view.
+Error: Could not read frame 444366 from the video for front view.
+No handles with labels found to put in legend.
+Error: Could not read frame 444366 from the video for overhead view.
+New total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+2694.2651243356145
+Reprojection error improvement: 1002.041260841102, as a percentage: 27.11%
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 576.76 seconds
+---------------------------------------------------------------
+Data saved to HDF5 file at H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowMid\Extended\Day4\HM_20230323_APACharExt_FAA-1035301_R_mapped3D.h5
+Data for 1035302 already exists. Skipping...
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Analysing Extended: HighLow...
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended
+Subdirectories found in H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended: ['Day1', 'Day2', 'Day3', 'Day4']
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended\Day1
+Files to be analysed are:
+Side: 8 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 8 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 8 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230325_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day1\\HM_20230412_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+###############################################################
+Mapping data for 1035243...
+###############################################################
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\MappingRealWorld_V3.py:519: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  side_timestamps_single_frame = side_timestamps[mask]
+Error processing 1035243: Unalignable boolean Series provided as indexer (index of the boolean Series and of the indexed object do not match).
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended\Day2
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExtW_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035249_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExtW_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035249_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExtW_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230326_APACharExt_FAA-1035249_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day2\\HM_20230413_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+###############################################################
+Mapping data for 1035249...
+###############################################################
+C:\Users\hmorl\Projects\VideoAnalysis_Aug2022\Preprocessing\MappingRealWorld_V3.py:519: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  side_timestamps_single_frame = side_timestamps[mask]
+Error processing 1035249: Unalignable boolean Series provided as indexer (index of the boolean Series and of the indexed object do not match).
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035299 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended\Day3
+Files to be analysed are:
+Side: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230327_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day3\\HM_20230414_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_HighLow\Extended\Day4
+Files to be analysed are:
+Side: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 9 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230328_APACharExt_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\APAChar_HighLow\\Extended\\Day4\\HM_20230415_APACharExt_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+Data for 1035243 already exists. Skipping...
+Data for 1035244 already exists. Skipping...
+Data for 1035245 already exists. Skipping...
+Data for 1035246 already exists. Skipping...
+Data for 1035250 already exists. Skipping...
+Data for 1035297 already exists. Skipping...
+Data for 1035298 already exists. Skipping...
+Data for 1035301 already exists. Skipping...
+Data for 1035302 already exists. Skipping...
+All experiments have been mapped to real-world coordinates and saved.
+Analysing PerceptionTest...
+Directory found: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\PerceptionTest
+Final directory: H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\PerceptionTest
+Files to be analysed are:
+Side: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035245_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035250_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035298_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035299_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035301_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035302_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5']
+Front: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035243_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035244_L_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035245_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035250_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035297_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035298_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035299_None_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035301_R_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035302_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+Overhead: 10 files
+['H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035243_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035244_L_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035245_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230411_APAPer_FAA-1035250_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035297_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035298_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035299_None_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035301_R_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5', 'H:\\Dual-belt_APAs\\analysis\\DLC_DualBelt\\DualBelt_MyAnalysis\\FilteredData\\Round6_Jan25\\PerceptionTest\\HM_20230416_APAPer_FAA-1035302_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5']
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+All videos labeled correctly
+###############################################################
+Mapping data for 1035243...
+###############################################################
+No camera movement detected. Processing data as a single segment.
+Processing segment 1/1: frames 0 to 293605
+Low confidence calibration label for TransitionL detected in front. Using low confidence TransitionL for now, will be optimised but check quality.
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 359.10 seconds
+---------------------------------------------------------------
+Data saved to HDF5 file at H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\PerceptionTest\HM_20230411_APAPer_FAA-1035243_None_mapped3D.h5
+###############################################################
+Mapping data for 1035244...
+###############################################################
+Error processing 1035244: polyorder must be less than window_length.
+###############################################################
+Mapping data for 1035245...
+###############################################################
+C:\Users\hmorl\miniconda3\envs\VideoAnalysis_XPSrecovered\lib\site-packages\sklearn\mixture\_base.py:277: ConvergenceWarning: Initialization 1 did not converge. Try different init parameters, or increase max_iter, tol or check for degenerate data.
+  warnings.warn(
+C:\Users\hmorl\miniconda3\envs\VideoAnalysis_XPSrecovered\lib\site-packages\sklearn\mixture\_base.py:277: ConvergenceWarning: Initialization 1 did not converge. Try different init parameters, or increase max_iter, tol or check for degenerate data.
+  warnings.warn(
+Camera movement detected. Processing data in 2 segments.
+Processing segment 1/2: frames 0 to 124898
+Low confidence calibration label for TransitionL detected in front. Using low confidence TransitionL for now, will be optimised but check quality.
+Initial total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+4750.788552645523
+Optimizing calibration points...
+RUNNING THE L-BFGS-B CODE
+
+           * * *
+
+Machine precision = 2.220D-16
+ N =           28     M =           10
+
+At X0         0 variables are exactly at the bounds
+
+At iterate    0    f=  4.75079D+03    |proj g|=  5.00000D+00
+
+At iterate    1    f=  4.01354D+03    |proj g|=  6.71677D+00
+
+At iterate    2    f=  3.82091D+03    |proj g|=  8.07475D+00
+
+At iterate    3    f=  3.73653D+03    |proj g|=  8.04483D+00
+
+At iterate    4    f=  3.57519D+03    |proj g|=  7.84236D+00
+
+At iterate    5    f=  3.54569D+03    |proj g|=  5.97946D+00
+
+At iterate    6    f=  3.49166D+03    |proj g|=  7.93566D+00
+
+At iterate    7    f=  3.45804D+03    |proj g|=  7.20266D+00
+
+At iterate    8    f=  3.43512D+03    |proj g|=  9.14168D+00
+
+At iterate    9    f=  3.39735D+03    |proj g|=  6.52971D+00
+
+At iterate   10    f=  3.37281D+03    |proj g|=  7.70205D+00
+
+At iterate   11    f=  3.36404D+03    |proj g|=  7.93625D+00
+
+At iterate   12    f=  3.33907D+03    |proj g|=  7.72387D+00
+
+At iterate   13    f=  3.30610D+03    |proj g|=  7.55402D+00
+
+At iterate   14    f=  3.29933D+03    |proj g|=  7.42296D+00
+
+At iterate   15    f=  3.29767D+03    |proj g|=  7.27591D+00
+
+At iterate   16    f=  3.29766D+03    |proj g|=  7.36893D+00
+
+At iterate   17    f=  3.29548D+03    |proj g|=  7.21840D+00
+
+At iterate   18    f=  3.29546D+03    |proj g|=  5.81262D+00
+
+At iterate   19    f=  3.29217D+03    |proj g|=  9.52792D+00
+
+At iterate   20    f=  3.28912D+03    |proj g|=  9.87975D+00
+
+At iterate   21    f=  3.28699D+03    |proj g|=  7.73015D+00
+
+At iterate   22    f=  3.28699D+03    |proj g|=  7.73015D+00
+
+           * * *
+
+Tit   = total number of iterations
+Tnf   = total number of function evaluations
+Tnint = total number of segments explored during Cauchy searches
+Skip  = number of BFGS updates skipped
+Nact  = number of active bounds at final generalized Cauchy point
+Projg = norm of the final projected gradient
+F     = final function value
+
+           * * *
+
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+   28     22     50     45     0     3   7.730D+00   3.287D+03
+  F =   3286.9927858848255
+
+CONVERGENCE: REL_REDUCTION_OF_F_<=_FACTR*EPSMCH
+Optimization completed in 236.65 seconds.
+
+ Warning:  more than 10 function and gradient
+   evaluations in the last line search.  Termination
+   may possibly be caused by a bad search direction.
+Error: Could not read frame 558737 from the video for side view.
+Error: Could not read frame 558737 from the video for front view.
+Error: Could not read frame 558737 from the video for overhead view.
+No handles with labels found to put in legend.
+New total reprojection error for ['Nose', 'EarL', 'EarR', 'ForepawToeR', 'ForepawToeL', 'HindpawToeR', 'HindpawKnuckleR', 'Back1', 'Back6', 'Tail1', 'Tail12', 'StartPlatR', 'StepR', 'StartPlatL', 'StepL', 'TransitionR', 'TransitionL']:
+3286.9927858848255
+Reprojection error improvement: 1463.7957667606975, as a percentage: 30.81%
+---------------------------------------------------------------
+Starting triangulation...
+Total triangulation time: 161.75 seconds
+---------------------------------------------------------------
+Processing segment 2/2: frames 124899 to 575307
+!!!!!Warning: high std for StartPlatR in side view: coords
+x    4.683833
+y    0.666887
+dtype: float64!!!!!
+!!!!!Warning: high std for StepR in side view: coords
+x    5.484779
+y    1.083204
+dtype: float64!!!!!
+!!!!!Warning: high std for StartPlatL in side view: coords
+x    4.851341
+y    0.735299
+dtype: float64!!!!!
+!!!!!Warning: high std for StepL in side view: coords
+x    4.272809
+y    0.625409
+dtype: float64!!!!!
+Low confidence calibration label for TransitionL detected in front. Using low confidence TransitionL for now, will be optimised but check quality.
+---------------------------------------------------------------
+Starting triangulation...

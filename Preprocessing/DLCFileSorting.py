@@ -256,7 +256,7 @@ def final_checks():
 
 
 # Example usage
-overwrite = True  # Set this to True if you want to overwrite files
+overwrite = False  # Set this to True if you want to overwrite files
 copy_files_recursive(dlc_dest, exp_cats, '', MouseIDs, overwrite)
 
 # Perform manual changes

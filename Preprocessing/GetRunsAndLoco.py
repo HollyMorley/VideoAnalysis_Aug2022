@@ -29,10 +29,22 @@ class GetRuns:
         self.speed = speed
         self.repeat_extend = repeat_extend
         self.exp_wash = exp_wash
-        self.day = day
+        #self.day = day
         self.vmt_type = vmt_type
         self.vmt_level = vmt_level
         self.prep = prep
+
+        # if self.day is empty, look for 'Day' in the file name and extract number after it
+        if day is None:
+            match = re.search(r'Day(\d+)', self.file)
+            if match:
+                # Example: store the raw number or "DayX"
+                self.day = match.group(1)  # e.g. '1'
+            # self.day = "Day" + match.group(1)  # e.g. 'Day1'
+            else:
+                self.day = None
+        else:
+            self.day = None
 
         self.model, self.label_encoders, self.feature_columns = self.load_model()
         self.trial_starts, self.trial_ends = [], []
@@ -41,7 +53,6 @@ class GetRuns:
 
         # Always load the raw data
         self.data = self.get_data()
-        self._write_run_summary()
 
         # Error logging
         self.error_log_file = os.path.join(paths['filtereddata_folder'], 'error_log.csv')
@@ -93,16 +104,16 @@ class GetRuns:
         if self.date in mra.missing_runs and self.mouseID in mra.missing_runs[self.date]:
             n_missing_runs = len(mra.missing_runs[self.date][self.mouseID])
 
-        n_dropped_runs = 0
-        if self.date in mra.runs_to_drop and self.mouseID in mra.runs_to_drop[self.date]:
-            n_dropped_runs = len(mra.runs_to_drop[self.date][self.mouseID])
+        n_dropped_runs_placeholder = 0
+        if self.date in mra.runs_to_drop_placeholder and self.mouseID in mra.runs_to_drop_placeholder[self.date]:
+            n_dropped_runs_placeholder = len(mra.runs_to_drop_placeholder[self.date][self.mouseID])
+
+        n_dropped_runs_completely = 0
+        if self.date in mra.runs_to_drop_completely and self.mouseID in mra.runs_to_drop_completely[self.date]:
+            n_dropped_runs_completely = len(mra.runs_to_drop_completely[self.date][self.mouseID])
 
         # Columns for the CSV
-        columns = [
-            'File', 'MouseID',
-            'RegisteredRuns', 'RecordedRuns',
-            'MissingRuns', 'DroppedRuns'
-        ]
+        columns = logging['run_summary']
 
         # 1) Read existing CSV (if it exists) into a DataFrame
         if os.path.exists(summary_log_file):
@@ -116,13 +127,23 @@ class GetRuns:
         # 3) Add the new entry
         new_row = {
             'File': self.file,
+            'exp': self.exp,
+            'speed': self.speed,
+            'repeat_extend': self.repeat_extend,
+            'exp_wash': self.exp_wash,
+            'day': self.day,
+            'vmt_type': self.vmt_type,
+            'vmt_level': self.vmt_level,
+            'prep': self.prep,
             'MouseID': self.mouseID,
             'RegisteredRuns': n_registered_runs,
             'RecordedRuns': n_recorded_runs,
             'MissingRuns': n_missing_runs,
-            'DroppedRuns': n_dropped_runs
+            'DroppedRunsPlaceholder': n_dropped_runs_placeholder,
+            'DroppedRunsCompletely': n_dropped_runs_completely
         }
         summary_df = summary_df.append(new_row, ignore_index=True)
+        summary_df = summary_df.sort_values(by=['File'])
 
         # 4) Write the updated DataFrame back to CSV
         summary_df.to_csv(summary_log_file, index=False)
@@ -218,15 +239,14 @@ class GetRuns:
     def get_runs(self):
         # Remove old entries for this file from the error log
         self._remove_existing_error_entries_for_file()
-
         self.find_trials()
         self.find_steps()
         self.index_by_run()
         print("Runs extracted successfully")
         print("Extracted runs (real): ", len(self.data.index.get_level_values('Run').unique()))
         print("Extracted runs: (symbolic)", len(self.trial_starts))
+        self._write_run_summary()
         self.find_run_stages()
-
         self.save_data()
 
     #-------------------------------------------------------------------------------------------------------------------
@@ -310,7 +330,7 @@ class GetRuns:
 
         return door_open, door_close
 
-    def find_forward_facing_bool(self, data, xthreshold, zthreshold):
+    def find_forward_facing_bool(self, data, xthreshold, zthreshold, nosezthreshold=45, nose=False):
         # filter by when mouse facing forward
         back_median = data.loc(axis=1)[
             ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11',
@@ -329,10 +349,15 @@ class GetRuns:
         nose_tail_x_mask = interp['Nose','x'] > interp['Tail1','x']
         nose_tail_z_mask = interp['Nose','z'] - interp['Tail1','z'] < zthreshold
 
+        nose_mask = interp['Nose','z'] < nosezthreshold
+
         # nose_tail_x_mask = data.loc[:, ('Nose', 'x')] > data.loc[:, ('Tail1', 'x')]
         # nose_tail_z_mask = data.loc[:, ('Nose', 'z')] - data.loc[:, ('Tail1', 'z')] < zthreshold
         # #belt1_mask = data.loc[:, ('Nose', 'x')] < 470
-        facing_forward_mask = back_tail_mask & nose_tail_x_mask & nose_tail_z_mask #& belt1_mask
+        if nose == True:
+            facing_forward_mask = back_tail_mask & nose_tail_x_mask & nose_tail_z_mask & nose_mask #& belt1_mask
+        else:
+            facing_forward_mask = back_tail_mask & nose_tail_x_mask & nose_tail_z_mask
         return facing_forward_mask
 
 
@@ -645,8 +670,12 @@ class GetRuns:
         paw_data = self.data.loc[start_frame:end_frame, (paw_columns, coords)]
         paw_data.columns = ['{}_{}'.format(bp, coord) for bp, coord in paw_data.columns]
 
-        # Interpolation
-        interpolated = paw_data.interpolate(
+        # 1) Identify columns that have enough valid data for a cubic spline
+        enough_points_for_spline = paw_data.notna().sum(axis=0) >= 4
+        cols_for_spline = paw_data.columns[enough_points_for_spline]
+
+        # 2) Spline interpolate only those columns
+        interpolated_subset = paw_data[cols_for_spline].interpolate(
             method='spline',
             order=3,
             limit=20,
@@ -654,20 +683,29 @@ class GetRuns:
             axis=0
         )
 
-        # Smoothing
+        # 3) Merge back into original DataFrame shape
+        interpolated = paw_data.copy()
+        interpolated[cols_for_spline] = interpolated_subset
+
+        # 4) Do the same smoothing as in your code snippet
         data_array = interpolated.values
         all_nan_cols = np.isnan(data_array).all(axis=0)
         smoothed_array = np.empty_like(data_array)
         smoothed_array[:, all_nan_cols] = np.nan
         valid_cols = ~all_nan_cols
         smoothed_array[:, valid_cols] = gaussian_filter1d(
-            data_array[:, valid_cols], sigma=2, axis=0, mode='nearest'
+            data_array[:, valid_cols],
+            sigma=2,
+            axis=0,
+            mode='nearest'
         )
 
-        # Convert back to DataFrame
-        smoothed_paw_data = pd.DataFrame(smoothed_array, index=paw_data.index, columns=paw_data.columns)
+        # 5) Put it back into a DataFrame with the same shape and index
+        smoothed_paw_data = pd.DataFrame(
+            smoothed_array, index=paw_data.index, columns=paw_data.columns
+        )
 
-        # Restore MultiIndex columns
+        # 6) Restore MultiIndex columns (if applicable)
         smoothed_paw_data.columns = pd.MultiIndex.from_tuples(
             [tuple(col.rsplit('_', 1)) for col in smoothed_paw_data.columns],
             names=['bodyparts', 'coords']
@@ -905,15 +943,43 @@ class GetRuns:
         correct_forward_chunks = [chunk for chunk in forward_chunks if chunk[0] < first_transition]
         return correct_forward_chunks
 
+    def check_real_forward_gap(self, run_data, forward_chunks):
+        checked_forward_chunks = forward_chunks.copy()
+        i = 0
+        while i < len(checked_forward_chunks) - 1:
+            upper_bound = checked_forward_chunks[i+1][0]
+            lower_bound = checked_forward_chunks[i][-1]
+            data = run_data.loc[lower_bound:upper_bound]
+
+            # check that nose x is never < tail1 x and that nose x is never < 0
+            nose_tail_mask = data.loc(axis=1)['Nose', 'x'] - data.loc(axis=1)['Tail1', 'x'] < -20
+            nose_tail_data = data[nose_tail_mask]
+
+            nose_mask = data.loc(axis=1)['Nose', 'x'] < 0
+            nose_data = data[nose_mask]
+
+            if len(nose_tail_data) > 0 and len(nose_data) > 0:
+                # keep this chunk as it is
+                pass
+            else:
+                # combine this chunk and the next chunk into one chunk
+                checked_forward_chunks[i] = [checked_forward_chunks[i][0], checked_forward_chunks[i+1][-1]]
+                checked_forward_chunks = np.delete(checked_forward_chunks, i+1, axis=0)
+            i += 1
+        return checked_forward_chunks
+
     def check_run_backs(self, data, forward_chunks):
         runbacks = []
         true_run = []
         i = 0
+
+        # only check for runbacks if there are more than 1 forward runs/up to the second to last forward run
         while i < len(forward_chunks) - 1:
             run = forward_chunks[i]
+            this_run_start = run[0]
             next_run = forward_chunks[i + 1]
             next_run_start = next_run[0]
-            run_data = data.loc[run[0]:next_run_start]
+            run_data = data.loc[this_run_start:next_run_start]
 
             # check if mice run backwards between this run and the next
             runback_mask = run_data.loc(axis=1)['Nose', 'x'] < run_data.loc(axis=1)['Tail1', 'x']
@@ -921,7 +987,7 @@ class GetRuns:
 
             # check if mice step off the platform between this run and the next # todo they dont have to step off??
             if len(runback_data) > 0:
-                step_off_mask = run_data.loc(axis=1)['Tail1', 'x'] < 0
+                step_off_mask = run_data.loc(axis=1)['Tail1', 'x'] < 0 # i think this is checking that after running back the mice exit the belt
                 step_off_data = run_data[step_off_mask]
 
                 # if mice meet these conditions, add this run to the runbacks list
@@ -930,8 +996,25 @@ class GetRuns:
                 else:
                     true_run.append(run)
             else:
-                # No backwards running detected in this snippet
-                raise ValueError("No backwards running detected in this snippet")
+                # # No backwards running detected in this snippet
+                # raise ValueError("No backwards running detected in this snippet")
+
+                # check if reappears on the start platform between entering belt on this run and the next
+                on_belt_mask = np.all(run_data.loc(axis=1)[['Tail1','Nose'], 'x'] > 0,axis=1)
+                on_belt_data = run_data[on_belt_mask]
+                on_belt_chunks = utils.Utils().find_blocks(on_belt_data.index, gap_threshold=20, block_min_size=20)
+                last_on_belt = on_belt_chunks[-1][-1]
+
+                on_plat_mask = np.any(run_data.loc(axis=1)[['Nose','EarR','EarL','Tail1','ForepawToeL','HindpawToeL'], 'x'] < 0, axis=1)
+                on_plat_data = run_data[on_plat_mask]
+
+                reappear_mask = on_plat_data.index > last_on_belt
+                reappear_data = on_plat_data[reappear_mask]
+
+                if len(reappear_data) > 0:
+                    runbacks.append(run)
+                else:
+                    true_run.append(run) # even if this is not a true run, will be picked up back in find_real_run_vs_rbs as multiple true runs
             i += 1
 
         true_run.append(forward_chunks[-1])
@@ -950,18 +1033,23 @@ class GetRuns:
         run_data = run_data.loc[trial_start:trial_end]
 
         # filter by when mouse facing forward
-        facing_forward_mask = self.find_forward_facing_bool(run_data, xthreshold=20, zthreshold=40)
+        facing_forward_mask = self.find_forward_facing_bool(run_data, xthreshold=20, zthreshold=45, nosezthreshold=45, nose=False) #todo: changed zthreshold from 40 to 30 on 14/1/25 as picking up when mouse standing up and added nose z abs thresh # on 15/1/25 changed z thresh to 45 as dont think there is need to break up runs like that
         facing_forward = run_data[facing_forward_mask]
-        forward_chunks = utils.Utils().find_blocks(facing_forward.index, gap_threshold=10, block_min_size=25)
+        forward_chunks = utils.Utils().find_blocks(facing_forward.index, gap_threshold=50, block_min_size=25) #todo: changed gap_threshold from 10 to 20 on 14/1/25 # on 15/1/25 changed gap threshold to 50 from 20
         if len(forward_chunks) > 1:
             # check all forward runs contain data from start of run
             forward_chunks = self.check_run_starts(facing_forward, forward_chunks)
             if len(forward_chunks) > 1:
                 forward_chunks = self.check_post_runs(facing_forward, forward_chunks)
                 if len(forward_chunks) > 1:
-                    runbacks, forward_chunks = self.check_run_backs(run_data, forward_chunks)
+                    # check if any backwards running or appearance on stationary platform between forward chunks to combine chunks from the same run back together
+                    forward_chunks = self.check_real_forward_gap(run_data, forward_chunks) #todo: this is new and experimental!! (16/1/25)
                     if len(forward_chunks) > 1:
-                        raise ValueError("More than one run detected in a trial")
+                        runbacks, forward_chunks = self.check_run_backs(run_data, forward_chunks)
+                        if len(forward_chunks) > 1:
+                            raise ValueError("More than one run detected in a trial")
+                    else:
+                        runbacks = []
                 else:
                     runbacks = []
             else:
@@ -980,7 +1068,7 @@ class GetRuns:
         if not os.path.exists(self.error_log_file):
             with open(self.error_log_file, 'w', newline='') as log_file:
                 writer = csv.writer(log_file)
-                writer.writerow(['ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber'])
+                writer.writerow(logging['error'])
 
         runs = self.data.index.get_level_values('Run').unique()
         self.data['initiating_limb'] = np.nan
@@ -1045,22 +1133,32 @@ class GetRuns:
             with open(self.error_log_file, mode, newline='') as log_file:
                 writer = csv.writer(log_file)
 
-                # If overwriting, write a header row including the new columns:
                 if overwrite:
-                    writer.writerow([
-                        'ErrorType', 'ErrorMessage', 'File', 'MouseID', 'RunNumber',
-                        'exp', 'speed', 'repeat_extend', 'exp_wash', 'day',
-                        'vmt_type', 'vmt_level', 'prep'
-                    ])
+                    writer.writerow(logging['error'])
 
-                # Write the row with optional columns (None if not provided):
+                # Write all columns *in the exact same order*
                 writer.writerow([
-                    error_type, error_message, self.file, self.mouseID, run_number,
-                    self.exp, self.speed, self.repeat_extend, self.exp_wash,
-                    self.day, self.vmt_type, self.vmt_level, self.prep
+                    self.file,
+                    self.exp,
+                    self.speed,
+                    self.repeat_extend,
+                    self.exp_wash,
+                    self.day,
+                    self.vmt_type,
+                    self.vmt_level,
+                    self.prep,
+                    self.mouseID,
+                    run_number,
+                    error_type,
+                    error_message,
                 ])
         except Exception as e:
             print(f"Failed to write to the error log file: {e}")
+
+        # After writing, we also read back, sort, and re-save so it's tidier.
+        df = pd.read_csv(self.error_log_file)
+        df = df.sort_values(by=['File','RunNumber'])
+        df.to_csv(self.error_log_file, index=False)
 
     def get_run_data(self, r):
         step_data = self.data.loc(axis=0)[r].loc(axis=1)[['ForepawR', 'ForepawL', 'HindpawR', 'HindpawL']]
@@ -1639,6 +1737,64 @@ class GetAllFiles:
         self.vmt_level = vmt_level
         self.prep = prep
 
+        # path to a dedicated file-level error log
+        self.file_error_log_file = os.path.join(paths['filtereddata_folder'], 'file_error_log.csv')
+
+        # Ensure file_error_log.csv has a header if not already
+        if not os.path.exists(self.file_error_log_file):
+            with open(self.file_error_log_file, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    'File',
+                    'exp',
+                    'speed',
+                    'repeat_extend',
+                    'exp_wash',
+                    'day',
+                    'vmt_type',
+                    'vmt_level',
+                    'prep',
+                    'MouseID',
+                    'ErrorMessage',
+                    'Timestamp'
+                ])
+
+    def _log_file_error(self, file, error_message, mouseID=None):
+        # If overwrite == True, remove existing rows for this file so they don't accumulate duplicates.
+        if self.overwrite and os.path.exists(self.file_error_log_file):
+            existing_df = pd.read_csv(self.file_error_log_file)
+            existing_df = existing_df[existing_df['File'] != file]
+            existing_df.to_csv(self.file_error_log_file, index=False)
+
+        # Now read again (or create a new DataFrame if empty) and append the new row.
+        if os.path.exists(self.file_error_log_file):
+            df = pd.read_csv(self.file_error_log_file)
+        else:
+            df = pd.DataFrame(columns=[
+                'File', 'exp', 'speed', 'repeat_extend', 'exp_wash', 'day',
+                'vmt_type', 'vmt_level', 'prep', 'MouseID', 'ErrorMessage', 'Timestamp'
+            ])
+
+        new_row = {
+            'File': file,
+            'exp': self.exp,
+            'speed': self.speed,
+            'repeat_extend': self.repeat_extend,
+            'exp_wash': self.exp_wash,
+            'day': self.day,
+            'vmt_type': self.vmt_type,
+            'vmt_level': self.vmt_level,
+            'prep': self.prep,
+            'MouseID': mouseID if mouseID else '',
+            'ErrorMessage': error_message,
+            'Timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        df = df.append(new_row, ignore_index=True)
+
+        # Sort rows for easier reading
+        df = df.sort_values(by=['File'])
+        df.to_csv(self.file_error_log_file, index=False)
+
     def GetFiles(self):
         files = utils.Utils().GetListofMappedFiles(self.directory)  # gets dictionary of side, front and overhead 3D files
 
@@ -1661,7 +1817,12 @@ class GetAllFiles:
                                vmt_type=self.vmt_type,
                                vmt_level=self.vmt_level,
                                prep=self.prep)
-                get_runs.get_runs()
+                try:
+                    get_runs.get_runs()
+                except Exception as e:
+                    print(f"Error processing file {files[j]}: {str(e)}")
+                    # Log to the new file_error_log.csv
+                    self._log_file_error(files[j], str(e), mouseID)
             else:
                 print(f"Data for {mouseID} already exists. Skipping...")
 
@@ -1736,7 +1897,11 @@ def main():
     # Get all data
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=True).get_dirs() # should do all 3 days
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False).get_dirs() # should do all 3 days
+
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

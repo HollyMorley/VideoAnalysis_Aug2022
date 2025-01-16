@@ -163,6 +163,13 @@ paths = {
         'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles"
 }
 
+logging = {
+    'error': ['File','exp','speed','repeat_extend','exp_wash','day','vmt_type','vmt_level','prep','MouseID','RunNumber',
+              'ErrorType','ErrorMessage'],
+    'run_summary': ['File', 'exp', 'speed', 'repeat_extend', 'exp_wash','day','vmt_type', 'vmt_level', 'prep','MouseID',
+                    'RegisteredRuns','RecordedRuns','MissingRuns','DroppedRunsPlaceholder','DroppedRunsCompletely', ]
+}
+
 micestuff = {
     'mice_IDs': {'A': ['1035243', '1035244', '1035245', '1035246', '1035249', '1035250'],
             'B': ['1035297', '1035298', '1035299', '1035301', '1035302']

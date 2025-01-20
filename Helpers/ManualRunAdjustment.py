@@ -65,6 +65,7 @@ runs_to_drop_completely = {
     '20230317': {
         '1035243': [14,15,16,17,18], # 4 fails where mouse was on belt so jerry re-attempted
         '1035244': [4,5,6,7,8,17,18,19,20,21], # mouse failed at [4,5,6,7,8] so jerry re-attempted, then 1 failed at 27:01, then 3 habituation runs mid-way through #todo added 21 as wont run with it
+        '1035249': [36], # todo removing as wont run with it
     },
     '20230318': {
         '1035249': [2], # first real run was a fail so jerry re-attempted
@@ -172,6 +173,18 @@ missing_runs = {
     },
     '20230403': {
         '1035297': [1, 23],  # moused slipped under door for prep run and havent detected run 23 for unknown reason (think it was a bad door close)
+        '1035301': [1,]
+    },
+    '20230404': {
+        '1035297': [6,10,11,22,31], # found post analysis todo check order correct, added as not detected in my code (gittery door)
+        '1035298': [0], # missed the first habituation run
+        '1035299': [16,28,29,36], # todo check order correct, added as not detected in my code (gittery door)
+        '1035301': [16,17,32]
+    },
+    '20230405': {
+        '1035297': [13,22,23,25,28,35], # todo check order correct, added as not detected in my code (gittery door)
+        '1035298': [27], #todo check order correct, added as not detected in my code (gittery door)
+        '1035299': [37], #todo check order correct, added as not detected in my code (gittery door)
     },
     '20230412': {
         '1035299': [26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45], # no notes for rest of this file but not if no runs recorded after stuck at r25
@@ -188,7 +201,7 @@ missing_runs = {
 20230309 - 1035302: slid under door at 3:07/after r5
 20230316 - 1035250: did a extra run at 17:39 with a door open/close but dont think this would have been registered
 20230403 - 1035299: slipped under door at 12:25/after r24 but dont think this would have been registered - has been acted on!
-20230404 - 1035297: slipped under door at 4:00/after r8 but dont think this would have been registered
+20230404 - 1035297: slipped under door at 4:00/after r8 but dont think this would have been registered - has been acted on!
 
 
 '''

@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import shutil
+import re
 
 from Helpers.Config_23 import *
 
@@ -34,8 +35,10 @@ def copy_files_recursive(dest_dir, current_dict, current_path, MouseIDs, overwri
                             print(f'Processing: {current_path}, {mouse_group}, {date}')
                             copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseIDs,
                                                        overwrite)
-                        except:
-                            print(f"No file found for {current_path}, {mouse_group}, {date}")
+                        except Exception as e:
+                            print(f"Error copying {current_path}, {mouse_group}, {date}: {e}")
+                           # raise  # or comment out if you want to continue
+
         else:
             # Continue recursion if we haven't reached 'A'/'B' level yet
             for key, value in current_dict.items():
@@ -58,6 +61,38 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
     current_timestamp_dir = os.path.join(paths['video_folder'], date)
 
     file_found = False
+
+    # ------------------------------------------------------------------
+    # 1) RENAME 10352450 --> 1035250, but ONLY if this date == '20230325'
+    # ------------------------------------------------------------------
+    if date == '20230325':
+        for cam, cam_dir_path in current_src_dir.items():
+            for old_name in os.listdir(cam_dir_path):
+                if "10352450" in old_name:
+                    old_path = os.path.join(cam_dir_path, old_name)
+                    new_name = old_name.replace("10352450", "1035250")
+                    new_path = os.path.join(cam_dir_path, new_name)
+                    if not os.path.exists(new_path):
+                        print(f"Renaming {old_path} to {new_path}")
+                        os.rename(old_path, new_path)
+
+    # ------------------------------------------------------------------
+    # 2) CHECK FOR ANY UNKNOWN MOUSE IDs (for ALL dates)
+    #    i.e., any file with FAA-(\d+) not in the known sets
+    # ------------------------------------------------------------------
+    # Build the full known ID set from groups A & B
+    all_known_ids = set(MouseIDs['A'] + MouseIDs['B'])
+
+    for cam, cam_dir_path in current_src_dir.items():
+        for fname in os.listdir(cam_dir_path):
+            if fname.endswith('.h5'):
+                match = re.search(r"FAA-(\d+)", fname)
+                if match:
+                    found_id = match.group(1)
+                    if found_id not in all_known_ids:
+                        print(f"[WARNING] File {fname} in {cam_dir_path} has unknown mouse ID = {found_id}")
+
+
     for mouse_id in MouseIDs[mouse_group]:
         # Gather all files for this mouse_id on this date, ignoring directories (e.g., calibration)
         relevant_files = []
@@ -187,21 +222,22 @@ def manual_changes():
     for change in changes:
         if change['action'] == 'delete':
             # Delete relevant files
-            for file in os.listdir(highlow_dir):
-                if f"{change['mouse_id']}_{change['date']}" in file:
-                    file_path = os.path.join(highlow_dir, change['day'], file)
+            day_path = os.path.join(highlow_dir, change['day'])
+            for file in os.listdir(day_path):
+                if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file:
+                    file_path = os.path.join(day_path, file)
                     if os.path.exists(file_path):
                         print(f"Deleting {file_path}")
                         os.remove(file_path)
 
         elif change['action'] == 'move':
             # Move files from one destination day to another within dlc_dest
-            src_day = os.path.join(highlow_dir, change['src_day'])
-            dst_day = os.path.join(highlow_dir, change['dst_day'])
-            for file in os.listdir(src_day):
-                if f"{change['mouse_id']}_{change['date']}" in file:
-                    src_file = os.path.join(src_day, file)
-                    dst_file = os.path.join(dst_day, file)
+            src_day_path = os.path.join(highlow_dir, change['src_day'])
+            dst_day_path = os.path.join(highlow_dir, change['dst_day'])
+            for file in os.listdir(src_day_path):
+                if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file:
+                    src_file = os.path.join(src_day_path, file)
+                    dst_file = os.path.join(dst_day_path, file)
                     print(f"Moving {src_file} to {dst_file}")
                     shutil.move(src_file, dst_file)
 
@@ -215,7 +251,7 @@ def manual_changes():
                 ensure_dir_exists(dst_day)
 
                 for file in os.listdir(src_day):
-                    if f"{change['mouse_id']}_{change['date']}" in file:
+                    if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file:
                         src_file = os.path.join(src_day, file)
                         dst_file = os.path.join(dst_day, file)
                         print(f"Copying {src_file} to {dst_file}")
@@ -233,11 +269,18 @@ def final_checks():
         included_dates = []
         for category, subcats in exp_cats.items():
             for subcat, phases in subcats.items():
-                for phase, days in phases.items():
-                    if isinstance(days, dict):
-                        for day, mice_dates in days.items():
-                            for mouse_group, dates in mice_dates.items():
-                                included_dates.extend(dates)
+                if isinstance(phases, dict):
+                    for phase, days in phases.items():
+                        if isinstance(days, dict):
+                            for day, mice_dates in days.items():
+                                for mouse_group, date_list in mice_dates.items():
+                                    included_dates.extend(date_list)
+                        elif isinstance(days, list):
+                            # e.g., included_dates.extend(days)
+                            pass
+                elif isinstance(phases, list):
+                    # This is where you'd handle PerceptionTest if subcat='A' or 'B'
+                    included_dates.extend(phases)
 
         # Exclude manually handled days
         manual_dates = ['20230329', '20230330']

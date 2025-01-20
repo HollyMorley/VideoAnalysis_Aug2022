@@ -1899,9 +1899,9 @@ def main():
     ### maybe instantiate first to protect entry point of my script
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False).get_dirs() # should do all 3 days
 
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=True).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=True).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=True).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

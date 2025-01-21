@@ -1474,26 +1474,25 @@ class GetDirsFromConditions:
         self._process_subdirectories(condition_path)
 
     def _process_subdirectories(self, current_path):
-        """
-        Recursively process directories and get to the final data directories.
-        """
-        subdirs = [d for d in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, d))]
+        subdirs = [d for d in os.listdir(current_path)
+                   if os.path.isdir(os.path.join(current_path, d))]
 
-        # If subdirectories exist, traverse deeper
-        if len(subdirs) > 0:
+        # Remove 'bin' from the list of subdirectories
+        subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
+
+        # If we still have subdirectories (other than 'bin'), recurse
+        if subdirs:
             print(f"Subdirectories found in {current_path}: {subdirs}")
             for subdir in subdirs:
                 full_subdir_path = os.path.join(current_path, subdir)
-                # Recursively process subdirectory
                 self._process_subdirectories(full_subdir_path)
         else:
-            # No more subdirectories, assume this is the final directory with data
+            # No subdirs (or only 'bin'), treat as final directory
             print(f"Final directory: {current_path}")
             try:
                 GetALLRuns(directory=current_path, overwrite=self.overwrite).GetFiles()
             except Exception as e:
                 print(f"Error processing directory {current_path}: {e}")
-
 
 def main():
     # Get all data

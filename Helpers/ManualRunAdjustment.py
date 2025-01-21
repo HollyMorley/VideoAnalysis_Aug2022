@@ -101,7 +101,7 @@ runs_to_drop_completely = {
     '20230403': {
         '1035302': [18,19,10], # mouse had been failing (in preserved runs), jerry did an extra run which failed and then 2 stationary runs
         '1035299': [25], # see notes at bottom (slipped under door?)
-        '1035301': [27], #todo have deleted as this run is stopping running, maybe it is not a real run??
+        '1035301': [30], #todo have deleted as this run is stopping running, maybe it is not a real run??
     },
     '20230404': {
         '1035302': [2], # belt was off for the first run
@@ -182,7 +182,7 @@ missing_runs = {
     },
     '20230403': {
         '1035297': [1, 23],  # moused slipped under door for prep run and havent detected run 23 for unknown reason (think it was a bad door close)
-        '1035301': [1,17,29]
+        '1035301': [1,17,29],
     },
     '20230404': {
         '1035297': [6,10,11,22,31], # found post analysis todo check order correct, added as not detected in my code (gittery door)

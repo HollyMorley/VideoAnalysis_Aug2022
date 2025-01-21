@@ -21,6 +21,25 @@ class CheckRuns:
         self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep = (
             exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep)
 
+        self.data = self.get_data()
+
+    def get_data(self):
+        # Get the data from the h5 file
+        data = pd.read_hdf(self.file, key='real_world_coords')
+        return data
+
+    def find_sitting(self,data):
+        pass
+
+    def find_climbing(self,data):
+        pass
+
+    def check_runs(self):
+        for r in self.data.index.get_level_values('Run').unique():
+            run_data = self.data.loc[r]
+            self.find_sitting(run_data)
+            self.find_climbing(run_data)
+
 
 
 

@@ -1888,6 +1888,7 @@ class GetConditionFiles:
         Recursively process directories and get to the final data directories.
         """
         subdirs = [d for d in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, d))]
+        subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
 
         # If subdirectories exist, traverse deeper
         if len(subdirs) > 0:

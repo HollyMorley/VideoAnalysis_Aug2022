@@ -15,7 +15,7 @@ runs_to_drop_placeholder = { # first = 0, last = 40 + 2/5
         '1035297': [16],  # belt was off at 7:09
     },
     '20230317': {
-        '1035244': [2,3], # belt was off for the first 2 runs
+        '1035244': [2,3,22], # belt was off for the first 2 runs + todo removed 22(/13 after deletions) as code wont run with it
     },
     '20230325': {
         '1035244': [34], # mouse got stuck
@@ -28,6 +28,7 @@ runs_to_drop_placeholder = { # first = 0, last = 40 + 2/5
     '20230413': {
         '1035297': [43],  # got stuck in middle of run at r43
     },
+
 }
 
 runs_to_drop_completely = {
@@ -64,7 +65,7 @@ runs_to_drop_completely = {
     },
     '20230317': {
         '1035243': [14,15,16,17,18], # 4 fails where mouse was on belt so jerry re-attempted
-        '1035244': [4,5,6,7,8,17,18,19,20,21], # mouse failed at [4,5,6,7,8] so jerry re-attempted, then 1 failed at 27:01, then 3 habituation runs mid-way through #todo added 21 as wont run with it
+        '1035244': [4,5,6,7,8,17,18,19,20], # mouse failed at [4,5,6,7,8] so jerry re-attempted, then 1 failed at 27:01, then 3 habituation runs mid-way through #todo added 21 as wont run with it
         '1035249': [36], # todo removing as wont run with it
     },
     '20230318': {

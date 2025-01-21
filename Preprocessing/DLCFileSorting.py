@@ -117,7 +117,7 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
                         and os.path.isfile(os.path.join(current_timestamp_dir, f))
                     ])
 
-            relevant_files.sort()
+            relevant_files.sort() # This will ensure '' comes first, followed by '_2', '_3'
             timestamp_relevant_files.sort()
 
             if not relevant_files:
@@ -143,13 +143,15 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
                 stitched_dfs = {'side': None, 'front': None, 'overhead': None}
                 stitched_timestamps = {'side': None, 'front': None, 'overhead': None}
 
-                for cam in ['side','front','overhead']:
+                for cam in stitched_dfs.keys():
                     # which files belong to this camera?
-                    cam_files = [f for f in relevant_files if cam in f]
-                    cam_files.sort()
+                    cam_files = [file_name for file_name in relevant_files if cam in file_name]
+                    # order the files in the correct order by moving the last file to the first position
+                    cam_files.insert(0, cam_files.pop())
+
                     # which timestamps belong to this camera?
-                    cam_ts_files = [f for f in timestamp_relevant_files if cam in f]
-                    cam_ts_files.sort()
+                    cam_ts_files = [file_name for file_name in timestamp_relevant_files if cam in file_name]
+                    cam_ts_files.insert(0, cam_ts_files.pop())
 
                     # read + stitch them
                     cam_dfs = []
@@ -208,23 +210,23 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
 
                 # 3c. Save to .h5 & CSV using the *first* filename for each camera (or whichever naming you prefer)
                 for cam in ['side','front','overhead']:
-                    cam_files = [f for f in relevant_files if cam in f]
-                    cam_files.sort()
+                    cam_files = [file_name for file_name in relevant_files if cam in file_name]
+                    cam_files.insert(0, cam_files.pop())
                     if not cam_files:
                         continue
                     # We'll use the first cam file name to save final result:
                     dest_file = os.path.join(final_dest_dir, cam_files[0])
                     if overwrite or not os.path.exists(dest_file):
-                        print(f"Saving stitched {cam} data to {dest_file}")
+                        print(f"Stitching and saving {cam_files} to {dest_file}")
                         stitched_dfs[cam].to_hdf(dest_file, key='df_with_missing', mode='w')
 
                     # same for timestamps
-                    cam_ts_files = [f for f in timestamp_relevant_files if cam in f]
-                    cam_ts_files.sort()
+                    cam_ts_files = [file_name for file_name in timestamp_relevant_files if cam in file_name]
+                    cam_ts_files.insert(0, cam_ts_files.pop())
                     if cam_ts_files:
                         dest_ts_file = os.path.join(final_dest_dir, cam_ts_files[0])
                         if overwrite or not os.path.exists(dest_ts_file):
-                            print(f"Saving stitched {cam} timestamps to {dest_ts_file}")
+                            print(f"Stitching and saving {cam_ts_files} to {dest_ts_file}")
                             stitched_timestamps[cam].to_csv(dest_ts_file, index=False)
 
                 file_found = True
@@ -248,6 +250,11 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
                     if len(side_df) == len(front_df) + 1 and len(overhead_df) == len(front_df) + 1:
                         print(f"[INFO] Trimming last frame from side & overhead for {mouse_id} on {date}")
                         side_df     = side_df.iloc[:-1]
+                        overhead_df = overhead_df.iloc[:-1]
+
+                elif mouse_id == '1035245' and date == '20230325':
+                    if len(overhead_df) == len(side_df) + 1:
+                        print(f"[INFO] Trimming last frame from overhead for {mouse_id} on {date}")
                         overhead_df = overhead_df.iloc[:-1]
                         # do the same for timestamps if needed
 

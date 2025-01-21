@@ -54,16 +54,18 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
     final_dest_dir = os.path.join(dest_dir, current_path)  # Keep experiment structure, but no A/B in folder path
     ensure_dir_exists(final_dest_dir)
 
-    current_src_dir = {'side': [], 'front': [], 'overhead': []}
-    for cam, cam_dir in dirs.items():
-        current_src_dir[cam] = os.path.join(cam_dir, date)
-
+    current_src_dir = {
+        'side': os.path.join(dirs['side'], date),
+        'front': os.path.join(dirs['front'], date),
+        'overhead': os.path.join(dirs['overhead'], date),
+    }
     current_timestamp_dir = os.path.join(paths['video_folder'], date)
 
     file_found = False
 
     # ------------------------------------------------------------------
-    # 1) RENAME 10352450 --> 1035250, but ONLY if this date == '20230325'
+    # 1) RENAME 10352450 --> 1035250, but ONLY if date == '20230325'
+    #    (unchanged from your current code)
     # ------------------------------------------------------------------
     if date == '20230325':
         for cam, cam_dir_path in current_src_dir.items():
@@ -78,11 +80,8 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
 
     # ------------------------------------------------------------------
     # 2) CHECK FOR ANY UNKNOWN MOUSE IDs (for ALL dates)
-    #    i.e., any file with FAA-(\d+) not in the known sets
     # ------------------------------------------------------------------
-    # Build the full known ID set from groups A & B
     all_known_ids = set(MouseIDs['A'] + MouseIDs['B'])
-
     for cam, cam_dir_path in current_src_dir.items():
         for fname in os.listdir(cam_dir_path):
             if fname.endswith('.h5'):
@@ -92,114 +91,217 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
                     if found_id not in all_known_ids:
                         print(f"[WARNING] File {fname} in {cam_dir_path} has unknown mouse ID = {found_id}")
 
-
+    # ------------------------------------------------------------------
+    # 3) Process each mouse in the chosen group
+    # ------------------------------------------------------------------
     for mouse_id in MouseIDs[mouse_group]:
-        # Gather all files for this mouse_id on this date, ignoring directories (e.g., calibration)
-        relevant_files = []
-        timestamp_relevant_files = []
-        for cam, cam_dir in current_src_dir.items():
-            relevant_files.extend([file_name for file_name in os.listdir(cam_dir)
-                                   if cam in file_name and file_name.endswith('.h5') and f"FAA-{mouse_id}" in file_name and os.path.isfile(
-                    os.path.join(cam_dir, file_name))])
-            timestamp_relevant_files.extend([file_name for file_name in os.listdir(current_timestamp_dir)
-                                    if cam in file_name and file_name.endswith('Timestamps.csv') and f"FAA-{mouse_id}" in file_name and os.path.isfile(
-                    os.path.join(current_timestamp_dir, file_name))])
+        try:
+            # Gather all .h5 data files and .csv timestamp files for this mouse/date
+            relevant_files = []
+            timestamp_relevant_files = []
+            for cam in ['side', 'front', 'overhead']:
+                cam_folder = current_src_dir[cam]
+                # data
+                relevant_files.extend([
+                    f for f in os.listdir(cam_folder)
+                    if cam in f and f.endswith('.h5')
+                    and f"FAA-{mouse_id}" in f
+                    and os.path.isfile(os.path.join(cam_folder, f))
+                ])
+                # timestamps
+                if os.path.exists(current_timestamp_dir):
+                    timestamp_relevant_files.extend([
+                        f for f in os.listdir(current_timestamp_dir)
+                        if cam in f and f.endswith('Timestamps.csv')
+                        and f"FAA-{mouse_id}" in f
+                        and os.path.isfile(os.path.join(current_timestamp_dir, f))
+                    ])
 
+            relevant_files.sort()
+            timestamp_relevant_files.sort()
 
-        # Organize them by segments ('', '_2', '_3', etc.)
-        relevant_files.sort()  # This will ensure '' comes first, followed by '_2', '_3' ## no it does not!
-        timestamp_relevant_files.sort()
+            if not relevant_files:
+                print(f"No relevant h5 files found for {mouse_id} on {date}")
+                continue
 
-        if not relevant_files:
-            print(f"No relevant h5 files found for {mouse_id} on {date}")
+            # Quick check: number of .h5 files vs timestamps
+            if len(relevant_files) != len(timestamp_relevant_files):
+                # your special exception for 1035249 / 20230306
+                if mouse_id == '1035249' and date == '20230306':
+                    timestamp_relevant_files = timestamp_relevant_files[3:]
+                else:
+                    raise ValueError(f"Error: Different # of timestamp files vs data files for {mouse_id} on {date}")
+
+            # ------------------------------------------------------------------
+            # If we have more than 3 data files total, you do multi-file stitching
+            # else if == 3 data files total, it's "one side, one front, one overhead".
+            # The difference is how we group them by camera & possibly stitch them.
+            # Then we do a length check before saving to .h5.
+            # ------------------------------------------------------------------
+            if len(relevant_files) > 3:
+                # We'll group by camera, read, stitch, fix mismatch, then save
+                stitched_dfs = {'side': None, 'front': None, 'overhead': None}
+                stitched_timestamps = {'side': None, 'front': None, 'overhead': None}
+
+                for cam in ['side','front','overhead']:
+                    # which files belong to this camera?
+                    cam_files = [f for f in relevant_files if cam in f]
+                    cam_files.sort()
+                    # which timestamps belong to this camera?
+                    cam_ts_files = [f for f in timestamp_relevant_files if cam in f]
+                    cam_ts_files.sort()
+
+                    # read + stitch them
+                    cam_dfs = []
+                    for f in cam_files:
+                        df = pd.read_hdf(os.path.join(current_src_dir[cam], f))
+                        cam_dfs.append(df)
+                    stitched_cam_df = pd.concat(cam_dfs, ignore_index=True)
+
+                    # read + stitch timestamps
+                    ts_dfs = []
+                    for f in cam_ts_files:
+                        df_ts = pd.read_csv(os.path.join(current_timestamp_dir, f))
+                        ts_dfs.append(df_ts)
+                    stitched_cam_ts = pd.concat(ts_dfs, ignore_index=True)
+
+                    stitched_dfs[cam] = stitched_cam_df
+                    stitched_timestamps[cam] = stitched_cam_ts
+
+                # 3a. Fix row mismatch if needed (the known 1035249/20230326 case)
+                if mouse_id == '1035249' and date == '20230326':
+                    # Suppose front is correct, side & overhead are each 1 row too long
+                    side_len      = len(stitched_dfs['side'])
+                    front_len     = len(stitched_dfs['front'])
+                    overhead_len  = len(stitched_dfs['overhead'])
+                    if side_len == front_len + 1 and overhead_len == front_len + 1:
+                        print(f"[INFO] Trimming last frame from side & overhead for {mouse_id} on {date}")
+                        stitched_dfs['side']      = stitched_dfs['side'].iloc[:-1]
+                        stitched_dfs['overhead']  = stitched_dfs['overhead'].iloc[:-1]
+                        # if timestamps also mismatch, do the same:
+                        if (len(stitched_timestamps['side']) == len(stitched_timestamps['front']) + 1
+                            and len(stitched_timestamps['overhead']) == len(stitched_timestamps['front']) + 1):
+                            stitched_timestamps['side'] = stitched_timestamps['side'].iloc[:-1]
+                            stitched_timestamps['overhead'] = stitched_timestamps['overhead'].iloc[:-1]
+                elif mouse_id == '1035245' and date == '20230325':
+                    side_len = len(stitched_dfs['side'])
+                    front_len = len(stitched_dfs['front'])
+                    overhead_len = len(stitched_dfs['overhead'])
+
+                    if overhead_len == side_len + 1:
+                        print(f"[INFO] Trimming last frame from overhead for {mouse_id} on {date}")
+                        stitched_dfs['overhead'] = stitched_dfs['overhead'].iloc[:-1]
+
+                        # if timestamps also mismatch:
+                        oh_ts_len = len(stitched_timestamps['overhead'])
+                        side_ts_len = len(stitched_timestamps['side'])
+                        if oh_ts_len == side_ts_len + 1:
+                            stitched_timestamps['overhead'] = stitched_timestamps['overhead'].iloc[:-1]
+
+                # 3b. Final check: all 3 cameras same length?
+                side_len     = len(stitched_dfs['side'])
+                front_len    = len(stitched_dfs['front'])
+                overhead_len = len(stitched_dfs['overhead'])
+                if not (side_len == front_len == overhead_len):
+                    raise ValueError(f"Error: Mismatch rows for {mouse_id} on {date} after stitching/fix. "
+                                     f"Lens= side:{side_len}, front:{front_len}, overhead:{overhead_len}")
+
+                # 3c. Save to .h5 & CSV using the *first* filename for each camera (or whichever naming you prefer)
+                for cam in ['side','front','overhead']:
+                    cam_files = [f for f in relevant_files if cam in f]
+                    cam_files.sort()
+                    if not cam_files:
+                        continue
+                    # We'll use the first cam file name to save final result:
+                    dest_file = os.path.join(final_dest_dir, cam_files[0])
+                    if overwrite or not os.path.exists(dest_file):
+                        print(f"Saving stitched {cam} data to {dest_file}")
+                        stitched_dfs[cam].to_hdf(dest_file, key='df_with_missing', mode='w')
+
+                    # same for timestamps
+                    cam_ts_files = [f for f in timestamp_relevant_files if cam in f]
+                    cam_ts_files.sort()
+                    if cam_ts_files:
+                        dest_ts_file = os.path.join(final_dest_dir, cam_ts_files[0])
+                        if overwrite or not os.path.exists(dest_ts_file):
+                            print(f"Saving stitched {cam} timestamps to {dest_ts_file}")
+                            stitched_timestamps[cam].to_csv(dest_ts_file, index=False)
+
+                file_found = True
+
+            elif len(relevant_files) == 3:
+                # Exactly 3 data files total => side, front, overhead (one each).
+                # We'll read them all, fix row mismatch, then save as new .h5.
+                # And likewise copy timestamps.
+
+                # Grab filenames for each camera
+                side_file      = next(f for f in relevant_files if 'side' in f)
+                front_file     = next(f for f in relevant_files if 'front' in f)
+                overhead_file  = next(f for f in relevant_files if 'overhead' in f)
+
+                side_df     = pd.read_hdf(os.path.join(current_src_dir['side'], side_file))
+                front_df    = pd.read_hdf(os.path.join(current_src_dir['front'], front_file))
+                overhead_df = pd.read_hdf(os.path.join(current_src_dir['overhead'], overhead_file))
+
+                # (A) Fix known mismatch if needed
+                if mouse_id == '1035249' and date == '20230326':
+                    if len(side_df) == len(front_df) + 1 and len(overhead_df) == len(front_df) + 1:
+                        print(f"[INFO] Trimming last frame from side & overhead for {mouse_id} on {date}")
+                        side_df     = side_df.iloc[:-1]
+                        overhead_df = overhead_df.iloc[:-1]
+                        # do the same for timestamps if needed
+
+                # (B) Final check
+                if not (len(side_df) == len(front_df) == len(overhead_df)):
+                    raise ValueError(f"Error: Mismatch rows for {mouse_id} on {date} after fix. "
+                                     f"Lens= side:{len(side_df)}, front:{len(front_df)}, overhead:{len(overhead_df)}")
+
+                # (C) Save them as .h5 with same filenames
+                for cam in ['side','front','overhead']:
+                    if cam == 'side':
+                        df_to_save = side_df
+                        src_file   = side_file
+                    elif cam == 'front':
+                        df_to_save = front_df
+                        src_file   = front_file
+                    else:
+                        df_to_save = overhead_df
+                        src_file   = overhead_file
+
+                    dest_file = os.path.join(final_dest_dir, src_file)
+                    if overwrite or not os.path.exists(dest_file):
+                        print(f"Saving {cam} data to {dest_file}")
+                        df_to_save.to_hdf(dest_file, key='df_with_missing', mode='w')
+                        file_found = True
+                    else:
+                        print(f"Skipped saving {cam} data (already exists) → {dest_file}")
+                        file_found = True
+
+                # (D) Copy the timestamps (unchanged)
+                for cam in ['side','front','overhead']:
+                    # find the matching timestamp for this cam
+                    cam_ts_file = next(f for f in timestamp_relevant_files if cam in f)
+                    src_ts_path = os.path.join(current_timestamp_dir, cam_ts_file)
+                    dest_ts_path = os.path.join(final_dest_dir, cam_ts_file)
+                    if overwrite or not os.path.exists(dest_ts_path):
+                        print(f"Copying timestamps from {src_ts_path} → {dest_ts_path}")
+                        shutil.copyfile(src_ts_path, dest_ts_path)
+                    else:
+                        print(f"Skipped copying {cam_ts_file} (already exists)")
+
+            else:
+                print(f"Unexpected number of files found for {mouse_id} on {date}")
+
+        except Exception as e:
+            print(f"[WARNING] Skipping mouse {mouse_id} on {date} due to error:\n   {e}")
+            # This ensures we continue to the next mouse_id in the loop
             continue
 
-        if len(relevant_files) != len(timestamp_relevant_files):
-            if mouse_id == '1035249' and date == '20230306':
-                timestamp_relevant_files = timestamp_relevant_files[3:] # remove first 3 files from timestamp_relevant_files as missing part 2 video for side
-            else:
-                raise ValueError(f"Error: Different number of timestamp files to data files for {mouse_id} on {date}")
+    # End of for mouse_id in MouseIDs[mouse_group]:
 
-        if len(relevant_files) > 3:
-            # Initialize DataFrame for stitched data
-            stitched_dfs = {'side': pd.DataFrame(), 'front': pd.DataFrame(), 'overhead': pd.DataFrame()}
-            stitched_timestamps = {'side': pd.DataFrame(), 'front': pd.DataFrame(), 'overhead': pd.DataFrame()}
-
-            for cam in stitched_dfs.keys():
-                cam_files = [file_name for file_name in relevant_files if cam in file_name]
-                # order the files in the correct order by moving the last file to the first position
-                cam_files.insert(0, cam_files.pop())
-
-                timestamp_files = [file_name for file_name in timestamp_relevant_files if cam in file_name]
-                timestamp_files.insert(0, timestamp_files.pop())
-
-                dest_file = os.path.join(final_dest_dir, cam_files[0])
-                dest_timestamp_file = os.path.join(final_dest_dir, timestamp_files[0])
-
-                if overwrite or not os.path.exists(dest_file):
-                    # stitch all available cam files for the current camera
-                    cam_dfs = []
-                    for file_name in cam_files:
-                        src_file = os.path.join(current_src_dir[cam], file_name)
-                        df = pd.read_hdf(src_file)
-                        cam_dfs.append(df)
-                    stitched_dfs[cam] = pd.concat(cam_dfs, ignore_index=True)
-
-                    # Save the stitched data to the destination directory
-                    print(f'Stitching and saving {cam_files} to {dest_file}')
-                    stitched_dfs[cam].to_hdf(dest_file, key='df_with_missing', mode='w')
-
-                    # stitch all available timestamp files for the current camera
-                    timestamp_dfs = []
-                    for file_name in timestamp_files:
-                        src_file = os.path.join(current_timestamp_dir, file_name)
-                        df = pd.read_csv(src_file)
-                        timestamp_dfs.append(df)
-                    stitched_timestamps[cam] = pd.concat(timestamp_dfs, ignore_index=True)
-
-                    # Save the stitched data to the destination directory
-                    print(f'Stitching and saving {timestamp_files} to {dest_timestamp_file}')
-                    stitched_timestamps[cam].to_csv(dest_timestamp_file, index=False)
-
-                    file_found = True
-                else:
-                    print(f'Skipped stitching {cam_files} (already exists in {final_dest_dir})')
-                    file_found = True
-            # check that all three files in stitched_dfs have the same number of rows
-            if not all([len(stitched_dfs[cam]) == len(stitched_dfs['side']) for cam in stitched_dfs.keys()]):
-                raise ValueError(f"Error: Files have different number of rows for {mouse_id} on {date}")
-        elif len(relevant_files) == 3:
-            # Only 3 files (one each for side, front and overhead), no need to stitch. Just copy the 3 files.
-            for cam in current_src_dir.keys():
-                file_name = [file_name for file_name in relevant_files if cam in file_name][0]
-                src_file = os.path.join(current_src_dir[cam], file_name)
-                dest_file = os.path.join(final_dest_dir, file_name)
-                if overwrite or not os.path.exists(dest_file):
-                    print(f'Copying {src_file} to {dest_file}')
-                    shutil.copyfile(src_file, dest_file)
-                    file_found = True
-                else:
-                    print(f'Skipped copying {file_name} (already exists in {final_dest_dir})')
-                    file_found = True
-
-                # Handle timestamp file copying for the same camera
-                timestamp_file_name = [file_name for file_name in timestamp_relevant_files if cam in file_name][0]
-                src_timestamp_file = os.path.join(current_timestamp_dir, timestamp_file_name)
-                dest_timestamp_file = os.path.join(final_dest_dir, timestamp_file_name)
-                if overwrite or not os.path.exists(dest_timestamp_file):
-                    print(f'Copying {src_timestamp_file} to {dest_timestamp_file}')
-                    shutil.copyfile(src_timestamp_file, dest_timestamp_file)
-                else:
-                    print(f'Skipped copying {timestamp_file_name} (already exists in {final_dest_dir})')
-
-            # check that all three files have the same number of rows
-            if not all([len(pd.read_hdf(os.path.join(final_dest_dir, file_name))) == len(
-                    pd.read_hdf(os.path.join(final_dest_dir, relevant_files[0]))) for file_name in relevant_files]):
-                raise ValueError(f"Error: Files have different number of rows for {mouse_id} on {date}")
-        else:
-            print(f"Unexpected number of files found for {mouse_id} on {date}")
     if not file_found:
         print(f"No files found for {mouse_group} on {date}")
+
 
 
 def manual_changes():

@@ -22,7 +22,7 @@ runs_to_drop_placeholder = { # first = 0, last = 40 + 2/5
         '1035245': [33], # mouse got stuck
     },
     '20230412': {
-        '1035297': [18],  # got stuck in middle of run at r18
+        #'1035297': [18],  # got stuck in middle of run at r18
         '1035298': [24], # got stuck in middle of run at r24
     },
     '20230413': {
@@ -77,7 +77,7 @@ runs_to_drop_completely = {
         '1035299': [20], # mouse climbed out so jerry counted this as an extra
     },
     '20230322': {
-        '1035298': [14,33], # 1) mouse stood/sat across belt so jerry re-attempted, 2) same but the extra run is where mouse stood
+        '1035298': [14,17,34], # 1) mouse stood/sat across belt so jerry re-attempted, 2) belt off, 3) same as 1. but the extra run is where mouse stood
     },
     '20230323': {
         '1035299': [37], # not sure why but jerry did an extra run at 20:21/after r36
@@ -96,7 +96,7 @@ runs_to_drop_completely = {
     },
     '20230328': {
         '1035245': [4], # belt was off for the first run
-        '1035246': [42], # jerry wrote extra after r16/@12:47 but not sure why so have just taken from then end as looks fine to me
+        '1035244': [42], # jerry wrote extra after r16/@12:47 but not sure why so have just taken from then end as looks fine to me
     },
     '20230403': {
         '1035302': [18,19,10], # mouse had been failing (in preserved runs), jerry did an extra run which failed and then 2 stationary runs
@@ -108,7 +108,10 @@ runs_to_drop_completely = {
     },
     '20230406': {
         '1035299': [36], # not sure why but jerry did an extra run at 18:27/after r35
-        '1035302': [37,39], # not sire why but seems like when mouse slid under door jerry re-attempted the run
+        '1035301': [37,39], # not sire why but seems like when mouse slid under door jerry re-attempted the run
+    },
+    '20230407': {
+        '1035246': [2], # belt off on first real run so jerry re-attempted
     },
     '20230408': {
         '1035246': [2,4,17], # belt 1 kept turning off so jerry re-attempted
@@ -121,14 +124,14 @@ runs_to_drop_completely = {
         '1035250': [25,39], # belt was off so jerry re-attempted (these were the extra runs)
     },
     '20230412': {
-        '1035297': [19], # got stuck in middle of run at r18 so gave 1 stationery run after
+        '1035297': [18,19], # got stuck in middle of run at r18 (not in notes but seems this was an extra too) so gave 1 stationery run after
         '1035298': [20,25,40,44,46], # stood up, extra after got stuck, climbed out x 3
         '1035299': [25],  # got stuck in middle of run at r25
         '1035302': [5,19,21], # fail so jerry re-attempted,
     },
     '20230413': {
         '1035297': [44,45], # todo i think 2x extra as stationary runs after got stuck
-        '1035302': [51] # fail so jerry re-attempted (this is the mouse we staggered, hence the extra runs!)
+        '1035302': [51,52] # fail so jerry re-attempted (ie the extra) (this is the mouse we staggered, hence the extra runs!)
     },
     '20230414': {
         '1035297': [6], # jerry seemed to count this as an extra run due to RB but im not sure
@@ -164,16 +167,22 @@ missing_runs = {
     '20230319': {
         '1035249': [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27], # 28 runs missing from start
     },
+    '20230323': {
+        '1035298': [0], # missing the 1st habituation run
+    },
     '20230325': {
         '1035244': [0,1], # missing the 2 stationary habituation runs (3 slow incld)
         '1035245': [41], # video cut out before last run
+    },
+    '20230327': {
+        '1035243': [38], # not detected in my code (gittery door)
     },
     '20230328': {
         '1035243': [0],  # missed a habituation run according to jerrys notes (4 not 5)
     },
     '20230403': {
         '1035297': [1, 23],  # moused slipped under door for prep run and havent detected run 23 for unknown reason (think it was a bad door close)
-        '1035301': [1,]
+        '1035301': [1,17,29]
     },
     '20230404': {
         '1035297': [6,10,11,22,31], # found post analysis todo check order correct, added as not detected in my code (gittery door)
@@ -186,10 +195,25 @@ missing_runs = {
         '1035298': [27], #todo check order correct, added as not detected in my code (gittery door)
         '1035299': [37], #todo check order correct, added as not detected in my code (gittery door)
     },
+    '20230406': {
+        '1035301': [14,17,20,28,29,30]
+    },
+    '20230408': {
+      '1035244': [10], # not detected in my code (gittery door)
+    },
+    '20230410': {
+        '1035244': [14,15,18,19,25,26,33,40,41], # not detected in my code (gittery door)
+    },
     '20230412': {
         '1035299': [26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45], # no notes for rest of this file but not if no runs recorded after stuck at r25
         # 302 would be here but we staggered the runs across the days to make up for the lost 20 here
-    }
+    },
+    '20230413': {
+        '1035297': [27], # not detected in my code (gittery door)
+        '1035301': [10], # not detected in my code (gittery door)
+    },
+    '20230415': {
+        '1035297': [14], # not detected in my code (gittery door)
 }
 
 '''
@@ -200,6 +224,7 @@ missing_runs = {
  r23, door close and mouse slip under at 20:43/after r31
 20230309 - 1035302: slid under door at 3:07/after r5
 20230316 - 1035250: did a extra run at 17:39 with a door open/close but dont think this would have been registered
+20230319 - 1035249: have removed associated files into 'bin' folders as only seem to have vid for extra low-low trials and dont know what they are
 20230403 - 1035299: slipped under door at 12:25/after r24 but dont think this would have been registered - has been acted on!
 20230404 - 1035297: slipped under door at 4:00/after r8 but dont think this would have been registered - has been acted on!
 

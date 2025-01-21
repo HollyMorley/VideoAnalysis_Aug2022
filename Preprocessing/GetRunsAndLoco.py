@@ -21,7 +21,8 @@ SENTINEL_VALUE = -1
 class GetRuns:
     def __init__(self, file, mouseID, date,
                  exp=None, speed=None, repeat_extend=None, exp_wash=None,
-                 day=None, vmt_type=None, vmt_level=None, prep=None):
+                 day=None, vmt_type=None, vmt_level=None, prep=None,
+                 save_frames=True):
         self.file, self.mouseID, self.date = file, mouseID, date
 
         # store the experiment details for error logging
@@ -33,6 +34,9 @@ class GetRuns:
         self.vmt_type = vmt_type
         self.vmt_level = vmt_level
         self.prep = prep
+
+        # whether or not to load/save frames from video
+        self.save_frames = save_frames
 
         # if self.day is empty, look for 'Day' in the file name and extract number after it
         if day is None:
@@ -149,6 +153,9 @@ class GetRuns:
         summary_df.to_csv(summary_log_file, index=False)
 
     def visualise_video_frames(self, view, start_frame, end_frame):
+        if not self.save_frames:
+            print("Skipping visualise_video_frames because save_frames=False")
+            return
         day = os.path.basename(self.file).split('_')[1]
         filename_pattern = '_'.join(os.path.basename(self.file).split('_')[:-1])
         video_files = glob.glob(os.path.join(paths['video_folder'], f"{day}/{filename_pattern}_{view}*.avi"))
@@ -463,6 +470,10 @@ class GetRuns:
             return pd.DataFrame()
 
     def show_steps_in_videoframes(self, view='Side'):
+        if not self.save_frames:
+            print("Skipping show_steps_in_videoframes because save_frames=False")
+            return
+
         import tkinter as tk
         from tkinter import ttk
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -782,6 +793,10 @@ class GetRuns:
         plt.close()
 
     def visualize_run_steps(self, run_number, view='Front'):
+        if not self.save_frames:
+            print("Skipping visualize_run_steps because save_frames=False")
+            return
+
         import matplotlib.pyplot as plt
 
         day = os.path.basename(self.file).split('_')[1]
@@ -1648,6 +1663,10 @@ class GetRuns:
         - run_stage: str, the run stage to visualize ('RunStart', 'Transition', 'RunEnd')
         - view: str, the camera view to use ('Side', 'Front', etc.')
         """
+        if not self.save_frames:
+            print("Skipping plot_run_stage_frames because save_frames=False")
+            return
+
         runs = self.data.index.get_level_values('Run').unique()
 
         # Video file selection
@@ -1723,7 +1742,8 @@ class GetRuns:
 class GetAllFiles:
     def __init__(self, directory=None, overwrite=False,
                  exp=None, speed=None, repeat_extend=None, exp_wash=None,
-                 day=None, vmt_type=None, vmt_level=None, prep=None):
+                 day=None, vmt_type=None, vmt_level=None, prep=None,
+                 save_frames=True):
         self.directory = directory
         self.overwrite = overwrite
 
@@ -1736,6 +1756,8 @@ class GetAllFiles:
         self.vmt_type = vmt_type
         self.vmt_level = vmt_level
         self.prep = prep
+
+        self.save_frames = save_frames
 
         # path to a dedicated file-level error log
         self.file_error_log_file = os.path.join(paths['filtereddata_folder'], 'file_error_log.csv')
@@ -1816,7 +1838,8 @@ class GetAllFiles:
                                day=self.day,
                                vmt_type=self.vmt_type,
                                vmt_level=self.vmt_level,
-                               prep=self.prep)
+                               prep=self.prep,
+                               save_frames=self.save_frames)
                 try:
                     get_runs.get_runs()
                 except Exception as e:
@@ -1831,9 +1854,9 @@ class GetAllFiles:
 
 class GetConditionFiles:
     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None,
-                 vmt_level=None, prep=None, overwrite=False):
-        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite = (
-            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite)
+                 vmt_level=None, prep=None, overwrite=False, save_frames=True):
+        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite, self.save_frames = (
+            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite, save_frames)
 
     def get_dirs(self):
         if self.speed:
@@ -1887,7 +1910,8 @@ class GetConditionFiles:
                     day=self.day,
                     vmt_type=self.vmt_type,
                     vmt_level=self.vmt_level,
-                    prep=self.prep
+                    prep=self.prep,
+                    save_frames=self.save_frames
                 ).GetFiles()
             except Exception as e:
                 print(f"Error processing directory {current_path}: {e}")
@@ -1897,11 +1921,11 @@ def main():
     # Get all data
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False).get_dirs() # should do all 3 days
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False, save_frames=False).get_dirs() # should do all 3 days
 
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=True).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=True).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=True).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

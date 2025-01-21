@@ -144,6 +144,17 @@ class Utils:
                   "%s" % (len(mappedfiles), mappedfiles))
             return mappedfiles
 
+    def GetListofRunFiles(self, directory):
+        runfiles = glob("%s\\*_Runs.h5" % directory)
+        runfiles.sort()
+        if not runfiles:
+            print("No run files found in this directory")
+        else:
+            print("Files to be analysed are:\n"
+                  "%d files\n"
+                  "%s" % (len(runfiles), runfiles))
+            return runfiles
+
     def GetlistofH5files(self, files=None, directory=None):
         datafiles_side = None
         datafiles_front = None

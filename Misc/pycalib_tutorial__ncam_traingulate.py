@@ -5,7 +5,7 @@ from glob import glob
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-module_path = os.path.abspath(os.path.join('..'))
+module_path = os.path.abspath(os.path.join('../..'))
 if module_path not in sys.path:
     sys.path.append(module_path)
 

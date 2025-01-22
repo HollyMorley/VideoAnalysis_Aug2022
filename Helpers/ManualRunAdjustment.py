@@ -81,12 +81,16 @@ runs_to_drop_completely = {
         '1035298': [14,17,34], # 1) mouse stood/sat across belt so jerry re-attempted, 2) belt off, 3) same as 1. but the extra run is where mouse stood
     },
     '20230323': {
+        '1035297': [0], # todo code wont run with this run so have removed it
         '1035299': [37], # not sure why but jerry did an extra run at 20:21/after r36
         '1035301': [17,20,39], # all marked as extra runs todo check why when can access videos!!
     },
     '20230325': {
-        '1035244': [35,36,37,38,39], # after mouse got stuck jerry re-attempted several times
+        # '1035244': [31,32,33,34,35,36,37,38,39,40,41,42], # after mouse got stuck jerry re-attempted several times
+        '1035244': [32,35,36,37,38,39], # after mouse got stuck jerry re-attempted several times
         '1035245': [34,35,37,38,39,41], # after mouse got stuck jerry re-attempted several times
+        '1035246': [37,42], # todo code wont run with this run so have removed it
+        '1035249': [41],#+3missing[38], # todo code wont run with this run so have removed it
     },
     '20230326': {
         '1035250': [3], # mouse tried to turn back after half stepping but struggled so jerry stopped (this was the 'extra') after r2/@6:59
@@ -108,6 +112,7 @@ runs_to_drop_completely = {
         '1035302': [2], # belt was off for the first run
     },
     '20230406': {
+        '1035298': [14], #todo code wont run with this run so have removed it
         '1035299': [36], # not sure why but jerry did an extra run at 18:27/after r35
         '1035301': [37,39], # not sire why but seems like when mouse slid under door jerry re-attempted the run
     },
@@ -126,7 +131,7 @@ runs_to_drop_completely = {
     },
     '20230412': {
         '1035297': [18,19], # got stuck in middle of run at r18 (not in notes but seems this was an extra too) so gave 1 stationery run after
-        '1035298': [20,25,40,44,46], # stood up, extra after got stuck, climbed out x 3
+        '1035298': [21,25,40,44,46],#[20,21,25,40,44,46], # stood up, extra after got stuck, climbed out x 3 #todo removed 21 as code wont run with it
         '1035299': [25],  # got stuck in middle of run at r25
         '1035302': [5,19,21], # fail so jerry re-attempted,
     },
@@ -174,6 +179,7 @@ missing_runs = {
     '20230325': {
         '1035244': [0,1], # missing the 2 stationary habituation runs (3 slow incld)
         '1035245': [41], # video cut out before last run
+        '1034249': [19,30,34,41], # not detected in my code (gittery door)
     },
     '20230327': {
         '1035243': [38], # not detected in my code (gittery door)
@@ -197,7 +203,8 @@ missing_runs = {
         '1035299': [37], #todo check order correct, added as not detected in my code (gittery door)
     },
     '20230406': {
-        '1035301': [14,17,20,28,29,30]
+        '1035298': [17,23], # not detected in my code (gittery door)
+        '1035301': [14,17,20,28,29,30,34,35]
     },
     '20230408': {
       '1035244': [10], # not detected in my code (gittery door)

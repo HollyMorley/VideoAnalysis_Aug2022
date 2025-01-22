@@ -328,12 +328,16 @@ class GetRuns:
                     door_open[idx] = SENTINEL_VALUE
                     door_close[idx] = SENTINEL_VALUE
 
+        # print("Runs before dropping:", np.arange(len(door_open)))
+        # print("Runs to drop:", mra.runs_to_drop_completely)
         # 3) Finally, drop the runs that need to be dropped completely
         if self.date in mra.runs_to_drop_completely and self.mouseID in mra.runs_to_drop_completely[self.date]:
             for idx in sorted(mra.runs_to_drop_completely[self.date][self.mouseID], reverse=True):
                 if 0 <= idx < len(door_open):
                     door_open = np.delete(door_open, idx)
                     door_close = np.delete(door_close, idx)
+        # print("Runs before dropping:", np.arange(len(door_open)))
+        # print("Runs to drop:", mra.runs_to_drop_completely)
 
         return door_open, door_close
 
@@ -442,6 +446,7 @@ class GetRuns:
 
     def process_run(self, r):
         try:
+            print(f'Analysing run {r}')
             # Create a copy of the data relevant to this trial
             trial_start = self.trial_starts[r]
             trial_end = self.trial_ends[r]
@@ -1922,11 +1927,11 @@ def main():
     # Get all data
     # GetALLRuns(directory=directory).GetFiles()
     ### maybe instantiate first to protect entry point of my script
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False, save_frames=False).get_dirs() # should do all 3 days
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',overwrite=False, save_frames=True).get_dirs() # should do all 3 days
 
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False, save_frames=False).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False, save_frames=True).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False, save_frames=True).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended', overwrite=False, save_frames=True).get_dirs()
 
 if __name__ == "__main__":
     # directory = input("Enter the directory path: ")

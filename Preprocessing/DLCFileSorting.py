@@ -185,15 +185,13 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
                             and len(stitched_timestamps['overhead']) == len(stitched_timestamps['front']) + 1):
                             stitched_timestamps['side'] = stitched_timestamps['side'].iloc[:-1]
                             stitched_timestamps['overhead'] = stitched_timestamps['overhead'].iloc[:-1]
+
                 elif mouse_id == '1035245' and date == '20230325':
                     side_len = len(stitched_dfs['side'])
-                    front_len = len(stitched_dfs['front'])
                     overhead_len = len(stitched_dfs['overhead'])
-
                     if overhead_len == side_len + 1:
                         print(f"[INFO] Trimming last frame from overhead for {mouse_id} on {date}")
                         stitched_dfs['overhead'] = stitched_dfs['overhead'].iloc[:-1]
-
                         # if timestamps also mismatch:
                         oh_ts_len = len(stitched_timestamps['overhead'])
                         side_ts_len = len(stitched_timestamps['side'])
@@ -234,68 +232,69 @@ def copy_files_for_mouse_group(dest_dir, current_path, mouse_group, date, MouseI
             elif len(relevant_files) == 3:
                 # Exactly 3 data files total => side, front, overhead (one each).
                 # We'll read them all, fix row mismatch, then save as new .h5.
-                # And likewise copy timestamps.
+                # And likewise handle timestamps identically.
 
                 # Grab filenames for each camera
                 side_file      = next(f for f in relevant_files if 'side' in f)
                 front_file     = next(f for f in relevant_files if 'front' in f)
                 overhead_file  = next(f for f in relevant_files if 'overhead' in f)
-
                 side_df     = pd.read_hdf(os.path.join(current_src_dir['side'], side_file))
                 front_df    = pd.read_hdf(os.path.join(current_src_dir['front'], front_file))
                 overhead_df = pd.read_hdf(os.path.join(current_src_dir['overhead'], overhead_file))
 
-                # (A) Fix known mismatch if needed
+                # 1) Read the single timestamp files for each camera:
+                side_ts_file = next(f for f in timestamp_relevant_files if 'side' in f)
+                front_ts_file = next(f for f in timestamp_relevant_files if 'front' in f)
+                overhead_ts_file = next(f for f in timestamp_relevant_files if 'overhead' in f)
+                side_ts = pd.read_csv(os.path.join(current_timestamp_dir, side_ts_file))
+                front_ts = pd.read_csv(os.path.join(current_timestamp_dir, front_ts_file))
+                overhead_ts = pd.read_csv(os.path.join(current_timestamp_dir, overhead_ts_file))
+
+                # 2) Fix known mismatch if needed, trimming both data and timestamps:
                 if mouse_id == '1035249' and date == '20230326':
                     if len(side_df) == len(front_df) + 1 and len(overhead_df) == len(front_df) + 1:
                         print(f"[INFO] Trimming last frame from side & overhead for {mouse_id} on {date}")
-                        side_df     = side_df.iloc[:-1]
+                        side_df = side_df.iloc[:-1]
                         overhead_df = overhead_df.iloc[:-1]
+                        side_ts = side_ts.iloc[:-1]
+                        overhead_ts = overhead_ts.iloc[:-1]
 
                 elif mouse_id == '1035245' and date == '20230325':
                     if len(overhead_df) == len(side_df) + 1:
                         print(f"[INFO] Trimming last frame from overhead for {mouse_id} on {date}")
                         overhead_df = overhead_df.iloc[:-1]
-                        # do the same for timestamps if needed
+                        #overhead_ts = overhead_ts.iloc[:-1] # todo the timestamps are not different len to other cams - THIS IS WEIRD?!?!
 
-                # (B) Final check
+                # Final check
                 if not (len(side_df) == len(front_df) == len(overhead_df)):
-                    raise ValueError(f"Error: Mismatch rows for {mouse_id} on {date} after fix. "
+                    raise ValueError(f"Error: Mismatch rows for {mouse_id} on {date}"
                                      f"Lens= side:{len(side_df)}, front:{len(front_df)}, overhead:{len(overhead_df)}")
 
-                # (C) Save them as .h5 with same filenames
-                for cam in ['side','front','overhead']:
-                    if cam == 'side':
-                        df_to_save = side_df
-                        src_file   = side_file
-                    elif cam == 'front':
-                        df_to_save = front_df
-                        src_file   = front_file
-                    else:
-                        df_to_save = overhead_df
-                        src_file   = overhead_file
+                if not (len(side_ts) == len(front_ts) == len(overhead_ts)):
+                    raise ValueError(f"Error: Mismatch timestamps for {mouse_id} on {date}")
 
-                    dest_file = os.path.join(final_dest_dir, src_file)
-                    if overwrite or not os.path.exists(dest_file):
-                        print(f"Saving {cam} data to {dest_file}")
-                        df_to_save.to_hdf(dest_file, key='df_with_missing', mode='w')
-                        file_found = True
-                    else:
-                        print(f"Skipped saving {cam} data (already exists) → {dest_file}")
-                        file_found = True
+                # Save data + timestamps in one loop:
+                for (cam, df, ts, file_name, ts_name) in [
+                    ('side', side_df, side_ts, side_file, side_ts_file),
+                    ('front', front_df, front_ts, front_file, front_ts_file),
+                    ('overhead', overhead_df, overhead_ts, overhead_file, overhead_ts_file),
+                ]:
+                    data_dest = os.path.join(final_dest_dir, file_name)
+                    ts_dest = os.path.join(final_dest_dir, ts_name)
 
-                # (D) Copy the timestamps (unchanged)
-                for cam in ['side','front','overhead']:
-                    # find the matching timestamp for this cam
-                    cam_ts_file = next(f for f in timestamp_relevant_files if cam in f)
-                    src_ts_path = os.path.join(current_timestamp_dir, cam_ts_file)
-                    dest_ts_path = os.path.join(final_dest_dir, cam_ts_file)
-                    if overwrite or not os.path.exists(dest_ts_path):
-                        print(f"Copying timestamps from {src_ts_path} → {dest_ts_path}")
-                        shutil.copyfile(src_ts_path, dest_ts_path)
+                    # Save the data
+                    if overwrite or not os.path.exists(data_dest):
+                        print(f"[SINGLE-FILE-SAVE] {cam} data → {data_dest}")
+                        df.to_hdf(data_dest, key='df_with_missing', mode='w')
                     else:
-                        print(f"Skipped copying {cam_ts_file} (already exists)")
+                        print(f"Skipped saving {cam} data (already exists) → {data_dest}")
 
+                    # Save the timestamps
+                    if overwrite or not os.path.exists(ts_dest):
+                        print(f"[SINGLE-FILE-SAVE] {cam} timestamps → {ts_dest}")
+                        ts.to_csv(ts_dest, index=False)
+                    else:
+                        print(f"Skipped saving {cam} timestamps (already exists) → {ts_dest}")
             else:
                 print(f"Unexpected number of files found for {mouse_id} on {date}")
 
@@ -330,7 +329,7 @@ def manual_changes():
 
     for change in changes:
         if change['action'] == 'delete':
-            # Delete relevant files
+            # Delete relevant files (both data and timestamps) from the destination day
             day_path = os.path.join(highlow_dir, change['day'])
             for file in os.listdir(day_path):
                 if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file:
@@ -339,8 +338,9 @@ def manual_changes():
                         print(f"Deleting {file_path}")
                         os.remove(file_path)
 
+
         elif change['action'] == 'move':
-            # Move files from one destination day to another within dlc_dest
+            # Move files from one destination day to another within dlc_dest, including timestamps
             src_day_path = os.path.join(highlow_dir, change['src_day'])
             dst_day_path = os.path.join(highlow_dir, change['dst_day'])
             for file in os.listdir(src_day_path):
@@ -360,11 +360,22 @@ def manual_changes():
                 ensure_dir_exists(dst_day)
 
                 for file in os.listdir(src_day):
-                    if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file:
+                    if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file and cam in file:
                         src_file = os.path.join(src_day, file)
                         dst_file = os.path.join(dst_day, file)
                         print(f"Copying {src_file} to {dst_file}")
                         shutil.copy(src_file, dst_file)
+
+                # also copy timestamps
+                src_ts = os.path.join(paths['video_folder'], change['src_day'])
+                dst_ts = dst_day
+                for file in os.listdir(src_ts):
+                    if f"FAA-{change['mouse_id']}" in file and f"{change['date']}" in file and cam in file and 'Timestamps' in file:
+                        src_file = os.path.join(src_ts, file)
+                        dst_file = os.path.join(dst_ts, file)
+                        print(f"Copying {src_file} to {dst_file}")
+                        shutil.copy(src_file, dst_file)
+
 
 
 def final_checks():

@@ -71,20 +71,52 @@ class VideoLabelerApp(tk.Tk):
         self.cap = None
         self.total_frames = 0
 
-        # For label mode, we track the index within 'extracted_frames'
-        self.label_extracted_idx = 0
+        # track label mode
+        self.extract_mode = True
 
-        # For dragging
-        self.dragging = False
-        self.drag_offset = (0, 0)  # how far mouse is from label center
-        self.drag_frame = None     # which frame's label is being dragged
+        # read any existing extracted frames / labels from CSV
+        self.load_extracted_csv()
+        self.load_labels_csv()
 
-        # Are we in extract mode or label mode
-        self.extract_mode = True  # start in Extract mode by default
-
-        # Setup UI
+        # create UI
         self.create_widgets()
-        self.load_video(0)
+        self.load_video(0)  # load the first video
+
+
+    def load_extracted_csv(self):
+        """Load previously extracted frames from CSV if it exists."""
+        if not os.path.exists(output_extracted_csv):
+            return  # No prior extracted CSV found, skip
+
+        with open(output_extracted_csv, 'r', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                vid_name = row['video_name']
+                frame_num = int(row['frame_number'])
+                # Find the matching video in videos_info
+                for vinfo in videos_info:
+                    if vinfo['name'] == vid_name:
+                        if frame_num not in vinfo['extracted_frames']:
+                            vinfo['extracted_frames'].append(frame_num)
+                        break
+
+    def load_labels_csv(self):
+        """Load previously saved labels from CSV if it exists."""
+        if not os.path.exists(output_labels_csv):
+            return
+
+        with open(output_labels_csv, 'r', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                vid_name = row['video_name']
+                frame_num = int(row['frame_number'])
+                x = int(row['x'])
+                y = int(row['y'])
+                # Find the matching video in videos_info
+                for vinfo in videos_info:
+                    if vinfo['name'] == vid_name:
+                        vinfo['labels'][frame_num] = (x, y)
+                        break
 
     ###########################################################################
     # 2A) CREATE ALL WIDGETS
@@ -115,7 +147,7 @@ class VideoLabelerApp(tk.Tk):
         mid_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # Canvas for video
-        self.canvas = tk.Canvas(mid_frame, bg="black", width=800, height=600)
+        self.canvas = tk.Canvas(mid_frame, bg="black")
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Bind mouse events for labeling
@@ -123,16 +155,28 @@ class VideoLabelerApp(tk.Tk):
         self.canvas.bind("<B1-Motion>", self.on_left_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
         self.canvas.bind("<Button-3>", self.on_right_click)  # right-click
+        self.canvas.bind("<Configure>", self.on_canvas_resize)
 
         # Right panel for controls
         right_panel = tk.Frame(mid_frame)
         right_panel.pack(side=tk.RIGHT, fill=tk.Y)
 
+        # ... in the right_panel
+        tk.Button(right_panel, text="Prev Video (Label)", command=self.prev_video_label).pack(pady=5)
+        tk.Button(right_panel, text="Next Video (Label)", command=self.next_video_label).pack(pady=5)
+
         # Frame slider (for EXTRACT mode)
-        tk.Label(right_panel, text="Frame Slider:").pack(pady=5)
-        self.frame_slider = tk.Scale(right_panel, from_=0, to=0, orient=tk.HORIZONTAL,
+        slider_frame = tk.Frame(self)
+        slider_frame.pack(side=tk.TOP, fill=tk.X)  # ensures the slider stretches horizontally
+
+        # Optional label on the left
+        tk.Label(slider_frame, text="Frame Slider:").pack(side=tk.LEFT, padx=5)
+
+        # The slider itself, filling all remaining horizontal space
+        self.frame_slider = tk.Scale(slider_frame, from_=0, to=0,
+                                     orient=tk.HORIZONTAL,
                                      command=self.on_frame_slider)
-        self.frame_slider.pack(pady=5)
+        self.frame_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Extract button
         self.extract_btn = tk.Button(right_panel, text="Extract Frame", command=self.extract_frame)
@@ -148,6 +192,102 @@ class VideoLabelerApp(tk.Tk):
         # Info label
         self.info_label = tk.Label(right_panel, text="", bg="white")
         self.info_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def prev_video_label(self):
+        """Switch to the previous video and stay in label mode."""
+        self.current_video_idx = (self.current_video_idx - 1) % len(videos_info)
+        self.load_video(self.current_video_idx)  # re-load the new video
+        # Remain in label mode
+        self.extract_mode = False
+        self.mode_btn.config(text="Switch to Extract Mode")
+        self.extract_btn.config(state=tk.DISABLED)
+        self.label_extracted_idx = 0
+        self.update_info_label()
+
+    def next_video_label(self):
+        """Switch to the next video and stay in label mode."""
+        self.current_video_idx = (self.current_video_idx + 1) % len(videos_info)
+        self.load_video(self.current_video_idx)
+        # Remain in label mode
+        self.extract_mode = False
+        self.mode_btn.config(text="Switch to Extract Mode")
+        self.extract_btn.config(state=tk.DISABLED)
+        self.label_extracted_idx = 0
+        self.update_info_label()
+
+    def on_canvas_resize(self, event):
+        """
+        Called whenever the canvas is resized.
+        We resize the current image to fill the canvas and redraw.
+        """
+        self.resize_and_display()
+
+    def resize_and_display(self):
+        """
+        Resizes the current PIL image to fit the canvas while maintaining aspect ratio.
+        Draws a "+" marker for labels instead of "X".
+        """
+        if self.current_pil_image is None:
+            return
+
+        # Get canvas dimensions
+        c_width = self.canvas.winfo_width()
+        c_height = self.canvas.winfo_height()
+
+        # Ensure valid canvas dimensions
+        if c_width <= 0 or c_height <= 0:
+            print("Canvas width or height is invalid, skipping resize.")
+            return
+
+        # Original image dimensions
+        img_w, img_h = self.current_pil_image.size
+
+        # Calculate scale to maintain aspect ratio
+        ratio_w = c_width / img_w
+        ratio_h = c_height / img_h
+        scale = min(ratio_w, ratio_h)
+
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+
+        # Ensure the scaled dimensions are valid
+        if new_w <= 0 or new_h <= 0:
+            print(f"Invalid scaled dimensions: ({new_w}, {new_h}). Skipping resize.")
+            return
+
+        # Resize the image
+        resized_img = self.current_pil_image.resize((new_w, new_h), Image.ANTIALIAS)
+        self.tk_img = ImageTk.PhotoImage(resized_img)
+
+        # Clear the canvas and draw the image
+        self.canvas.delete("all")
+
+        # Center the image
+        x_offset = (c_width - new_w) // 2
+        y_offset = (c_height - new_h) // 2
+
+        self.last_scale = scale
+        self.last_xoffset = x_offset
+        self.last_yoffset = y_offset
+
+        # Draw the image
+        self.canvas.create_image(x_offset, y_offset, anchor=tk.NW, image=self.tk_img)
+
+        # Draw any labels
+        vinfo = videos_info[self.current_video_idx]
+        for frame, (image_x, image_y) in vinfo['labels'].items():
+            # Scale label coordinates
+            scaled_x = int(image_x * self.last_scale) + self.last_xoffset
+            scaled_y = int(image_y * self.last_scale) + self.last_yoffset
+
+            # Draw a "+" for the label
+            line_len = 10
+            self.canvas.create_line(scaled_x, scaled_y - line_len,
+                                    scaled_x, scaled_y + line_len,
+                                    fill="red", width=2)
+            self.canvas.create_line(scaled_x - line_len, scaled_y,
+                                    scaled_x + line_len, scaled_y,
+                                    fill="red", width=2)
 
     ###########################################################################
     # 2B) VIDEO LOADING
@@ -274,22 +414,26 @@ class VideoLabelerApp(tk.Tk):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(frame_rgb)
 
-        # Optionally draw the label for label-mode
+        # If label mode, draw the label (circle or X) in the PIL image now
         if not self.extract_mode:
             label_xy = vinfo['labels'].get(fnum, None)
             if label_xy is not None:
-                # Draw a small circle in PIL. One approach is ImageDraw:
                 from PIL import ImageDraw
                 draw = ImageDraw.Draw(pil_img)
-                x, y = label_xy
-                r = 10
-                draw.ellipse([(x-r, y-r), (x+r, y+r)], fill=(255,0,0,128))
+                image_x, image_y = label_xy
 
-        # Convert to ImageTk
-        tk_img = ImageTk.PhotoImage(pil_img)
-        self.canvas.image = tk_img  # keep reference!
-        self.canvas.config(width=pil_img.width, height=pil_img.height)
-        self.canvas.create_image(0, 0, anchor=tk.NW, image=tk_img)
+                # Draw an "X" directly on the canvas (relative to the image, not the resized canvas)
+                line_len = 10  # Adjust line length for visibility
+                draw.line([(image_x - line_len, image_y - line_len), (image_x + line_len, image_y + line_len)],
+                          fill=(255, 0, 0), width=2)
+                draw.line([(image_x - line_len, image_y + line_len), (image_x + line_len, image_y - line_len)],
+                          fill=(255, 0, 0), width=2)
+
+        # Store this image as the "current" frame
+        self.current_pil_image = pil_img
+
+        # Resize and display
+        self.resize_and_display()
 
     def show_blank(self, message):
         self.canvas.delete("all")
@@ -349,8 +493,6 @@ class VideoLabelerApp(tk.Tk):
             return
         fnum = vinfo['extracted_frames'][self.label_extracted_idx]
 
-        # Check if SHIFT is pressed. On Windows, SHIFT sets event.state bits.
-        # This can vary by OS. 0x0001 is SHIFT, or might be 0x0004, etc.
         shift_pressed = (event.state & 0x0001) != 0 or (event.state & 0x0004) != 0
 
         if shift_pressed:
@@ -360,9 +502,28 @@ class VideoLabelerApp(tk.Tk):
                 self.info_label.config(text=f"Deleted label for frame {fnum}")
                 self.update_frame()
         else:
-            # Normal right-click -> place or move label
-            vinfo['labels'][fnum] = (event.x, event.y)
-            self.info_label.config(text=f"Labeled frame {fnum} at ({event.x}, {event.y})")
+            # Convert (event.x, event.y) from canvas coords -> image coords
+            canvas_x = event.x
+            canvas_y = event.y
+
+            # Convert canvas coordinates to relative image coordinates
+            rel_x = canvas_x - self.last_xoffset
+            rel_y = canvas_y - self.last_yoffset
+
+            # # Ignore clicks outside the visible image
+            # if rel_x < 0 or rel_y < 0 or rel_x > (self.last_scale * self.current_pil_image.width) or rel_y > (
+            #         self.last_scale * self.current_pil_image.height):
+            #     self.info_label.config(text="Clicked outside the image bounds.")
+            #     return
+
+            # Scale back to original image size
+            image_x = int(rel_x / self.last_scale)
+            image_y = int(rel_y / self.last_scale)
+
+            # Store the label
+            vinfo['labels'][fnum] = (image_x, image_y)
+            self.info_label.config(text=f"Labeled frame {fnum} at image coords ({image_x},{image_y})")
+
             self.update_frame()
 
     ###########################################################################
@@ -373,9 +534,12 @@ class VideoLabelerApp(tk.Tk):
         idxs = self.video_listbox.curselection()
         if idxs:
             self.load_video(idxs[0])
-            self.extract_mode = True
-            self.mode_btn.config(text="Switch to Label Mode")
-            self.extract_btn.config(state=tk.NORMAL)
+            if self.extract_mode:
+                self.mode_btn.config(text="Switch to Label Mode")
+                self.extract_btn.config(state=tk.NORMAL)
+            else:
+                self.mode_btn.config(text="Switch to Extract Mode")
+                self.extract_btn.config(state=tk.DISABLED)
             self.label_extracted_idx = 0
             self.update_info_label()
 

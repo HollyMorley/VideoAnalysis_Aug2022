@@ -1,20 +1,19 @@
-import numpy as np
 import os, glob, re, csv
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
-import threading
 from matplotlib.widgets import Slider, Button
 import matplotlib.patches as patches
-from scipy.signal import find_peaks
 import joblib
-from joblib import Parallel, delayed
 import cv2
 import time
+
 import Helpers.utils as utils
 from Helpers.Config_23 import *
 from Preprocessing import GaitFeatureExtraction as gfe
 from Helpers import ManualRunAdjustment as mra
+from Helpers import ManualFileAdjustment as mfa
+from Helpers.ConditionsFinder import BaseConditionFiles
 
 SENTINEL_VALUE = -1
 
@@ -415,7 +414,9 @@ class GetRuns:
         RunBounds = []
         Runbacks = []
         for r in range(len(self.trial_starts)):
-            #print(f"Processing run {r}: {self.trial_starts[r]}")
+            mins = self.trial_starts[r]/fps/60
+            secs = self.trial_starts[r]/fps%60
+            print(f"Trial: {r} at {mins} mins {secs} secs")
             if self.trial_starts[r] == SENTINEL_VALUE or self.trial_ends[r] == SENTINEL_VALUE:
                 print(f"Skipping run {r} due to manual exclusion.")
                 Steps.append(pd.DataFrame())  # or whatever placeholder you like
@@ -1825,6 +1826,23 @@ class GetAllFiles:
         df = df.sort_values(by=['File'])
         df.to_csv(self.file_error_log_file, index=False)
 
+    def remove_log_entries(self, file):
+        # Define paths to the logs
+        run_log_file = os.path.join(paths['filtereddata_folder'], 'run_summary_log.csv')
+        error_log_file = os.path.join(paths['filtereddata_folder'], 'error_log.csv')
+
+        # Remove entries from run log
+        if os.path.exists(run_log_file):
+            run_log_df = pd.read_csv(run_log_file)
+            run_log_df = run_log_df[run_log_df['File'] != file]
+            run_log_df.to_csv(run_log_file, index=False)
+
+        # Remove entries from error log
+        if os.path.exists(error_log_file):
+            error_log_df = pd.read_csv(error_log_file)
+            error_log_df = error_log_df[error_log_df['File'] != file]
+            error_log_df.to_csv(error_log_file, index=False)
+
     def GetFiles(self):
         files = utils.Utils().GetListofMappedFiles(self.directory)  # gets dictionary of side, front and overhead 3D files
 
@@ -1834,6 +1852,16 @@ class GetAllFiles:
             pattern = "*%s*_Runs.h5" % mouseID
             dir = os.path.dirname(files[j])
             date = files[j].split(os.sep)[-1].split('_')[1]
+
+            if date in mfa.Files_to_be_dropped and mouseID in mfa.Files_to_be_dropped[date]:
+                # check if file exists, if it does delete the file, and from the run log, if not continue
+                self.remove_log_entries(files[j])
+                if glob.glob(os.path.join(dir, pattern)):
+                    os.remove(glob.glob(os.path.join(dir, pattern))[0])
+                    print(f"File {mouseID} from {date} was deleted due to known issues.")
+                else:
+                    print(f"Skipping {mouseID} from {date} due to known issues.")
+                continue
 
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
                 print(f"###############################################################"
@@ -1859,71 +1887,96 @@ class GetAllFiles:
 
         print('All experiments have been mapped to real-world coordinates and saved.')
 
+class GetConditionFiles(BaseConditionFiles):
+    def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None,
+                 vmt_type=None, vmt_level=None, prep=None, overwrite=False, save_frames=True):
+        super().__init__(
+            exp=exp, speed=speed, repeat_extend=repeat_extend, exp_wash=exp_wash,
+            day=day, vmt_type=vmt_type, vmt_level=vmt_level, prep=prep, overwrite=overwrite
+        )
+        self.save_frames = save_frames
 
-class GetConditionFiles:
-    def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None,
-                 vmt_level=None, prep=None, overwrite=False, save_frames=True):
-        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite, self.save_frames = (
-            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite, save_frames)
+    def process_final_directory(self, directory):
+        # Instead of rewriting the same logic, just call GetAllFiles
+        GetAllFiles(
+            directory=directory,
+            overwrite=self.overwrite,
+            exp=self.exp,
+            speed=self.speed,
+            repeat_extend=self.repeat_extend,
+            exp_wash=self.exp_wash,
+            day=self.day,
+            vmt_type=self.vmt_type,
+            vmt_level=self.vmt_level,
+            prep=self.prep,
+            save_frames=self.save_frames
+        ).GetFiles()
 
-    def get_dirs(self):
-        if self.speed:
-            exp_speed_name = f"{self.exp}_{self.speed}"
-        else:
-            exp_speed_name = self.exp
-        base_path = os.path.join(paths['filtereddata_folder'], exp_speed_name)
 
-        # join any of the conditions that are not None in the order they appear in the function as individual directories
-        conditions = [self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep]
-        conditions = [c for c in conditions if c is not None]
-
-        # if Repeats in conditions, add 'Wash' directory in the next position in the list
-        if 'Repeats' in conditions:
-            idx = conditions.index('Repeats')
-            conditions.insert(idx + 1, 'Wash')
-        condition_path = os.path.join(base_path, *conditions)
-
-        if os.path.exists(condition_path):
-            print(f"Directory found: {condition_path}")
-        else:
-            raise FileNotFoundError(f"No path found {condition_path}")
-
-        # Recursively find and process the final data directories
-        self._process_subdirectories(condition_path)
-
-    def _process_subdirectories(self, current_path):
-        """
-        Recursively process directories and get to the final data directories.
-        """
-        subdirs = [d for d in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, d))]
-        subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
-
-        # If subdirectories exist, traverse deeper
-        if len(subdirs) > 0:
-            print(f"Subdirectories found in {current_path}: {subdirs}")
-            for subdir in subdirs:
-                full_subdir_path = os.path.join(current_path, subdir)
-                # Recursively process subdirectory
-                self._process_subdirectories(full_subdir_path)
-        else:
-            # No more subdirectories, assume this is the final directory with data
-            print(f"Final directory: {current_path}")
-            try:
-                GetAllFiles(
-                    directory=current_path,
-                    overwrite=self.overwrite,
-                    exp=self.exp,
-                    speed=self.speed,
-                    repeat_extend=self.repeat_extend,
-                    exp_wash=self.exp_wash,
-                    day=self.day,
-                    vmt_type=self.vmt_type,
-                    vmt_level=self.vmt_level,
-                    prep=self.prep,
-                    save_frames=self.save_frames
-                ).GetFiles()
-            except Exception as e:
-                print(f"Error processing directory {current_path}: {e}")
+# class GetConditionFiles:
+#     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None,
+#                  vmt_level=None, prep=None, overwrite=False, save_frames=True):
+#         self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite, self.save_frames = (
+#             exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite, save_frames)
+#
+#     def get_dirs(self):
+#         if self.speed:
+#             exp_speed_name = f"{self.exp}_{self.speed}"
+#         else:
+#             exp_speed_name = self.exp
+#         base_path = os.path.join(paths['filtereddata_folder'], exp_speed_name)
+#
+#         # join any of the conditions that are not None in the order they appear in the function as individual directories
+#         conditions = [self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep]
+#         conditions = [c for c in conditions if c is not None]
+#
+#         # if Repeats in conditions, add 'Wash' directory in the next position in the list
+#         if 'Repeats' in conditions:
+#             idx = conditions.index('Repeats')
+#             conditions.insert(idx + 1, 'Wash')
+#         condition_path = os.path.join(base_path, *conditions)
+#
+#         if os.path.exists(condition_path):
+#             print(f"Directory found: {condition_path}")
+#         else:
+#             raise FileNotFoundError(f"No path found {condition_path}")
+#
+#         # Recursively find and process the final data directories
+#         self._process_subdirectories(condition_path)
+#
+#     def _process_subdirectories(self, current_path):
+#         """
+#         Recursively process directories and get to the final data directories.
+#         """
+#         subdirs = [d for d in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, d))]
+#         subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
+#
+#         # If subdirectories exist, traverse deeper
+#         if len(subdirs) > 0:
+#             print(f"Subdirectories found in {current_path}: {subdirs}")
+#             for subdir in subdirs:
+#                 full_subdir_path = os.path.join(current_path, subdir)
+#                 # Recursively process subdirectory
+#                 self._process_subdirectories(full_subdir_path)
+#         else:
+#             # No more subdirectories, assume this is the final directory with data
+#             print(f"Final directory: {current_path}")
+#             try:
+#                 GetAllFiles(
+#                     directory=current_path,
+#                     overwrite=self.overwrite,
+#                     exp=self.exp,
+#                     speed=self.speed,
+#                     repeat_extend=self.repeat_extend,
+#                     exp_wash=self.exp_wash,
+#                     day=self.day,
+#                     vmt_type=self.vmt_type,
+#                     vmt_level=self.vmt_level,
+#                     prep=self.prep,
+#                     save_frames=self.save_frames
+#                 ).GetFiles()
+#             except Exception as e:
+#                 print(f"Error processing directory {current_path}: {e}")
 
 
 def main():

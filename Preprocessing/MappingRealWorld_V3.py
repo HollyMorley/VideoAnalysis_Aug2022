@@ -7,13 +7,10 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from pycalib.calib import triangulate, triangulate_Npts
 from sklearn.linear_model import LinearRegression
 from multiprocessing import Pool, cpu_count, shared_memory
-import cupy as cp
 from scipy.signal import savgol_filter
-import ruptures as rpt
 from sklearn.mixture import GaussianMixture
 from kneed import KneeLocator
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
 
 sys.path.append(r'C:\Users\hmorl\Projects\VideoAnalysis_Aug2022')
 
@@ -21,8 +18,8 @@ from Helpers.utils_3d_reconstruction import CameraData, BeltPoints
 from Helpers.CalibrateCams import BasicCalibration
 from Helpers import utils
 from Helpers.Config_23 import *
-from Helpers import MultiCamLabelling_config as opt_config
 from Helpers import OptimizeCalibration
+from Helpers.ConditionsFinder import BaseConditionFiles
 
 ########################################################################################################################
 # Prepare the data for mapping in parallel
@@ -1442,57 +1439,60 @@ class GetALLRuns:
 
         print('All experiments have been mapped to real-world coordinates and saved.')
 
-        #### save data
+class GetDirsFromConditions(BaseConditionFiles):
+    def process_final_directory(self, directory):
+        # Just call GetALLRuns
+        GetALLRuns(directory=directory, overwrite=self.overwrite).GetFiles()
 
-class GetDirsFromConditions:
-    def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None, vmt_level=None, prep=None, overwrite=False):
-        self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite = (
-            exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite)
-
-    def get_dirs(self):
-        if self.speed:
-            exp_speed_name = f"{self.exp}_{self.speed}"
-        else:
-            exp_speed_name = self.exp
-        base_path = os.path.join(paths['filtereddata_folder'], exp_speed_name)
-
-        # join any of the conditions that are not None in the order they appear in the function as individual directories
-        conditions = [self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep]
-        conditions = [c for c in conditions if c is not None]
-        # if Repeats in conditions, add 'Wash' directory in the next position in the list
-        if 'Repeats' in conditions:
-            idx = conditions.index('Repeats')
-            conditions.insert(idx + 1, 'Wash')
-        condition_path = os.path.join(base_path, *conditions)
-
-        if os.path.exists(condition_path):
-            print(f"Directory found: {condition_path}")
-        else:
-            raise FileNotFoundError(f"No path found {condition_path}")
-
-        # Recursively find and process the final data directories
-        self._process_subdirectories(condition_path)
-
-    def _process_subdirectories(self, current_path):
-        subdirs = [d for d in os.listdir(current_path)
-                   if os.path.isdir(os.path.join(current_path, d))]
-
-        # Remove 'bin' from the list of subdirectories
-        subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
-
-        # If we still have subdirectories (other than 'bin'), recurse
-        if subdirs:
-            print(f"Subdirectories found in {current_path}: {subdirs}")
-            for subdir in subdirs:
-                full_subdir_path = os.path.join(current_path, subdir)
-                self._process_subdirectories(full_subdir_path)
-        else:
-            # No subdirs (or only 'bin'), treat as final directory
-            print(f"Final directory: {current_path}")
-            try:
-                GetALLRuns(directory=current_path, overwrite=self.overwrite).GetFiles()
-            except Exception as e:
-                print(f"Error processing directory {current_path}: {e}")
+# class GetDirsFromConditions:
+#     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None, vmt_type=None, vmt_level=None, prep=None, overwrite=False):
+#         self.exp, self.speed, self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep, self.overwrite = (
+#             exp, speed, repeat_extend, exp_wash, day, vmt_type, vmt_level, prep, overwrite)
+#
+#     def get_dirs(self):
+#         if self.speed:
+#             exp_speed_name = f"{self.exp}_{self.speed}"
+#         else:
+#             exp_speed_name = self.exp
+#         base_path = os.path.join(paths['filtereddata_folder'], exp_speed_name)
+#
+#         # join any of the conditions that are not None in the order they appear in the function as individual directories
+#         conditions = [self.repeat_extend, self.exp_wash, self.day, self.vmt_type, self.vmt_level, self.prep]
+#         conditions = [c for c in conditions if c is not None]
+#         # if Repeats in conditions, add 'Wash' directory in the next position in the list
+#         if 'Repeats' in conditions:
+#             idx = conditions.index('Repeats')
+#             conditions.insert(idx + 1, 'Wash')
+#         condition_path = os.path.join(base_path, *conditions)
+#
+#         if os.path.exists(condition_path):
+#             print(f"Directory found: {condition_path}")
+#         else:
+#             raise FileNotFoundError(f"No path found {condition_path}")
+#
+#         # Recursively find and process the final data directories
+#         self._process_subdirectories(condition_path)
+#
+#     def _process_subdirectories(self, current_path):
+#         subdirs = [d for d in os.listdir(current_path)
+#                    if os.path.isdir(os.path.join(current_path, d))]
+#
+#         # Remove 'bin' from the list of subdirectories
+#         subdirs = [sd for sd in subdirs if sd.lower() != 'bin']
+#
+#         # If we still have subdirectories (other than 'bin'), recurse
+#         if subdirs:
+#             print(f"Subdirectories found in {current_path}: {subdirs}")
+#             for subdir in subdirs:
+#                 full_subdir_path = os.path.join(current_path, subdir)
+#                 self._process_subdirectories(full_subdir_path)
+#         else:
+#             # No subdirs (or only 'bin'), treat as final directory
+#             print(f"Final directory: {current_path}")
+#             try:
+#                 GetALLRuns(directory=current_path, overwrite=self.overwrite).GetFiles()
+#             except Exception as e:
+#                 print(f"Error processing directory {current_path}: {e}")
 
 def main():
     # Get all data

@@ -41,6 +41,7 @@ class BaseConditionFiles:
         self._process_subdirectories(condition_path)
 
     def _process_subdirectories(self, current_path):
+        print("Checking subdirectories in:", current_path)
         subdirs = [
             d for d in os.listdir(current_path)
             if os.path.isdir(os.path.join(current_path, d))

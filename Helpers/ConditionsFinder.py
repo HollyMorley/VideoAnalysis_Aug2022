@@ -4,7 +4,7 @@ from Helpers.Config_23 import paths
 class BaseConditionFiles:
     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None,
                  day=None, vmt_type=None, vmt_level=None, prep=None,
-                 overwrite=False):
+                 overwrite=False, recursive=True):
         self.exp = exp
         self.speed = speed
         self.repeat_extend = repeat_extend
@@ -14,6 +14,7 @@ class BaseConditionFiles:
         self.vmt_level = vmt_level
         self.prep = prep
         self.overwrite = overwrite
+        self.recursive = recursive
 
     def get_dirs(self):
         # Build base path from exp/speed
@@ -48,7 +49,7 @@ class BaseConditionFiles:
                and d.lower() != 'bin'
         ]
 
-        if subdirs:
+        if subdirs and self.recursive:
             for subdir in subdirs:
                 self._process_subdirectories(os.path.join(current_path, subdir))
         else:

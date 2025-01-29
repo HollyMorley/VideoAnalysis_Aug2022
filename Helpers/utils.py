@@ -155,6 +155,16 @@ class Utils:
                   "%s" % (len(runfiles), runfiles))
             return runfiles
 
+    def GetAllMiceFiles(self, directory):
+        allmicefiles = glob("%s\\allmice.pickle" % directory)
+        if not allmicefiles:
+            print("No allmice files found in this directory")
+        else:
+            print("Files to be analysed are:\n"
+                  "%d files\n"
+                  "%s" % (len(allmicefiles), allmicefiles))
+            return allmicefiles
+
     def GetlistofH5files(self, files=None, directory=None):
         datafiles_side = None
         datafiles_front = None

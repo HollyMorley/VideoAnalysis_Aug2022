@@ -93,6 +93,13 @@ N.B. don't need to re-run this section if re-run the previous steps, though can 
     - Classifies each frame into 'TrialStart', 'RunStart', 'Transition', 'RunEnd', 'TrialEnd' and 'RunBack'
     - Classifies each limb into 'stance' or 'swing' for each frame based on the classifier created in GaitClassification.py
 
+(7. CheckRunAvailability.py)
+    - Plots the runs I have over the course of the experiment to visualise any missing data
+
+8. FinalPrep.py
+    - Compiles and saves data for all mice files in a single condition. Files are stored as a dictionary of dataframes for every mouse and saved as pickle files
+    - Extended experiments data also concatenated into a single file
+
 
  NEXT STEPS:
  - Manage cases where door goes down a little but not end of trial, just jerry managing the mouse. Is there a way if not manual..?
@@ -100,4 +107,5 @@ N.B. don't need to re-run this section if re-run the previous steps, though can 
  - Cross-check number of runs in each file with notes
  - Quantify quality of run detection by randomly manually labelling runstart and transition frames/paws and checking against my data
     - This can also show the accuracy of my step detection, or I also extract/label non start/transition frames
+
 

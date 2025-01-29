@@ -34,18 +34,24 @@ expstuff = {
         'APAVmtRuns': [10,15,10]
     },
     'condition_exp_runs': {
-        'APACharRuns': {
-            'Short': {
-                'Baseline': np.arange(1, 11),
-                'APA1': np.arange(11, 21),
-                'APA2': np.arange(21, 31),
-                'Washout': np.arange(31, 41)
+        'APAChar': { #todo changed from apacharruns
+            'Repeats': { # 10, 20, 10
+                'Baseline': np.arange(0, 10), #todo also change from starting at 1 to 0
+                'APA1': np.arange(10, 20),
+                'APA2': np.arange(20, 30),
+                'Washout': np.arange(30, 40)
             },
-            'Extended': []
+            'Extended': { # 10, 50, 50, 50
+                'Baseline': np.arange(0, 10),
+                'APA1': np.arange(10, 60),
+                'APA2': np.arange(60, 110),
+                'Washout': np.arange(110, 160)
+            }
         }
     },
     'setup': {
-        'distancescm': [13,12,11.5,11.5] # goes 0: wall1-wall0,  1: wall2-wall1, 3: wall3-wall2, 4: wall4-wall3
+        'distancescm': [13,12,11.5,11.5], # goes 0: wall1-wall0,  1: wall2-wall1, 3: wall3-wall2, 4: wall4-wall3
+        'transition_mm': 470, # mm
     },
     'speeds': {'Low': 6, 'Mid': 18, 'High': 30},
     'preprun_nos': {
@@ -138,6 +144,10 @@ structural_stuff = {
     'belt_length_sideviewend': 130 # mm
 }
 locostuff = {
+    'swst_vals_2025': {
+        'st': '1',
+        'sw': '0'
+    },
     'swst_vals': {
         'st': 0,
         'sw': 1,
@@ -193,6 +203,10 @@ micestuff = {
     'LR': {
         'ForepawToeL': 1,
         'ForepawToeR': 2,
+        'ForepawL': 1,
+        'ForepawR': 2,
+        'ForepawL_slid': 1,
+        'ForepawR_slid': 2,
     },
     'skeleton':[
         ('Nose', 'Back1'), ('EarL', 'Back1'), ('EarR', 'Back1'),
@@ -341,7 +355,7 @@ def measures_list(buffer): ## add in displacement??
                 # this is displacement
                 'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
                 'speed_correct': [True,False],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
@@ -349,7 +363,7 @@ def measures_list(buffer): ## add in displacement??
             'y': {
                 # this is displacement
                 'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
@@ -357,7 +371,7 @@ def measures_list(buffer): ## add in displacement??
             'z': {
                 # this is displacement
                 'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
@@ -375,35 +389,35 @@ def measures_list(buffer): ## add in displacement??
             },
             'body_distance': {
                 'bodyparts': [['Back1','Back12']],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
             },
             'back_height': {
                 'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
             },
             'tail_height': {
                 'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
             },
             'double_support': [],
             'back_skew': {
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]
             },
             'limb_rel_to_body': {
                 'time': ['start','end'],
-                'step_phase': [0, 1, None],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
                 'buffer_size': [0, buffer]

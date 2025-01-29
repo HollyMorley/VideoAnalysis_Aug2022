@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 import os
+import pickle
 import warnings
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
@@ -12,38 +13,56 @@ from Helpers.Config_23 import *
 from Analysis.MeasuresByStride import CalculateMeasuresByStride, RunMeasures
 from Analysis.MeasuresByRun import CalculateMeasuresByRun
 
+
+
 class Save():
-    def __init__(self, conditions, buffer_size=0.25):
-        self.conditions, self.buffer_size = conditions, buffer_size
-        #self.data = utils.Utils().GetDFs(conditions,reindexed_loco=True)
-        self.XYZw = utils.Utils().Get_XYZw_DFs(conditions)
+    def __init__(self, file, exp=None, speed=None, repeat_extend=None, exp_wash=None,
+                 day=None, vmt_type=None, vmt_level=None, prep=None, buffer_size=0.25):
+        self.file = file
+
+        self.exp = exp
+        self.speed = speed
+        self.repeat_extend = repeat_extend
+        self.exp_wash = exp_wash
+        self.day = day
+        self.vmt_type = vmt_type
+        self.vmt_level = vmt_level
+        self.prep = prep
+
+        self.buffer_size = buffer_size
+
+        self.XYZw = self.get_data()
         self.CalculateMeasuresByStride = CalculateMeasuresByStride
 
-    def find_pre_post_transition_strides(self, con, mouseID, r, numstrides=3):
+        self.error_logs = []
+
+    def get_data(self):
+        with open(self.file[0], 'rb') as handle:
+            XYZw = pickle.load(handle)
+        data = XYZw
+        return data
+
+    def find_pre_post_transition_strides(self, mouseID, r, numstrides=3):
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
-        pre_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'RunStart'].loc(axis=1)[
-            ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[-1]
-        post_frame = self.XYZw[con][mouseID].loc(axis=0)[r, 'Transition'].loc(axis=1)[
-            ['ForepawToeL', 'ForepawToeR'], 'StepCycleFill'].iloc[0]
-        trans_limb_mask = post_frame - pre_frame == -1
-        stepping_limb = np.array(['ForepawToeL', 'ForepawToeR'])[trans_limb_mask]
-        if len(stepping_limb) == 1:
-            stepping_limb = stepping_limb[0]
+        post_frame = self.XYZw[mouseID].loc(axis=0)[r, 'Transition'].loc(axis=1)[['ForepawL','ForepawR']].iloc[0].name
+        stepping_limb = self.XYZw[mouseID].loc(axis=0)[r,:,post_frame].loc(axis=1)['initiating_limb'].values
+        if len(stepping_limb) > 1:
+            raise ValueError("More than one stepping limb found")
+        elif len(stepping_limb) == 0:
+            raise ValueError("No stepping limb found")
         else:
-            raise ValueError('wrong number of stepping limbs identified')
+            stepping_limb = stepping_limb[0]
 
-        # limbs_mask_post = (self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition', 'RunEnd']].loc(axis=1)[['ForepawToeR','ForepawToeL'], 'likelihood'] > pcutoff).any(axis=1)
-        #
-        stance_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
-        swing_mask_pre = self.XYZw[con][mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
-        stance_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 0
-        swing_mask_post = self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'] == 1
+        stance_mask_pre = self.XYZw[mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+        swing_mask_pre = self.XYZw[mouseID].loc(axis=0)[r, ['RunStart']].loc(axis=1)[stepping_limb, 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
+        stance_mask_post = self.XYZw[mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+        swing_mask_post = self.XYZw[mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
 
-        stance_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][stance_mask_pre].tail(numstrides))
-        swing_idx_pre = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'StepCycle'][swing_mask_pre].tail(numstrides))
-        stance_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][stance_mask_post].head(2))
-        swing_idx_post = pd.DataFrame(self.XYZw[con][mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'StepCycle'][swing_mask_post].head(2))
+        stance_idx_pre = pd.DataFrame(self.XYZw[mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'SwSt_discrete'][stance_mask_pre].tail(numstrides))
+        swing_idx_pre = pd.DataFrame(self.XYZw[mouseID].loc(axis=0)[r,['RunStart']].loc(axis=1)[stepping_limb,'SwSt_discrete'][swing_mask_pre].tail(numstrides))
+        stance_idx_post = pd.DataFrame(self.XYZw[mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'SwSt_discrete'][stance_mask_post].head(2))
+        swing_idx_post = pd.DataFrame(self.XYZw[mouseID].loc(axis=0)[r, ['Transition','RunEnd']].loc(axis=1)[stepping_limb, 'SwSt_discrete'][swing_mask_post].head(2))
 
         stance_idx_pre['Stride_no'] = np.sort(np.arange(1,len(stance_idx_pre)+1)*-1)
         swing_idx_pre['Stride_no'] = np.sort(np.arange(1,len(swing_idx_pre)+1)*-1)
@@ -56,12 +75,23 @@ class Save():
 
         return combined_df
 
-    def find_pre_post_transition_strides_ALL_RUNS(self, con, mouseID):
+    def find_pre_post_transition_strides_ALL_RUNS(self, mouseID):
         #view = 'Side'
         SwSt = []
-        for r in self.XYZw[con][mouseID].index.get_level_values(level='Run').unique().astype(int):
+
+        # # If there is a 'Day' level, iterate over that:
+        # day_levels = (
+        #     self.XYZw[mouseID].index.get_level_values('Day').unique()
+        #     if 'Day' in self.XYZw[mouseID].index.names
+        #     else [None]
+        # )
+        # todo drop the 'Day' level if it exists - MAY WANT TO RETAIN THIS LONG TERM
+        if 'Day' in self.XYZw[mouseID].index.names:
+            self.XYZw[mouseID].reset_index('Day', drop=True, inplace=True)
+
+        for r in self.XYZw[mouseID].index.get_level_values(level='Run').unique().astype(int):
             try:
-                stsw = self.find_pre_post_transition_strides(con=con,mouseID=mouseID,r=r)
+                stsw = self.find_pre_post_transition_strides(mouseID=mouseID,r=r)
                 SwSt.append(stsw)
             except:
                 pass
@@ -70,18 +100,30 @@ class Save():
 
         return SwSt_df
 
-    def get_measures_byrun_bystride(self, SwSt, con, mouseID):
+    def get_measures_byrun_bystride(self, SwSt, mouseID):
         warnings.simplefilter(action='ignore', category=FutureWarning)
 
-        st_mask = (SwSt.loc(axis=1)[['ForepawToeR', 'ForepawToeL'],'StepCycle'] == 0).any(axis=1)
+        st_mask = (SwSt.loc(axis=1)[['ForepawR', 'ForepawL'],'SwSt_discrete'] == locostuff['swst_vals_2025']['st']).any(axis=1)
         stride_borders = SwSt[st_mask]
 
         temp_single_list = []
         temp_multi_list = []
         temp_run_list = []
 
+        conditions = [
+            ('exp', self.exp),
+            ('speed', self.speed),
+            ('repeat_extend', self.repeat_extend),
+            ('exp_wash', self.exp_wash),
+            ('day', self.day),
+            ('vmt_type', self.vmt_type),
+            ('vmt_level', self.vmt_level),
+            ('prep', self.prep)
+        ]
+        conditions = dict(conditions)
+
         for r in tqdm(stride_borders.index.get_level_values(level='Run').unique(), desc=f"Processing: {mouseID}"):
-            stepping_limb = np.array(['ForepawToeR','ForepawToeL'])[(stride_borders.loc(axis=0)[r].loc(axis=1)[['ForepawToeR','ForepawToeL']].count() > 1).values][0]
+            stepping_limb = np.array(['ForepawR','ForepawL'])[(stride_borders.loc(axis=0)[r].loc(axis=1)[['ForepawR','ForepawL']].count() > 1).values][0]
             for sidx, s in enumerate(stride_borders.loc(axis=0)[r].loc(axis=1)['Stride_no']):#[:-1]):
                 # if len(stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')) <= sidx + 1:
                 #     print("Can't calculate s: %s" %s)
@@ -90,18 +132,32 @@ class Save():
                     stride_end = stride_borders.loc(axis=0)[r].index.get_level_values(level='FrameIdx')[sidx + 1] - 1 # todo check i am right to consider the previous frame the end frame
 
                     #class_instance = self.CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
-                    calc_obj = CalculateMeasuresByStride(self.XYZw, con, mouseID, r, stride_start, stride_end, stepping_limb)
+                    calc_obj = CalculateMeasuresByStride(self.XYZw, mouseID, r, stride_start, stride_end, stepping_limb, conditions)
                     measures_dict = measures_list(buffer=self.buffer_size)
 
                     runXstride_measures = RunMeasures(measures_dict, calc_obj, buffer_size=self.buffer_size, stride=s)
                     single_val, multi_val = runXstride_measures.get_all_results()
                     temp_single_list.append(single_val)
                     temp_multi_list.append(multi_val)
-                except:
-                    pass
-                    #print("Cant calculate s: %s" %s)
+                except Exception as e:
+                    # Replace print with logging to error_logs
+                    error_entry = {
+                        'MouseID': mouseID,
+                        'Run': r,
+                        'Stride': s,
+                        'Condition_exp': self.exp,
+                        'Condition_speed': self.speed,
+                        'Condition_repeat_extend': self.repeat_extend,
+                        'Condition_exp_wash': self.exp_wash,
+                        'Condition_day': self.day,
+                        'Condition_vmt_type': self.vmt_type,
+                        'Condition_vmt_level': self.vmt_level,
+                        'Condition_prep': self.prep,
+                        'Error': str(e)
+                    }
+                    self.error_logs.append(error_entry)
 
-            run_measures = CalculateMeasuresByRun(XYZw=self.XYZw,con=con,mouseID=mouseID,r=r,stepping_limb=stepping_limb)
+            run_measures = CalculateMeasuresByRun(XYZw=self.XYZw,mouseID=mouseID,r=r,stepping_limb=stepping_limb, conditions=conditions)
             run_val = run_measures.run()
             temp_run_list.append(run_val)
         measures_bystride_single = pd.concat(temp_single_list)
@@ -110,11 +166,11 @@ class Save():
 
         return measures_bystride_single, measures_bystride_multi, measures_byrun
 
-    def process_mouse_data(self, mouseID, con):
+    def process_mouse_data(self, mouseID):
         try:
             # Process data for the given mouseID
-            SwSt = self.find_pre_post_transition_strides_ALL_RUNS(con=con, mouseID=mouseID)
-            single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt=SwSt, con=con, mouseID=mouseID)
+            SwSt = self.find_pre_post_transition_strides_ALL_RUNS(mouseID=mouseID)
+            single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt=SwSt, mouseID=mouseID)
 
             # add mouseID to SwSt index
             index = SwSt.index
@@ -124,54 +180,86 @@ class Save():
 
             return single_byStride, multi_byStride, byRun, SwSt
         except Exception as e:
-            print(f"Error processing mouse {mouseID}: {e}")
+            # Replace print with logging to error_logs
+            error_entry = {
+                'MouseID': mouseID,
+                'Run': None,
+                'Stride': None,
+                'Condition_exp': self.exp,
+                'Condition_speed': self.speed,
+                'Condition_repeat_extend': self.repeat_extend,
+                'Condition_exp_wash': self.exp_wash,
+                'Condition_day': self.day,
+                'Condition_vmt_type': self.vmt_type,
+                'Condition_vmt_level': self.vmt_level,
+                'Condition_prep': self.prep,
+                'Error': f"Processing mouse error: {str(e)}"
+            }
+            self.error_logs.append(error_entry)
             return None, None, None, None
+        finally:
+            self.error_logs = []  # Reset after processing
 
+    # Inside the Save class
     def process_mouse_data_wrapper(self, args):
-        mouseID, con = args
-        return self.process_mouse_data(mouseID, con)
+        mouseID = args
+        single_byStride, multi_byStride, byRun, SwSt = self.process_mouse_data(mouseID)
+        return single_byStride, multi_byStride, byRun, SwSt, self.error_logs  # Return error_logs
 
     def save_all_measures_parallel(self):
-        pool = Pool(cpu_count())
-        for con in self.conditions:
-            # Initialize multiprocessing Pool with number of CPU cores
-            results = []
+        #pool = Pool(cpu_count())
+        pool = Pool(processes=8)
+        # Initialize multiprocessing Pool with number of CPU cores
+        results = []
 
-            # Process data for each mouseID in parallel
-            for mouseID in self.XYZw[con].keys():
-                result = pool.apply_async(self.process_mouse_data_wrapper, args=((mouseID, con),))
-                results.append(result)
+        # Process data for each mouseID in parallel
+        for mouseID in self.XYZw.keys():
+            print(f"{mouseID} Processing...")
+            result = pool.apply_async(self.process_mouse_data_wrapper, args=((mouseID),))
+            results.append(result)
 
-            # Aggregate results
-            single_byStride_all, multi_byStride_all, byRun_all, SwSt_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-            for result in results:
-                single_byStride, multi_byStride, byRun, SwSt = result.get()
-                if single_byStride is not None:
-                    single_byStride_all = pd.concat([single_byStride_all, single_byStride])
-                if multi_byStride is not None:
-                    multi_byStride_all = pd.concat([multi_byStride_all, multi_byStride])
-                if byRun is not None:
-                    byRun_all = pd.concat([byRun_all, byRun])
-                if SwSt is not None:
-                    SwSt_all = pd.concat([SwSt_all, SwSt])
+        print(results)
 
-            single_byStride_all = single_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
-            multi_byStride_all = multi_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
-            byRun_all = byRun_all.apply(pd.to_numeric, errors='coerce', downcast='float')
-            #SwSt_all = SwSt_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+        # Aggregate results
+        single_byStride_all, multi_byStride_all, byRun_all, SwSt_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        all_error_logs = []  # Initialize a list to collect all error logs
 
-            # Write to HDF files
-            if 'Day' not in con:
-                dir = os.path.join(paths['filtereddata_folder'], con)
-            else:
-                dir = utils.Utils().Get_processed_data_locations(con)
+        for result in results:
+            single_byStride, multi_byStride, byRun, SwSt, error_logs = result.get()
+            if single_byStride is not None:
+                single_byStride_all = pd.concat([single_byStride_all, single_byStride])
+            if multi_byStride is not None:
+                multi_byStride_all = pd.concat([multi_byStride_all, multi_byStride])
+            if byRun is not None:
+                byRun_all = pd.concat([byRun_all, byRun])
+            if SwSt is not None:
+                SwSt_all = pd.concat([SwSt_all, SwSt])
+            if error_logs:
+                all_error_logs.extend(error_logs)  # Collect error logs
 
-            single_byStride_all.to_hdf(os.path.join(dir, "MEASURES_single_kinematics_runXstride.h5"),
-                                       key='single_kinematics', mode='w')
-            multi_byStride_all.to_hdf(os.path.join(dir, "MEASURES_multi_kinematics_runXstride.h5"), key='multi_kinematics',
-                                      mode='w')
-            byRun_all.to_hdf(os.path.join(dir, "MEASURES_behaviour_run.h5"), key='behaviour', mode='w')
-            SwSt_all.to_hdf(os.path.join(dir, "MEASURES_StrideInfo.h5"), key='stride_info', mode='w')
+        # Convert error logs to DataFrame and save to CSV
+        if all_error_logs:
+            error_df = pd.DataFrame(all_error_logs)
+            error_df.to_csv(os.path.join(dir, "Error_Logs.csv"), index=False)
+
+        single_byStride_all = single_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+        multi_byStride_all = multi_byStride_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+        byRun_all = byRun_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+        #SwSt_all = SwSt_all.apply(pd.to_numeric, errors='coerce', downcast='float')
+
+        # Write to HDF files
+        # if 'Day' not in con:
+        #     dir = os.path.join(paths['filtereddata_folder'], con)
+        # else:
+        #     dir = utils.Utils().Get_processed_data_locations(con)
+        dir = os.path.dirname(self.file[0])
+
+        single_byStride_all.to_hdf(os.path.join(dir, "MEASURES_single_kinematics_runXstride.h5"),
+                                   key='single_kinematics', mode='w')
+        multi_byStride_all.to_hdf(os.path.join(dir, "MEASURES_multi_kinematics_runXstride.h5"), key='multi_kinematics',
+                                  mode='w')
+        byRun_all.to_hdf(os.path.join(dir, "MEASURES_behaviour_run.h5"), key='behaviour', mode='w')
+        SwSt_all.to_hdf(os.path.join(dir, "MEASURES_StrideInfo.h5"), key='stride_info', mode='w')
 
         # Wait for all processes to complete and collect results
         pool.close()
@@ -193,108 +281,35 @@ class GetAllFiles():
         self.prep = prep
 
     def get_files(self):
-        """
-        If 'Extended', gather .h5 from all Day subdirectories so we can plot them all at once.
-        Otherwise, do the original logic for 'Repeats' or other cases.
-        """
-        if self.repeat_extend == 'Extended':
-            parent_dir = os.path.dirname(self.directory)
-            if not os.path.isdir(parent_dir):
-                print(f"Parent dir not found for extended condition: {parent_dir}")
-                return
+        # Original logic for Repeats
+        file = utils.Utils().GetAllMiceFiles(self.directory)
+        if not file:
+            print(f"No run file found in directory: {self.directory}")
+            return
 
-            # Gather .h5 from subdirs named 'Day...'
-            all_files = []
-            all_mouseIDs = []
-            all_dates = []
-            for subd in os.listdir(parent_dir):
-                if not subd.lower().startswith('day'):
-                    continue
-                sub_path = os.path.join(parent_dir, subd)
-                if os.path.isdir(sub_path):
-                    these_files = utils.Utils().GetListofRunFiles(sub_path)
-                    for f in these_files:
-                        match = re.search(r'FAA-(\d+)', f)
-                        if not match:
-                            continue
-                        all_files.append(f)
-                        all_mouseIDs.append(match.group(1))
-                        date_part = f.split(os.sep)[-1].split('_')[1]
-                        all_dates.append(date_part)
-
-            if not all_files:
-                print(f"No day-based .h5 files found under {parent_dir}")
-                return
-
-            save = Save(
-                files=all_files,
-                mouseIDs=all_mouseIDs,
-                dates=all_dates,
-                exp=self.exp,
-                speed=self.speed,
-                repeat_extend=self.repeat_extend,
-                exp_wash=self.exp_wash,
-                day=self.day,
-                vmt_type=self.vmt_type,
-                vmt_level=self.vmt_level,
-                prep=self.prep
-            )
-            save.save_all_measures_parallel()
-
-        else:
-            # Original logic for Repeats
-            files = utils.Utils().GetListofRunFiles(self.directory)
-            if not files:
-                print(f"No run files found in directory: {self.directory}")
-                return
-
-            mouseIDs = []
-            dates = []
-            for f in files:
-                match = re.search(r'FAA-(\d+)', f)
-                if match:
-                    mouseIDs.append(match.group(1))
-                else:
-                    mouseIDs.append(None)
-                try:
-                    date = f.split(os.sep)[-1].split('_')[1]
-                    dates.append(date)
-                except IndexError:
-                    dates.append(None)
-
-            valid_indices = [
-                i for i, (m, d) in enumerate(zip(mouseIDs, dates))
-                if m is not None and d is not None
-            ]
-            filtered_files = [files[i] for i in valid_indices]
-            filtered_mouseIDs = [mouseIDs[i] for i in valid_indices]
-            filtered_dates = [dates[i] for i in valid_indices]
-
-            if not filtered_files:
-                print("No valid run files to process after filtering.")
-                return
-
-            save = Save(
-                files=filtered_files,
-                mouseIDs=filtered_mouseIDs,
-                dates=filtered_dates,
-                exp=self.exp,
-                speed=self.speed,
-                repeat_extend=self.repeat_extend,
-                exp_wash=self.exp_wash,
-                day=self.day,
-                vmt_type=self.vmt_type,
-                vmt_level=self.vmt_level,
-                prep=self.prep
-            )
-            save.save_all_measures_parallel()
+        save = Save(
+            file=file,
+            exp=self.exp,
+            speed=self.speed,
+            repeat_extend=self.repeat_extend,
+            exp_wash=self.exp_wash,
+            day=self.day,
+            vmt_type=self.vmt_type,
+            vmt_level=self.vmt_level,
+            prep=self.prep
+        )
+        save.save_all_measures_parallel()
 
 class GetConditionFiles(BaseConditionFiles):
     def __init__(self, exp=None, speed=None, repeat_extend=None, exp_wash=None, day=None,
                  vmt_type=None, vmt_level=None, prep=None):
+        if repeat_extend == 'Extended':
+            recursive = False
+        else:
+            recursive = True
         super().__init__(
             exp=exp, speed=speed, repeat_extend=repeat_extend, exp_wash=exp_wash,
-            day=day, vmt_type=vmt_type, vmt_level=vmt_level, prep=prep
+            day=day, vmt_type=vmt_type, vmt_level=vmt_level, prep=prep, recursive=recursive
         )
 
     def process_final_directory(self, directory):
@@ -312,9 +327,9 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Repeats
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
+    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
+    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
+    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
 
     # Extended
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended').get_dirs()

@@ -44,8 +44,10 @@ expstuff = {
             'Extended': { # 10, 50, 50, 50
                 'Baseline': np.arange(0, 10),
                 'APA1': np.arange(10, 60),
-                'APA2': np.arange(60, 110),
-                'Washout': np.arange(110, 160)
+                'APA2': np.arange(85, 110),
+                'Washout': np.arange(110, 160),
+                'Wash1': np.arange(110, 135),
+                'Wash2': np.arange(135, 160)
             }
         }
     },
@@ -425,4 +427,95 @@ def measures_list(buffer): ## add in displacement??
         }
     }
     return measures
+
+measures_list_feature_reduction = {
+            'stride_duration': [],
+            'stance_duration': [],
+            'swing_duration': [],
+            'cadence': [],
+            'duty_factor': [],
+            'walking_speed': {
+                'bodypart': ['Back6','Tail1'],
+                'speed_correct': [True]
+            },
+            'swing_velocity': {
+                'speed_correct': [True]
+            },
+            'stride_length': {
+                'speed_correct': [True]
+            },
+            'x': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'speed_correct': [True],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'y': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'z': {
+                # this is displacement
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'coo_xyz': {
+                'xyz': ['x','y','z']
+            },
+            'coo_euclidean': [],
+            'bos_stancestart': {
+                'ref_or_contr': ['ref','contr'],
+                'y_or_euc': ['y','euc']
+            },
+            'ptp_amplitude_stride': {
+                'bodypart': ['Tail1','Back6']
+            },
+            'body_distance': {
+                'bodyparts': [['Back1','Back12']],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'back_height': {
+                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'tail_height': {
+                'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'double_support': [],
+            'back_skew': {
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'limb_rel_to_body': {
+                'time': ['start','end'],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            }
+        }
+
+
 

@@ -99,6 +99,7 @@ N.B. don't need to re-run this section if re-run the previous steps, though can 
 8. FinalPrep.py
     - Compiles and saves data for all mice files in a single condition. Files are stored as a dictionary of dataframes for every mouse and saved as pickle files
     - Extended experiments data also concatenated into a single file
+    - SwSt discrete column added
 
 
  NEXT STEPS:

@@ -8,9 +8,6 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 import seaborn as sns
-import scipy.stats as stats
-from sklearn.preprocessing import LabelEncoder
-
 
 from Helpers.Config_23 import *
 
@@ -28,12 +25,11 @@ stride_numbers = [-1, -2]  # List of stride numbers to filter data
 phases = ['APA1', 'APA2', 'Wash2']  # List of phases to compare
 
 # Define the base directory where plots will be saved
-base_save_dir = os.path.join(paths['plotting_destfolder'], 'FeatureReduction')
+base_save_dir = os.path.join(paths['plotting_destfolder'], 'FeatureReduction_behaviour')
 
 # ----------------------------
 # Function Definitions
 # ----------------------------
-sns.set(style="whitegrid")
 
 def create_save_directory(base_dir, mouse_id, stride_number, phase1, phase2):
     """
@@ -59,40 +55,6 @@ def create_save_directory(base_dir, mouse_id, stride_number, phase1, phase2):
     return save_path
 
 
-def load_stride_data(stride_data_path):
-    """
-    Load stride data from the specified HDF5 file.
-
-    Parameters:
-        stride_data_path (str): Path to the stride data HDF5 file.
-
-    Returns:
-        pd.DataFrame: Loaded stride data.
-    """
-    stride_data = pd.read_hdf(stride_data_path, key='stride_info')
-    return stride_data
-
-
-def determine_stepping_limbs(stride_data, mouse_id, run, stride_number):
-    """
-    Determine the stepping limb (ForepawL or ForepawR) for a given MouseID, Run, and Stride.
-
-    Parameters:
-        stride_data (pd.DataFrame): Stride data DataFrame.
-        mouse_id (str): Identifier for the mouse.
-        run (str/int): Run identifier.
-        stride_number (int): Stride number.
-
-    Returns:
-        str: 'ForepawL' or 'ForepawR' indicating the stepping limb.
-    """
-    paws = stride_data.loc(axis=0)[mouse_id, run].xs('SwSt_discrete', level=1, axis=1).isna().any().index[
-        stride_data.loc(axis=0)[mouse_id, run].xs('SwSt_discrete', level=1, axis=1).isna().any()]
-    if len(paws) > 1:
-        raise ValueError(f"Multiple paws found for Mouse {mouse_id}, Run {run}.")
-    else:
-        return paws[0]
-
 def load_and_preprocess_data(mouse_id, stride_number):
     """
     Load data for the specified mouse and preprocess it by selecting desired features,
@@ -107,8 +69,8 @@ def load_and_preprocess_data(mouse_id, stride_number):
     """
     # Load data
     data_allmice = pd.read_hdf(
-        r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\MEASURES_single_kinematics_runXstride.h5",
-        key='single_kinematics'
+        r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\MEASURES_behaviour_run.h5",
+        key='behaviour'
     )
 
     # Select data for the specified mouse
@@ -117,50 +79,52 @@ def load_and_preprocess_data(mouse_id, stride_number):
     except KeyError:
         raise ValueError(f"Mouse ID {mouse_id} not found in the dataset.")
 
-    # Filter desired columns based on measures_list_feature_reduction
-    desired_columns = []
-    for measure, params in measures_list_feature_reduction.items():
-        if not params:
-            # Measures with no parameters
-            desired_columns.append((measure, 'no_param'))
-        elif isinstance(params, dict):
-            # Extract parameter keys and their possible values
-            param_keys = list(params.keys())
-            param_values = [params[key] for key in param_keys]
+    # # Filter desired columns based on measures_list_feature_reduction
+    # desired_columns = []
+    # for measure, params in measures_list_feature_reduction.items():
+    #     if not params:
+    #         # Measures with no parameters
+    #         desired_columns.append((measure, 'no_param'))
+    #     elif isinstance(params, dict):
+    #         # Extract parameter keys and their possible values
+    #         param_keys = list(params.keys())
+    #         param_values = [params[key] for key in param_keys]
+    #
+    #         # Generate all possible combinations of parameters
+    #         for combination in itertools.product(*param_values):
+    #             # Create a Params string in the format "key1:value1, key2:value2, ..."
+    #             params_str = ', '.join(f"{key}:{value}" for key, value in zip(param_keys, combination))
+    #             desired_columns.append((measure, params_str))
+    #     else:
+    #         # Handle unexpected parameter formats if necessary
+    #         pass
+    #
+    # # Convert DataFrame columns to a set for faster lookup
+    # data_columns_set = set(data.columns)
+    #
+    # # Filter out only those columns that exist in the DataFrame
+    # selected_columns = [col for col in desired_columns if col in data_columns_set]
+    #
+    # if not selected_columns:
+    #     raise ValueError("No desired columns found in the dataset based on measures_list_feature_reduction.")
+    #
+    # # Extract the filtered DataFrame
+    # filtered_data = data.loc[:, selected_columns]
 
-            # Generate all possible combinations of parameters
-            for combination in itertools.product(*param_values):
-                # Create a Params string in the format "key1:value1, key2:value2, ..."
-                params_str = ', '.join(f"{key}:{value}" for key, value in zip(param_keys, combination))
-                desired_columns.append((measure, params_str))
-        else:
-            # Handle unexpected parameter formats if necessary
-            pass
+    filtered_data = data
 
-    # Convert DataFrame columns to a set for faster lookup
-    data_columns_set = set(data.columns)
-
-    # Filter out only those columns that exist in the DataFrame
-    selected_columns = [col for col in desired_columns if col in data_columns_set]
-
-    if not selected_columns:
-        raise ValueError("No desired columns found in the dataset based on measures_list_feature_reduction.")
-
-    # Extract the filtered DataFrame
-    filtered_data = data.loc[:, selected_columns]
-
-    # Collapse MultiIndex to single-level index
-    separator = '|'  # Choose a separator
-    filtered_data.columns = [
-        f"{measure}{separator}{params}" if params != 'no_param' else f"{measure}"
-        for measure, params in filtered_data.columns
-    ]
+    # # Collapse MultiIndex to single-level index
+    # separator = '|'  # Choose a separator
+    # filtered_data.columns = [
+    #     f"{measure}{separator}{params}" if params != 'no_param' else f"{measure}"
+    #     for measure, params in filtered_data.columns
+    # ]
 
     # Filter by the specified stride number
-    try:
-        filtered_data = filtered_data.xs(stride_number, level='Stride', axis=0)
-    except KeyError:
-        raise ValueError(f"Stride number {stride_number} not found in the data.")
+    # try:
+    #     filtered_data = filtered_data.xs(stride_number, level='Stride', axis=0)
+    # except KeyError:
+    #     raise ValueError(f"Stride number {stride_number} not found in the data.")
 
     # Handle missing data by imputing with the mean of each feature
     filtered_data_imputed = filtered_data.fillna(filtered_data.mean())
@@ -179,7 +143,7 @@ def load_and_preprocess_data(mouse_id, stride_number):
     return scaled_data_df
 
 
-def perform_pca(scaled_data_df, n_components=10):
+def perform_pca(scaled_data_df, n_components=5):
     """
     Perform Principal Component Analysis (PCA) on the standardized data.
 
@@ -204,7 +168,7 @@ def perform_pca(scaled_data_df, n_components=10):
     return pca, pcs, loadings_df
 
 
-def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path):
+def plot_pca(pca, pcs, labels, run_numbers, mouse_id, save_path):
     """
     Create 2D and 3D scatter plots of the PCA-transformed data with run number labels and save them.
 
@@ -212,7 +176,6 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
         pca (PCA): Fitted PCA object.
         pcs (np.ndarray): PCA-transformed data.
         labels (np.ndarray): Labels for each data point.
-        stepping_limbs (list): Stepping limb identifiers ('ForepawL' or 'ForepawR') for each data point.
         run_numbers (list): Run numbers corresponding to each data point.
         mouse_id (str): Identifier for the mouse (used in plot titles).
         save_path (str): Directory path where plots will be saved.
@@ -220,22 +183,7 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
     # Create a DataFrame for plotting
     df_plot = pd.DataFrame(pcs, columns=[f'PC{i + 1}' for i in range(pca.n_components_)])
     df_plot['Condition'] = labels
-    df_plot['SteppingLimb'] = stepping_limbs
     df_plot['Run'] = run_numbers  # Add run numbers for labeling
-
-    # Define all possible markers
-    markers_all = {'ForepawL': 'X', 'ForepawR': 'o'}
-
-    # Get unique stepping limbs
-    unique_limbs = df_plot['SteppingLimb'].unique()
-    print(f"Unique Stepping Limbs: {unique_limbs}")  # For debugging
-
-    current_markers = {}
-    for limb in unique_limbs:
-        if limb in markers_all:
-            current_markers[limb] = markers_all[limb]
-        else:
-            raise ValueError(f"No marker defined for stepping limb: {limb}")
 
     # Explained variance
     explained_variance = pca.explained_variance_ratio_
@@ -246,32 +194,17 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
 
     # 2D Scatter Plot using Seaborn
     plt.figure(figsize=(12, 8))
-    scatter = sns.scatterplot(
-        data=df_plot,
-        x='PC1',
-        y='PC2',
-        hue='Condition',
-        style='SteppingLimb',
-        markers=current_markers,  # Use the dynamically created markers dictionary
-        s=100,
-        alpha=0.7
-    )
+    scatter = sns.scatterplot(data=df_plot, x='PC1', y='PC2', hue='Condition', style='Condition', s=100, alpha=0.7)
     plt.title(f'PCA: PC1 vs PC2 for Mouse {mouse_id}')
     plt.xlabel(f'Principal Component 1 ({explained_variance[0] * 100:.1f}%)')
     plt.ylabel(f'Principal Component 2 ({explained_variance[1] * 100:.1f}%)')
-    plt.legend(title='Condition & Stepping Limb', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    plt.legend(title='Condition')
     plt.grid(True)
 
     # Annotate points with run numbers
     for _, row in df_plot.iterrows():
         plt.text(row['PC1'] + 0.02, row['PC2'] + 0.02, str(row['Run']),
                  fontsize=8, alpha=0.7)
-
-    # Add padding to axes
-    padding_pc1 = (df_plot['PC1'].max() - df_plot['PC1'].min()) * 0.05
-    padding_pc2 = (df_plot['PC2'].max() - df_plot['PC2'].min()) * 0.05
-    plt.xlim(df_plot['PC1'].min() - padding_pc1, df_plot['PC1'].max() + padding_pc1)
-    plt.ylim(df_plot['PC2'].min() - padding_pc2, df_plot['PC2'].max() + padding_pc2)
 
     plt.tight_layout()
     # Save the 2D PCA scatter plot
@@ -290,73 +223,22 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
             subset = df_plot[df_plot['Condition'] == condition]
             ax.scatter(
                 subset['PC1'], subset['PC2'], subset['PC3'],
-                label=condition,
-                color=palette[idx],
-                alpha=0.7,
-                s=50,
-                marker='o'  # Default marker
+                label=condition, color=palette[idx], alpha=0.7, s=50
             )
-            # Annotate points with run numbers and stepping limbs
+            # Annotate points with run numbers
             for _, row in subset.iterrows():
-                ax.text(
-                    row['PC1'] + 0.02,
-                    row['PC2'] + 0.02,
-                    row['PC3'] + 0.02,
-                    str(row['Run']),
-                    fontsize=8,
-                    alpha=0.7
-                )
+                ax.text(row['PC1'] + 0.02, row['PC2'] + 0.02, row['PC3'] + 0.02,
+                        str(row['Run']), fontsize=8, alpha=0.7)
 
         ax.set_xlabel(f'Principal Component 1 ({explained_variance[0] * 100:.1f}%)')
         ax.set_ylabel(f'Principal Component 2 ({explained_variance[1] * 100:.1f}%)')
         ax.set_zlabel(f'Principal Component 3 ({explained_variance[2] * 100:.1f}%)')
         ax.set_title(f'3D PCA for Mouse {mouse_id}')
-        ax.legend(title='Condition', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-
-        # Add padding to axes
-        padding_pc1 = (df_plot['PC1'].max() - df_plot['PC1'].min()) * 0.05
-        padding_pc2 = (df_plot['PC2'].max() - df_plot['PC2'].min()) * 0.05
-        padding_pc3 = (df_plot['PC3'].max() - df_plot['PC3'].min()) * 0.05
-        ax.set_xlim(df_plot['PC1'].min() - padding_pc1, df_plot['PC1'].max() + padding_pc1)
-        ax.set_ylim(df_plot['PC2'].min() - padding_pc2, df_plot['PC2'].max() + padding_pc2)
-        ax.set_zlim(df_plot['PC3'].min() - padding_pc3, df_plot['PC3'].max() + padding_pc3)
-
+        ax.legend(title='Condition')
         plt.tight_layout()
         # Save the 3D PCA scatter plot
         plt.savefig(os.path.join(save_path, f"PCA_Mouse_{mouse_id}_PC1_vs_PC2_vs_PC3_3D.png"), dpi=300)
         plt.close()
-
-def plot_relationship_pc1_pc2(df_plot, save_path, mouse_id):
-    """
-    Plot the relationship between PC1 and PC2.
-
-    Parameters:
-        df_plot (pd.DataFrame): DataFrame with PCA-transformed data.
-        save_path (str): Directory path where plots will be saved.
-        mouse_id (str): Identifier for the mouse (used in plot titles).
-    """
-    plt.figure(figsize=(12, 8))
-    sns.scatterplot(
-        data=df_plot,
-        x='PC1',
-        y='PC2',
-        hue='Condition',
-        style='SteppingLimb',
-        markers={'ForepawL': 'X', 'ForepawR': 'o'},
-        palette='Set1',
-        s=100,
-        alpha=0.7
-    )
-    plt.title(f'Relationship between PC1 and PC2 for Mouse {mouse_id}')
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.legend(title='Condition & Stepping Limb', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f"PC1_vs_PC2_Relationship_Mouse_{mouse_id}.png"), dpi=300)
-    plt.close()
-
-
 
 
 def plot_scree(pca, save_path):
@@ -438,10 +320,6 @@ def compute_feature_contributions(loadings_df, lda_loadings):
         'Contribution': original_feature_contributions.values
     })
 
-    # # Sort features by absolute contribution for better visualization
-    # feature_contributions_df['Abs_Contribution'] = feature_contributions_df['Contribution'].abs()
-    # feature_contributions_df.sort_values(by='Abs_Contribution', ascending=False, inplace=True)
-
     return feature_contributions_df
 
 
@@ -496,22 +374,14 @@ def plot_lda_transformed_data(Y_lda, phase1, phase2, save_path, title_suffix="")
     df_lda['Condition'] = [phase1] * num_phase1 + [phase2] * num_phase2
 
     # Scatter Plot
-    plt.figure(figsize=(12, 8))
-    sns.scatterplot(
-        data=df_lda,
-        x='LDA_Component',
-        y=[0] * df_lda.shape[0],
-        hue='Condition',
-        style='Condition',
-        s=100,
-        alpha=0.7
-    )
+    plt.figure(figsize=(10, 7))
+    sns.scatterplot(data=df_lda, x='LDA_Component', y=[0] * df_lda.shape[0],
+                    hue='Condition', style='Condition', s=100, alpha=0.7)
     plt.title(f'LDA Transformed Data for {phase1} vs {phase2} ({title_suffix})')
     plt.xlabel('LDA Component')
     plt.yticks([])  # Hide y-axis as it's not informative in this context
-    plt.legend(title='Condition', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    plt.legend(title='Condition')
     plt.grid(True)
-
     plt.tight_layout()
     # Save the LDA Scatter plot
     scatter_plot_filename = f"LDA_{phase1}_vs_{phase2}_{title_suffix.replace(' ', '_')}_Scatter.png"
@@ -519,7 +389,7 @@ def plot_lda_transformed_data(Y_lda, phase1, phase2, save_path, title_suffix="")
     plt.close()
 
     # Box Plot
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(10, 6))
     sns.boxplot(x='Condition', y='LDA_Component', data=df_lda, palette='Set2')
     plt.title(f'LDA Component Distribution by Condition ({phase1} vs {phase2}) ({title_suffix})')
     plt.xlabel('Condition')
@@ -531,68 +401,12 @@ def plot_lda_transformed_data(Y_lda, phase1, phase2, save_path, title_suffix="")
     plt.savefig(os.path.join(save_path, box_plot_filename), dpi=300)
     plt.close()
 
-# ----------------------------
-# Check relationship with handedness
-# ----------------------------
-def handedness_correlation(df_plot, save_path):
-    """
-    Check the correlation between PC2 and handedness (SteppingLimb) and visualize the relationship.
-
-    Parameters:
-        df_plot (pd.DataFrame): DataFrame with PCA-transformed data and SteppingLimb.
-        save_path (str): Directory path where plots will be saved.
-    """
-    # Encode 'SteppingLimb' for correlation
-    le = LabelEncoder()
-    df_plot['SteppingLimb_Encoded'] = le.fit_transform(df_plot['SteppingLimb'])
-
-    # Compute correlation
-    correlation = df_plot['PC2'].corr(df_plot['SteppingLimb_Encoded'])
-    print(f"Correlation between PC2 and SteppingLimb: {correlation:.2f}")
-
-    # Visualize the relationship
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(x='SteppingLimb', y='PC2', data=df_plot, palette='Set3')
-    plt.title('PC2 Scores by Stepping Limb (Handedness)')
-    plt.xlabel('Stepping Limb')
-    plt.ylabel('PC2 Score')
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, "PC2_vs_SteppingLimb_Boxplot.png"), dpi=300)
-    plt.close()
-
-def handedness_stats(df_plot, save_path):
-    """
-    Perform statistical tests to assess differences in PC2 scores between handedness groups.
-
-    Parameters:
-        df_plot (pd.DataFrame): DataFrame with PCA-transformed data and SteppingLimb.
-        save_path (str): Directory path where plots will be saved.
-    """
-    # Assuming two groups: 'ForepawL' and 'ForepawR'
-    group1 = df_plot[df_plot['SteppingLimb'] == 'ForepawL']['PC2']
-    group2 = df_plot[df_plot['SteppingLimb'] == 'ForepawR']['PC2']
-
-    # Perform t-test
-    t_stat, p_val = stats.ttest_ind(group1, group2, equal_var=False)
-    print(f"T-test between ForepawL and ForepawR on PC2: t-stat={t_stat:.2f}, p-value={p_val:.4f}")
-
-    # Save the t-test results to a text file
-    with open(os.path.join(save_path, "PC2_Handedness_TTest.txt"), 'w') as f:
-        f.write(f"T-test between ForepawL and ForepawR on PC2:\n")
-        f.write(f"t-statistic = {t_stat:.2f}\n")
-        f.write(f"p-value = {p_val:.4f}\n")
-
-
 
 # ----------------------------
 # Main Execution
 # ----------------------------
 
 def main(mouse_ids, stride_numbers, phases, base_save_dir):
-    # Load stride_data once before the loops
-    stride_data_path = r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\MEASURES_StrideInfo.h5"
-    stride_data = load_stride_data(stride_data_path)
-
     for mouse_id in mouse_ids:
         for stride_number in stride_numbers:
             for phase1, phase2 in itertools.combinations(phases, 2):
@@ -605,7 +419,7 @@ def main(mouse_ids, stride_numbers, phases, base_save_dir):
                 scaled_data_df = load_and_preprocess_data(mouse_id, stride_number)
 
                 # Perform PCA
-                pca, pcs, loadings_df = perform_pca(scaled_data_df, n_components=10)
+                pca, pcs, loadings_df = perform_pca(scaled_data_df, n_components=5)
 
                 # Prepare masks for the specified phases
                 mask_phase1 = scaled_data_df.index.get_level_values('Run').isin(
@@ -628,12 +442,6 @@ def main(mouse_ids, stride_numbers, phases, base_save_dir):
                 run_numbers_phase2 = scaled_data_df.index[mask_phase2]
                 run_numbers = run_numbers_phase1.tolist() + run_numbers_phase2.tolist()
 
-                # Determine stepping limb for each run
-                stepping_limbs = []
-                for run in run_numbers:
-                    stepping_limb = determine_stepping_limbs(stride_data, mouse_id, run, stride_number)
-                    stepping_limbs.append(stepping_limb)
-
                 # Create labels for plotting
                 labels_phase1 = np.array([phase1] * pcs_phase1.shape[0])
                 labels_phase2 = np.array([phase2] * pcs_phase2.shape[0])
@@ -642,11 +450,14 @@ def main(mouse_ids, stride_numbers, phases, base_save_dir):
                 # Combine PCA-transformed data for plotting
                 pcs_combined = np.vstack([pcs_phase1, pcs_phase2])
 
-                # Plot PCA results and save, with run number labels and stepping limb markers
-                plot_pca(pca, pcs_combined, labels, stepping_limbs, run_numbers, mouse_id, save_path)
+                # Plot PCA results and save, with run number labels
+                plot_pca(pca, pcs_combined, labels, run_numbers, mouse_id, save_path)
 
                 # Plot Scree Plot and save
                 plot_scree(pca, save_path)
+
+                # Plot PCA Loadings is excluded as per your request
+                # plot_pca_loadings(loadings_df)
 
                 # ----------------------------
                 # Perform LDA on All PCs
@@ -705,16 +516,19 @@ def main(mouse_ids, stride_numbers, phases, base_save_dir):
                     n_components=1
                 )
 
-                # Compute Feature Contributions to LDA for PC2
-                # Since we're using only PC2, the contribution is directly from PC2
-                loadings_df_pc2 = loadings_df[['PC2']]
-                feature_contributions_df_pc2 = compute_feature_contributions(loadings_df_pc2, lda_loadings_pc2)
-
-                # Plot Feature Contributions to LDA and save for PC2
-                plot_feature_contributions(feature_contributions_df_pc2, save_path, title_suffix="PC2")
-
-                # Visualize LDA-transformed Data and save for PC2
-                plot_lda_transformed_data(Y_lda_pc2, phase1, phase2, save_path, title_suffix="PC2 Only")
+                # # Compute Feature Contributions to LDA for PC2
+                # # Note: Since we're using only PC2, the feature contributions will be based solely on PC2 loadings
+                # # To compute feature contributions, we need to consider the relationship between PC2 and original features
+                # # However, with only PC2 as the predictor, the contribution is directly from PC2
+                # # Thus, we can use the PCA loadings for PC2 multiplied by the LDA coefficient
+                # loadings_df_pc2 = loadings_df[['PC2']]
+                # feature_contributions_df_pc2 = compute_feature_contributions(loadings_df_pc2, lda_loadings_pc2)
+                #
+                # # Plot Feature Contributions to LDA and save for PC2
+                # plot_feature_contributions(feature_contributions_df_pc2, save_path, title_suffix="PC2")
+                #
+                # # Visualize LDA-transformed Data and save for PC2
+                # plot_lda_transformed_data(Y_lda_pc2, phase1, phase2, save_path, title_suffix="PC2 Only")
 
                 # Optionally, plot LDA loadings as a bar chart and save for PC2
                 # **User Request:** Do not create this plot
@@ -729,65 +543,6 @@ def main(mouse_ids, stride_numbers, phases, base_save_dir):
                 # plt.tight_layout()
                 # plt.savefig(os.path.join(save_path, f"LDA_Loadings_on_PC2_Only.png"), dpi=300)
                 # plt.close()
-
-                # ----------------------------
-                # Handedness Correlation and Stats
-                # ----------------------------
-                # Create a combined DataFrame for correlation and stats
-                df_plot = pd.DataFrame(pcs_combined, columns=[f'PC{i + 1}' for i in range(pca.n_components_)])
-                df_plot['Condition'] = labels
-                df_plot['SteppingLimb'] = stepping_limbs
-                df_plot['Run'] = run_numbers
-
-                # Perform correlation analysis between PC2 and Handedness
-                handedness_correlation(df_plot, save_path)
-
-                # Perform statistical tests on PC2 between handedness groups
-                handedness_stats(df_plot, save_path)
-
-                # ----------------------------
-                # Include Handedness as a Covariate in LDA
-                # ----------------------------
-                # Encode 'SteppingLimb' as a numerical feature
-                le = LabelEncoder()
-                handedness_encoded = le.fit_transform(df_plot['SteppingLimb'])  # 0 and 1
-
-                # Combine PCs with handedness as covariate
-                pcs_with_covariate = np.hstack((pcs_combined, handedness_encoded.reshape(-1, 1)))
-
-                # Perform LDA with Handedness as a covariate
-                lda_cov, Y_lda_cov, lda_loadings_cov = perform_lda(
-                    pcs_with_covariate,
-                    y_labels_all,
-                    phase1=phase1,
-                    phase2=phase2,
-                    n_components=1
-                )
-
-                # Compute Feature Contributions to LDA with Covariate
-                # Note: The last column corresponds to Handedness
-                loadings_df_cov = pd.DataFrame(
-                    loadings_df.copy(),
-                    index=loadings_df.index,
-                    columns=list(loadings_df.columns) + ['Handedness']
-                )
-                # Assign a loading of 1 for the Handedness covariate
-                loadings_df_cov['Handedness'] = 1  # Since it's directly included
-
-                feature_contributions_df_cov = compute_feature_contributions(loadings_df_cov, lda_loadings_cov)
-
-                # Plot Feature Contributions to LDA with Covariate and save
-                plot_feature_contributions(feature_contributions_df_cov, save_path,
-                                           title_suffix="All_PCs_With_Handedness")
-
-                # Visualize LDA-transformed Data with Covariate and save
-                plot_lda_transformed_data(Y_lda_cov, phase1, phase2, save_path, title_suffix="All_PCs_With_Handedness")
-
-                # ----------------------------
-                # Relationship between PC1 and PC2
-                # ----------------------------
-                plot_relationship_pc1_pc2(df_plot, save_path, mouse_id)
-
 
 # ----------------------------
 # Execute Main Function

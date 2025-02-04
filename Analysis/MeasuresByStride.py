@@ -3,6 +3,8 @@ import pandas as pd
 import itertools
 from scipy.signal import savgol_filter
 import re
+from scipy.signal import correlate
+from scipy.signal import savgol_filter
 
 from Helpers.Config_23 import *
 from Helpers import utils
@@ -21,7 +23,7 @@ class CalculateMeasuresByStride():
     ### General utility functions
     ####################################################################################################################
 
-    def calculate_belt_speed(self): # mm/s # todo this doesnt seem to factor in run number/experimental stage??
+    def calculate_belt_speed(self): # mm/s
         speed_condition = self.conditions['speed']
         run_phases = expstuff['condition_exp_runs'][self.conditions['exp']][self.conditions['repeat_extend']]
         for phase_name, run_array in run_phases.items():
@@ -117,6 +119,58 @@ class CalculateMeasuresByStride():
         result = (stance_duration / stride_duration) * 100
         return result
 
+    def brake_prop_duration(self, type):
+        """
+        Returns the duration (in seconds) of the braking phase during stance. Here, braking is defined
+        as the period (in stance) from the initial touchdown (first frame where the stepping limb is in stance)
+        until the forward (x-axis) velocity of the stepping limb first becomes nonnegative.
+        """
+        # Select stance-phase frames for the stepping limb
+        stance_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == locostuff['swst_vals_2025']['st']
+        chunk = self.data_chunk[stance_mask]
+
+        # Use the frame number from the multi-index.
+        # (Assuming the index level 'FrameIdx' holds frame numbers.)
+        dt = 1 / fps  # Convert frames to seconds.
+        initial_frame = chunk.index.get_level_values('FrameIdx')[0]
+        initial_time = initial_frame * dt
+
+        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        # Define the landmark labels for the stepping limb.
+        toe_label = f'ForepawToe{lr}'
+        knuckle_label = f'ForepawKnuckle{lr}'
+        ankle_label = f'ForepawAnkle{lr}'
+
+        # Extract the z-coordinate series for each landmark from the chunk.
+        toe_z = chunk.loc(axis=1)[toe_label, 'z']
+        knuckle_z = chunk.loc(axis=1)[knuckle_label, 'z']
+        ankle_z = chunk.loc(axis=1)[ankle_label, 'z']
+
+        # Compute an overall contact metric as the average z-value (the lower, the better contact).
+        # (If the belt is at z==0, then lower z means closer to the belt.)
+        contact_metric = (toe_z + knuckle_z + ankle_z) / 3.0
+
+        # Identify the frame (within the chunk) where contact is maximal (i.e. minimal average z).
+        max_contact_idx = contact_metric.idxmin()  # This returns a multi-index for that frame.
+        # Extract the frame number from the multi-index. (Assumes 'FrameIdx' is one level.)
+        max_time = max_contact_idx * dt
+
+        # Next, determine swing onset.
+        # We search in the full data (or a larger slice) for the first frame after max_contact
+        # where the stepping limb’s state becomes swing.
+        swing_frame_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
+        swing_frame = self.data_chunk[swing_frame_mask].index[0]
+        swing_time = swing_frame * dt
+
+        if type == 'brake':
+            brake_time = max_time - initial_time
+            return brake_time
+        elif type == 'propulsion':
+            propulsion_time = swing_time - max_time
+            return propulsion_time
+
+    # todo could try include tau propulsion also but it seems my x velocities are not precise enough to get a good estimate
+
     ########### SPEEDS ###########:
 
     def walking_speed(self, bodypart, speed_correct):
@@ -179,44 +233,116 @@ class CalculateMeasuresByStride():
         else:
             return length - self.calculate_belt_x_displacement()
 
-    def x(self, bodypart, speed_correct, step_phase, all_vals, full_stride, buffer_size=0.25):
-        if full_stride:
-            buffer_chunk = self.get_buffer_chunk(buffer_size)
-            x = buffer_chunk.loc(axis=1)[bodypart, 'x']
+    def net_displacement_rel(self, coord, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+        if bodypart == 'FrontIpsi':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'FrontContra':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        elif bodypart == 'HindIpsi':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'HindContra':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
         else:
-            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
-            x = self.data_chunk.loc(axis=1)[bodypart, 'x'][stsw_mask]
-        x = x - self.calculate_belt_x_displacement() if speed_correct else x
-        if all_vals:
-            return x.droplevel(['Run', 'RunStage'], axis=0)
-        else:
-            return x.iloc[-1] - x.iloc[0]
+            bodypart = bodypart
 
-    def y(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+        # relative to Tail1 frame by frame
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            y = buffer_chunk.loc(axis=1)[bodypart, 'y']
+            val = buffer_chunk.loc(axis=1)[bodypart, coord]
+            tail = buffer_chunk.loc(axis=1)['Tail1', coord]
+            rel_val = val - tail
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
-            y = self.data_chunk.loc(axis=1)[bodypart, 'y'][stsw_mask]
+            val = self.data_chunk.loc(axis=1)[bodypart, coord][stsw_mask]
+            tail = self.data_chunk.loc(axis=1)['Tail1', coord][stsw_mask]
+            rel_val = val - tail
+        #x = x - self.calculate_belt_x_displacement() if speed_correct else x # dont do this anymore as relative to tail anyway
         if all_vals:
-            return y.droplevel(['Run', 'RunStage'], axis=0)
+            return rel_val.droplevel(['Run', 'RunStage'], axis=0)
         else:
-            return y.iloc[-1] - y.iloc[0]
+            return rel_val.iloc[-1] - rel_val.iloc[0]
 
-    def z(self, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+    def distance_to_transition(self, step_phase, all_vals, full_stride, buffer_size=0.25):
+        """
+        Proximity of tailbase (to which other displacement measures are referenced to) at beginning of step phase.
+        A positive value indicates that the tailbase is ahead of the transition point.
+        """
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
-            z = buffer_chunk.loc(axis=1)[bodypart, 'z']
+            proximity = buffer_chunk.loc(axis=1)['Tail1', 'x'] - 470
         else:
             stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
-            z = self.data_chunk.loc(axis=1)[bodypart, 'z'][stsw_mask]
+            proximity = self.data_chunk.loc(axis=1)['Tail1', 'x'][stsw_mask] - 470
         if all_vals:
-            return z.droplevel(['Run', 'RunStage'], axis=0)
+            return proximity.droplevel(['Run', 'RunStage'], axis=0)
         else:
-            return z.iloc[-1] - z.iloc[0]
+            return proximity.iloc[0]
+
+    def distance_from_midline(self, step_phase, all_vals, full_stride, buffer_size=0.25):
+        """
+        Proximity of tailbase (to which other displacement measures are referenced to) at beginning of step phase.
+        A positive value indicates that the tailbase is to the right of the midline.
+        """
+        y_midline = structural_stuff['belt_width'] / 2
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            proximity = buffer_chunk.loc(axis=1)['Tail1', 'y'] - y_midline
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
+            proximity = self.data_chunk.loc(axis=1)['Tail1', 'y'][stsw_mask] - y_midline
+        if all_vals:
+            return proximity.droplevel(['Run', 'RunStage'], axis=0)
+        else:
+            return proximity.iloc[0]
+
+    def distance_from_belt_surface(self, step_phase, all_vals, full_stride, buffer_size=0.25):
+        """
+        Proximity of tailbase to belt surface (z==0) at beginning of step phase.
+        """
+        if full_stride:
+            buffer_chunk = self.get_buffer_chunk(buffer_size)
+            proximity = buffer_chunk.loc(axis=1)['Tail1', 'z']
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
+            proximity = self.data_chunk.loc(axis=1)['Tail1', 'z'][stsw_mask]
+        if all_vals:
+            return proximity.droplevel(['Run', 'RunStage'], axis=0)
+        else:
+            return proximity.iloc[0]
+
+    def excursion(self, bodypart, coord, buffer_size=0.25):
+        """
+        the overall range of movement during a stride—that is, the difference between the highest and lowest x/y/z-values reached.
+        # todo NB this is NOT relative to tailbase (currently)
+        """
+        if bodypart == 'FrontIpsi':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'FrontContra':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        elif bodypart == 'HindIpsi':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'HindContra':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        else:
+            bodypart = bodypart
+
+        buffer_chunk = self.get_buffer_chunk(buffer_size)
+        val = buffer_chunk.loc(axis=1)[bodypart, coord]
+        return val.max() - val.min()
+
 
     def traj(self, bodypart, coord, step_phase, full_stride, speed_correct, aligned, buffer_size=0.25):
+        if bodypart == 'FrontIpsi':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'FrontContra':
+            bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        elif bodypart == 'HindIpsi':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+        elif bodypart == 'HindContra':
+            bodypart = 'HindpawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+        else:
+            bodypart = bodypart
+
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)
             xyz = buffer_chunk.loc(axis=1)[bodypart, ['x', 'y', 'z']].droplevel('bodyparts', axis=1).droplevel(
@@ -231,7 +357,7 @@ class CalculateMeasuresByStride():
                 self.stride_start]  ### todo cant align traj to first position when that is a nan
         return xyz[coord]
 
-    ########### BODY-RELATVE DISTANCES ###########:
+    ########### BODY-RELATVE DISTANCES/ coordination ###########:
 
     def coo_xyz(self, xyz):
         """
@@ -287,7 +413,7 @@ class CalculateMeasuresByStride():
         trough = coords.min()
         return peak - trough
 
-    def body_distance(self, bodyparts, step_phase, all_vals, full_stride,
+    def body_length(self, bodyparts, step_phase, all_vals, full_stride,
                       buffer_size=0.25):  ### eg body length, midback to forepaw
         bodypart1, bodypart2 = bodyparts
         if full_stride:
@@ -336,41 +462,231 @@ class CalculateMeasuresByStride():
         else:
             return tail_heights.mean(axis=0)
 
-    ########### BODY-RELATIVE TIMINGS/PHASES ###########:
+        # todo body y dislacment
+        # todo body pitch, roll, yaw
 
-    def double_support(self):  # %
-        lr = utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+    ########### BODY-RELATIVE TIMINGS/PHASES/coordination ###########:
+
+    def double_support(self, support_type):
+        """
+        Calculates the percentage of the stride cycle between the touch-down of the reference forepaw and the lift-off
+        of a second limb, based on the provided support type.
+
+        support_type:
+            'frontonly'   => Contralateral forepaw swing (may include negative double support)
+            'homolateral' => Ipsilateral hindpaw swing
+            'diagonal'    => Contralateral hindpaw swing
+
+        Returns:
+            A percentage value of the stride cycle (positive if swing occurs after reference touchdown, negative if before).
+        """
+        # Choose which limb and paw to use based on support_type
+        if support_type == 'frontonly':
+            limb_direction = 'contr'
+            paw = 'Forepaw'
+        elif support_type == 'homolateral':
+            limb_direction = 'ipsi'
+            paw = 'Hindpaw'
+        elif support_type == 'diagonal':
+            limb_direction = 'contr'
+            paw = 'Hindpaw'
+        else:
+            raise ValueError(f"Invalid support_type provided: {support_type}")
+
+        # Determine the correct left/right indicator for the chosen limb
+        lr = utils.Utils().picking_left_or_right(self.stepping_limb, limb_direction)
+
+        # Compute stride length and prepare the frame range for negative swing detection
         stride_length = self.stride_end - self.stride_start
-        contr_swing_posframe_mask = self.data_chunk.loc(axis=1)['Forepaw%s' % lr, 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
-        contr_swing_negframe_mask = self.XYZw[self.mouseID].loc(axis=0)[
-                                        self.r, ['RunStart', 'Transition', 'RunEnd'], np.arange(
-                                            self.stride_start - round(stride_length / 4), self.stride_start)].loc(
-            axis=1)['Forepaw%s' % lr, 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
-        if any(contr_swing_posframe_mask):
-            contr_swing_frame = self.data_chunk.index.get_level_values(level='FrameIdx')[contr_swing_posframe_mask][0]
+        # Here we consider frames starting up to 25% of the stride before the stride start
+        neg_frame_range = np.arange(self.stride_start - round(stride_length / 4), self.stride_start)
+
+        # Positive swing mask: within the stride cycle (data_chunk should be the current stride’s chunk)
+        pos_mask = self.data_chunk.loc(axis=1)[f'{paw}{lr}', 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
+
+        # Negative swing mask: before the stride cycle from the complete XYZw data
+        neg_mask = self.XYZw[self.mouseID].loc(axis=0)[self.r, ['RunStart', 'Transition', 'RunEnd'], neg_frame_range] \
+                       .loc(axis=1)[f'{paw}{lr}', 'SwSt_discrete'] == locostuff['swst_vals_2025']['sw']
+
+        # Calculate result based on the first occurrence in either mask
+        if any(pos_mask):
+            # For the positive mask, get the first matching frame from the data_chunk's index
+            swing_frame = self.data_chunk.index.get_level_values('FrameIdx')[pos_mask][0]
             ref_stance_frame = self.data_chunk.index[0]
-            stride_duration = self.stride_duration()
-            result = ((contr_swing_frame - ref_stance_frame) / stride_duration) * 100
-        elif any(contr_swing_negframe_mask):
-            contr_swing_frame = self.XYZw[self.mouseID].loc(axis=0)[
-                self.r, ['RunStart', 'Transition', 'RunEnd'], np.arange(self.stride_start - round(stride_length / 4),
-                                                                        self.stride_start)].index.get_level_values(
-                level='FrameIdx')[contr_swing_negframe_mask][0]
+            #stride_duration = self.stride_duration()
+            result = ((swing_frame - ref_stance_frame) / stride_length) * 100  # old : ((swing_frame - ref_stance_frame) / stride_duration) * 100
+        elif any(neg_mask):
+            # For the negative mask, get the first matching frame from the XYZw data (within the negative frame range)
+            swing_frame = self.XYZw[self.mouseID].loc(axis=0)[
+                self.r, ['RunStart', 'Transition', 'RunEnd'], neg_frame_range] \
+                .index.get_level_values('FrameIdx')[neg_mask][0]
             ref_stance_frame = self.data_chunk.index[0]
-            stride_duration = self.stride_duration()
-            result = ((contr_swing_frame - ref_stance_frame) / stride_duration) * 100
+            #stride_duration = self.stride_duration()
+            result = ((swing_frame - ref_stance_frame) / stride_length) * 100  # old : ((swing_frame - ref_stance_frame) / stride_duration) * 100
         else:
             result = 0
+
         return result
 
-    # todo 3 & 4 support patterns
+    def triple_support(self, mode):
+        """
+        Calculates the percentage of the stride cycle during which triple support occurs.
 
-    # todo def stance_phase(self):
+        Parameters:
+            mode: str, either 'any' or 'front+hind'
+                - 'any': returns the percentage of frames where any three (or four) limbs are in stance.
+                - 'front+hind': returns the percentage of frames where both forepaws are in stance
+                                and at least one hindpaw is in stance.
 
-    # todo tail and nose phases
+        Returns:
+            Percentage (0-100) of the stride cycle with triple support.
+        """
+        # Define the stance value and the list of limbs
+        stance_val = locostuff['swst_vals_2025']['st']
+        limbs = ['ForepawL', 'ForepawR', 'HindpawL', 'HindpawR']
+
+        # Create a boolean DataFrame: each cell True if that limb is in stance at that frame.
+        stance_df = pd.DataFrame({
+            limb: (self.data_chunk.loc(axis=1)[limb, 'SwSt'] == stance_val)
+            for limb in limbs
+        }, index=self.data_chunk.index)
+
+        if mode == 'any':
+            # Count frames where at least three of the four limbs are in stance.
+            triple_frames = stance_df.sum(axis=1) >= 3
+        elif mode == 'front_hind':
+            # Require that both forepaws are in stance and at least one hindpaw is in stance.
+            front_support = stance_df['ForepawL'] & stance_df['ForepawR']
+            hind_support = stance_df['HindpawL'] | stance_df['HindpawR']
+            triple_frames = front_support & hind_support
+        else:
+            raise ValueError("Invalid mode for triple_support. Use 'any' or 'front+hind'.")
+
+        # Calculate percentage: (# of frames meeting condition) / (total frames) * 100
+        percent_triple = triple_frames.sum() / len(triple_frames) * 100
+        return percent_triple
+
+    def quadruple_support(self):
+        """
+        Calculates the percentage of the stride cycle during which all four paws are in support.
+
+        Returns:
+            Percentage (0-100) of the stride cycle with quadruple (all four) support.
+        """
+        # Define the stance value and the list of limbs
+        stance_val = locostuff['swst_vals_2025']['st']
+        limbs = ['ForepawL', 'ForepawR', 'HindpawL', 'HindpawR']
+
+        # Create a boolean DataFrame for each limb's stance state.
+        stance_df = pd.DataFrame({
+            limb: (self.data_chunk.loc(axis=1)[limb, 'SwSt'] == stance_val)
+            for limb in limbs
+        }, index=self.data_chunk.index)
+
+        # Identify frames where all four limbs are in stance.
+        quadruple_frames = (stance_df.sum(axis=1) == 4)
+
+        # Calculate percentage of stride cycle with quadruple support.
+        percent_quadruple = quadruple_frames.sum() / len(quadruple_frames) * 100
+        return percent_quadruple
+
+    def stance_phase(self, stance_limb):
+        """relative timing of limb touchdowns to stride cycle of reference paw (FR). Calculated as: stance time - stance
+        timereference paw/stride duration.
+        N.B. only measuring length of stance time *within* the stepping limbs stride cycle
+        """
+        if stance_limb == 'contra_front':
+            limb_direction = 'contr'
+            paw = 'Forepaw'
+        elif stance_limb == 'contra_hind':
+            limb_direction = 'contr'
+            paw = 'Hindpaw'
+        elif stance_limb == 'ipsi_hind':
+            limb_direction = 'ipsi'
+            paw = 'Hindpaw'
+        else:
+            raise ValueError(f"Invalid stance_limb provided: {stance_limb}")
+
+        stride_length = self.stride_end - self.stride_start
+
+        lr = utils.Utils().picking_left_or_right(self.stepping_limb, limb_direction)
+        stance_limb = f'{paw}{lr}'
+        stance_limb_mask = self.data_chunk.loc(axis=1)[stance_limb, 'SwSt'] == locostuff['swst_vals_2025']['st']
+        stepping_limb_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == locostuff['swst_vals_2025']['st']
+        stance_limb_length = len(self.data_chunk.loc(axis=1)[stance_limb, 'SwSt'][stance_limb_mask])
+        stepping_limb_length = len(self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'][stepping_limb_mask])
+        stance_phase = (stance_limb_length - stepping_limb_length) / stride_length
+
+        return stance_phase
+
+    def nose_tail_phase(self, bodypart, frontback, coord):
+        """
+        Calculate the phase (delay) at which the stridewise trajectory of the specified body part
+        (e.g. 'nose' or 'tail') maximally correlates with the reference trajectory defined as the difference
+        between the forward positions of the right and left paws. This is computed separately for front
+        limbs (ForepawR - ForepawL) and hind limbs (HindpawR - HindpawL).
+
+        Parameters:
+            bodypart (str): The body part to analyze (e.g. 'nose' or 'tail').
+            coordinate (str): The coordinate to use (e.g. 'x').
+
+        Returns:
+            dict: A dictionary with keys:
+                  'phase_front' - the phase delay (in normalized time units) for the front limb reference,
+                  'phase_hind'  - the phase delay for the hind limb reference.
+        """
+        # Number of points to which trajectories are normalized (adjust as desired)
+        num_points = 100
+        dt = 1 / (num_points - 1)
+
+        def normalize_trajectory(traj, num_points=num_points):
+            """
+            Normalize a 1D trajectory to a fixed number of points using linear interpolation.
+            Assumes the original trajectory spans a normalized time from 0 to 1.
+            """
+            traj = np.asarray(traj)
+            x_orig = np.linspace(0, 1, len(traj))
+            x_new = np.linspace(0, 1, num_points)
+            return np.interp(x_new, x_orig, traj)
+
+        def compute_phase(traj1, traj2, dt):
+            """
+            Compute the delay (phase) that maximizes the cross-correlation between two 1D signals.
+            """
+            corr = correlate(traj1, traj2, mode='full')
+            lags = np.arange(-len(traj1) + 1, len(traj1))
+            best_lag = lags[np.argmax(corr)]
+            return best_lag * dt
+
+        # Get the trajectory of the specified body part from the current stride.
+        # (self.data_chunk is assumed to contain frames from stride_start to stride_end.)
+        body_traj = self.data_chunk.loc(axis=1)[bodypart, coord].values
+        body_traj_norm = normalize_trajectory(body_traj, num_points)
+
+        if frontback == 'front':
+            # Compute the front paw difference trajectory: (ForepawR - ForepawL)
+            right_fore = self.data_chunk.loc(axis=1)['ForepawToeR', coord].values
+            left_fore = self.data_chunk.loc(axis=1)['ForepawToeL', coord].values
+            front_diff = right_fore - left_fore
+            front_diff_norm = normalize_trajectory(front_diff, num_points)
+
+            # compute the phase delays via cross-correlation
+            phase_front = compute_phase(body_traj_norm, front_diff_norm, dt)
+            return phase_front
+
+        elif frontback == 'hind':
+            # Compute the hind paw difference trajectory: (HindpawR - HindpawL)
+            right_hind = self.data_chunk.loc(axis=1)['HindpawToeR', coord].values
+            left_hind = self.data_chunk.loc(axis=1)['HindpawToeL', coord].values
+            hind_diff = right_hind - left_hind
+            hind_diff_norm = normalize_trajectory(hind_diff, num_points)
+
+            # Compute the phase delays via cross-correlation.
+            phase_hind = compute_phase(body_traj_norm, hind_diff_norm, dt)
+            return phase_hind
+
 
     ########### BODY-RELATIVE POSITIONING ###########:
-
     def back_skew(self, step_phase, all_vals, full_stride,
                   buffer_size=0.25):  ##### CHECK HOW TO DEAL WITH MISSING BACK VALUES - HAVE A MULT ROW FOR EVERY FRAME BASED ON HOW MANY TRUE VALUES I HAVE
         back_labels = ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10',
@@ -412,94 +728,105 @@ class CalculateMeasuresByStride():
             elif time == 'end':
                 return position.iloc[-1]
 
-    def signed_angle(self, reference_vector, plane_normal, bodyparts, buffer_size=0.25):
+    def signed_angle(self, reference_vector, plane_normal, bodyparts, step_phase, all_vals, full_stride, summary_stats,
+                     buffer_size=0.25):
         """
-        Calculates the signed angle between the vector AB and a reference vector when viewed from a given plane.
-        Positive angles are clockwise, and negative angles are anticlockwise from the reference vector.
-
-        I'm assuming your use cases will mostly care about angles when viewed form a specific plane (i.e. side view, top
-        view, front view, or any other plane you defined through plane_normal). Use the right hand rule for figuring out the
-        appropriate normal vector for any plane.
-
-        E.g. for looking at from side plane (x and z coords) the plane_normal would be [0, 1, 0], and if you want angles
-        relative to vertical, reference_vector = [0, 0, 1]; relative to horizontal belt line would be [1,0,0].
+        Calculates the signed angle between the vector from bodypart1 to bodypart2 and a reference vector
+        when viewed from a given plane. Positive angles are clockwise and negative anticlockwise from the reference.
+        If all_vals is True, returns a pd.Series of angles (in degrees) indexed by FrameIdx.
+        Otherwise, returns a dictionary with two single values:
+            - 'average': the average signed angle over the selected frames.
+            - 'peak_amplitude': the maximum absolute angle (peak excursion).
 
         Parameters:
-            A (np.array): An (n x 3) array of points.
-            B (np.array): An (n x 3) array of points.
-            reference_vector (np.array): The reference vector within the plane, defining the "vertical" direction.
+            reference_vector (np.array): The reference vector within the plane.
             plane_normal (np.array): The normal vector of the plane.
+            bodyparts (tuple): A tuple containing two strings: (bodypart1, bodypart2).
+            step_phase (str): The step phase to use when full_stride is False.
+            all_vals (bool): If True, returns all frame values; if False, returns summary statistics.
+            full_stride (bool): If True, uses the full stride (with a buffer); if False, uses only frames where
+                                self.stepping_limb is in the specified step_phase.
+            buffer_size (float): Proportion of stride to include as buffer.
 
         Returns:
-            np.array: An array of signed angles in degrees.
-
-        Example use (you'll have to add the z corrections etc):
-            path_ankle = '~/Downloads/Ankle.csv'
-            path_toe   = '~/Downloads/Toe.csv'
-
-            A = load_coords(path_ankle)
-            B = load_coords(path_toe)
-            A = A[['x','y','z']].to_numpy()
-            B = B[['x', 'y', 'z']].to_numpy()
-
-            # Define the reference vector (z axis)
-            reference_vector = np.array([0, 0, -1])
-
-            # Define the plane normal (Y-axis, for the XZ plane - i.e. side view)
-            plane_normal = np.array([0, 1, 0])
-
-            angles_deg = calculate_signed_angle(A, B, reference_vector, plane_normal)
-            plot_angles(np.arange(30), angles_deg)
+            Either a pd.Series (if all_vals True) or a dict with keys 'average' and 'peak_amplitude'.
         """
-        bodypart1, bodypart2 = bodyparts
-        buffer_chunk = self.get_buffer_chunk(buffer_size)
-        coord_1 = buffer_chunk.loc(axis=1)[bodypart1, ['x', 'y', 'z']].droplevel('bodyparts', axis=1)
-        coord_2 = buffer_chunk.loc(axis=1)[bodypart2, ['x', 'y', 'z']].droplevel('bodyparts', axis=1)
+        if bodyparts == ['FrontAnkleIpsi', 'FrontToeIpsi']:
+            bodypart1 = 'ForepawAnkle%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+            bodypart2 = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+            bodyparts = [bodypart1, bodypart2]
+        elif bodyparts == ['FrontAnkleContra', 'FrontToeContra']:
+            bodypart1 = 'ForepawAnkle%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+            bodypart2 = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+            bodyparts = [bodypart1, bodypart2]
+        elif bodyparts == ['FrontKnuckleIpsi', 'FrontToeIpsi']:
+            bodypart1 = 'ForepawKnuckle%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+            bodypart2 = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
+            bodyparts = [bodypart1, bodypart2]
+        elif bodyparts == ['FrontKnuckleContra', 'FrontToeContra']:
+            bodypart1 = 'ForepawKnuckle%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+            bodypart2 = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'contr')
+            bodyparts = [bodypart1, bodypart2]
+        else:
+            bodyparts = bodyparts
 
-        # Calculate vectors from points A to B
+
+        # Select the appropriate data chunk
+        if full_stride:
+            data_chunk = self.get_buffer_chunk(buffer_size)
+        else:
+            stsw_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == step_phase
+            data_chunk = self.data_chunk[stsw_mask]
+
+        # Extract coordinates for the two body parts and drop the bodyparts level
+        bodypart1, bodypart2 = bodyparts
+        coord_1 = data_chunk.loc(axis=1)[bodypart1, ['x', 'y', 'z']].droplevel('bodyparts', axis=1)
+        coord_2 = data_chunk.loc(axis=1)[bodypart2, ['x', 'y', 'z']].droplevel('bodyparts', axis=1)
+
+        # Convert to numpy arrays
         A = coord_1.to_numpy()
         B = coord_2.to_numpy()
+        # Compute vectors from A to B
         vectors_AB = B - A
 
-        # Project vectors_AB and reference_vector onto the plane
-        # Subtracting the outer product basically removes the component in vectors_AB that is aligned to plane_normal,
-        # leaving only the projection onto the reference plane
+        # Project vectors_AB onto the plane by removing the component along plane_normal
         vectors_AB_projected = vectors_AB - np.outer(
             np.dot(vectors_AB, plane_normal) / np.linalg.norm(plane_normal) ** 2,
             plane_normal)
-        # For clarity, the above line is equivalent to calculating projections onto x, y, and z dims, then just looking at
-        # the two relevant dimensions defining your reference plane.
-        # vectors_AB_projectedX = np.dot(vectors_AB, [1,0,0])
-        # vectors_AB_projectedY = np.dot(vectors_AB, [0,1,0])
-        # vectors_AB_projectedZ = np.dot(vectors_AB, [0,0,1])
-        # then if your reference plane is in x and z (side view), vectors_AB_projected is just:
-        # [vectors_AB_projectedX, zeros column, vectors_AB_projectedZ]
 
-        reference_vector_projected = reference_vector - np.dot(reference_vector, plane_normal) / np.linalg.norm(
-            plane_normal) ** 2 * plane_normal
+        # Project the reference_vector onto the plane
+        reference_vector_projected = reference_vector - (np.dot(reference_vector, plane_normal) /
+                                                         np.linalg.norm(plane_normal) ** 2) * plane_normal
 
         # Normalize the projected vectors
-        vectors_AB_projected_normalized = vectors_AB_projected / np.linalg.norm(vectors_AB_projected, axis=1)[:,
-                                                                 np.newaxis]
-        reference_vector_projected_normalized = reference_vector_projected / np.linalg.norm(reference_vector_projected)
+        vectors_norm = np.linalg.norm(vectors_AB_projected, axis=1)
+        # Avoid division by zero
+        vectors_AB_projected_normalized = vectors_AB_projected / vectors_norm[:, np.newaxis]
+        ref_norm = np.linalg.norm(reference_vector_projected)
+        reference_vector_projected_normalized = reference_vector_projected / ref_norm
 
-        # Calculate the angle magnitudes
+        # Compute the angle (in radians) via the dot product
         dot_products = np.dot(vectors_AB_projected_normalized, reference_vector_projected_normalized)
-        angles_rad = np.arccos(np.clip(dot_products, -1.0, 1.0))  # Clip for numerical stability
+        angles_rad = np.arccos(np.clip(dot_products, -1.0, 1.0))
 
-        # Determine the sign of the angles using the cross product and the plane normal
+        # Determine the sign of each angle using the cross product and plane_normal
         cross_products = np.cross(vectors_AB_projected_normalized, reference_vector_projected_normalized)
-        angle_signs = np.sign(np.dot(cross_products,
-                                     plane_normal))  # this is a simple way to calculate if angles should be + or -; see right hand rule
-
-        # Apply signs to the angles
+        angle_signs = np.sign(np.dot(cross_products, plane_normal))
         signed_angles_rad = angles_rad * angle_signs
+        signed_angles_deg = np.degrees(signed_angles_rad).flatten()
 
-        # Convert to degrees
-        signed_angles_deg = np.degrees(signed_angles_rad)
-        signed_angles_deg = signed_angles_deg.flatten()
+        # Create a Series with the FrameIdx from the coordinate index
+        angle_series = pd.Series(signed_angles_deg, index=coord_1.index.get_level_values('FrameIdx'))
 
-        return pd.Series(signed_angles_deg, index=coord_1.index.get_level_values(level='FrameIdx'))
+        if all_vals:
+            return angle_series
+        else:
+            # Calculate summary statistics
+            if summary_stats == 'mean':
+                return angle_series.mean()
+            elif summary_stats == 'peak':
+                return np.max(np.abs(angle_series))
+
 
     def angle_3d(self, bodypart1, bodypart2, reference_axis, step_phase, all_vals, full_stride, buffer_size=0.25):
         """
@@ -507,7 +834,7 @@ class CalculateMeasuresByStride():
         :param bodypart1 (str): First body part
         :param bodypart2 (str): Second body part
         :param reference_axis (array): Reference axis in the form of a 3D vector.
-        :param step_phase: 0 or 1 for swing or stance , respectively #todo this was swapped from the original code 20250128
+        :param step_phase: 0 or 1 for swing or stance , respectively
         :param all_vals: True or False for returning all values in stride or averaging, respectively
         :param full_stride: True or False for analysing all frames from the stride and not splitting into st or sw
         :param buffer_size: Proportion of stride in franes to add before and end as a buffer, 0 to 1
@@ -641,10 +968,10 @@ class RunMeasures(CalculateMeasuresByStride):
                 else:
                     for combo in measures[datatype]['signed_angle'].keys():
                         result = getattr(self, function)(*measures[datatype][function][combo])
-                        # if datatype == 'single_val_measure_list':
-                        #     vals.loc(axis=1)[(function, combo)] = result
-                        # elif datatype == 'multi_val_measure_list':
-                        vals.loc[result.index, (function, combo)] = result.values
+                        if datatype == 'single_val_measure_list':
+                            vals.loc(axis=1)[(function, combo)] = result
+                        elif datatype == 'multi_val_measure_list':
+                            vals.loc[result.index, (function, combo)] = result.values
 
             else:
                 # when no parameters required

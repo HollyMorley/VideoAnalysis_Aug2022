@@ -44,7 +44,7 @@ expstuff = {
             'Extended': { # 10, 50, 50, 50
                 'Baseline': np.arange(0, 10),
                 'APA1': np.arange(10, 60),
-                'APA2': np.arange(85, 110),
+                'APA2': np.arange(60, 110),
                 'Washout': np.arange(110, 160),
                 'Wash1': np.arange(110, 135),
                 'Wash2': np.arange(135, 160)
@@ -160,6 +160,7 @@ locostuff = {
 settings = {
     'analysis_chunks': {
         'APA_lengthruns': 25, #100#25
+        'APA_lengthruns': 25, #100#25
         'after_lengthruns': 25,
         'literature_apa_length': 100 #ms ## this isnt acutally correct, check this
     }
@@ -226,6 +227,18 @@ micestuff = {
         ('ForepawKnuckleL', 'ForepawToeL'), ('ForepawKnuckleR', 'ForepawToeR'),
         ('HindpawKnuckleL', 'HindpawToeL'), ('HindpawKnuckleR', 'HindpawToeR')
         ]
+    ,
+    'bodyparts': ['Nose', 'EarL', 'EarR',
+                  'Back1', 'Back2', 'Back3','Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10','Back11', 'Back12',
+                  'Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5','Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12',
+                  'ForepawToeL', 'ForepawToeR',
+                  'ForepawKnuckleL', 'ForepawKnuckleR',
+                  'ForepawAnkleL', 'ForepawAnkleR',
+                  'ForepawKneeL', 'ForepawKneeR',
+                  'HindpawToeL', 'HindpawToeR',
+                  'HindpawKnuckleL', 'HindpawKnuckleR',
+                  'HindpawAnkleL', 'HindpawAnkleR',
+                  'HindpawKneeL', 'HindpawKneeR']
 }
 
 label_list_World = ['Door','StartPlatL','StartPlatR','TransitionL','TransitionR', 'StepR', 'StepL',
@@ -253,30 +266,16 @@ def measures_list(buffer): ## add in displacement??
                 'xyz': ['x','y','z'],
                 'smooth': [False]
             },
-            'x': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
-                'step_phase': [None],
-                'all_vals': [True],
-                'full_stride': [True],
-                'buffer_size': [0, buffer]
-            },
-            'y': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'step_phase': [None],
-                'all_vals': [True],
-                'full_stride': [True],
-                'buffer_size': [0, buffer]
-            },
-            'z' : {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+            'net_displacement_rel': {
+                'coord': ['x','y','z'],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
                 'step_phase': [None],
                 'all_vals': [True],
                 'full_stride': [True],
                 'buffer_size': [0, buffer]
             },
             'traj': {
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
                 'coord': ['x','y','z'],
                 'step_phase': [None],
                 'full_stride': [True],
@@ -284,7 +283,7 @@ def measures_list(buffer): ## add in displacement??
                 'aligned': [True], # False
                 'buffer_size': [0, buffer]
             },
-            'body_distance': {
+            'body_length': {
                 'bodyparts': [['Back1','Back12']],
                 'step_phase': [None],
                 'all_vals': [True],
@@ -318,24 +317,28 @@ def measures_list(buffer): ## add in displacement??
                 'full_stride': [True],
                 'buffer_size': [0, buffer]
              },
-            'signed_angle': {
-                'ToeAnkleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleL','ForepawToeL'], buffer],
-                'ToeAnkleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleL', 'ForepawToeL'], 0],
-                'ToeAnkleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['ForepawAnkleR', 'ForepawToeR'],buffer],
-                'ToeAnkleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['ForepawAnkleR', 'ForepawToeR'], 0],
-                'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],buffer],
-                'Back1Back12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0],
-                'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],buffer],
-                'Tail1Tail12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0],
-                'NoseBack1_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],buffer],
-                'NoseBack1_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0],
-                'Back1Back12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],buffer],
-                'Back1Back12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0],
-                'Tail1Tail12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], buffer],
-                'Tail1Tail12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0],
-                'NoseBack1_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], buffer],
-                'NoseBack1_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0],
-            }
+            # 'signed_angle': {
+            #     'ToeKnuckleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'], buffer],
+            #     'ToeKnuckleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'], 0],
+            #     'ToeKnuckleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'], buffer],
+            #     'ToeKnuckleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'], 0],
+            #     'ToeAnkleL_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'], buffer],
+            #     'ToeAnkleL_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'], 0],
+            #     'ToeAnkleR_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleContra', 'FrontToeContra'],buffer],
+            #     'ToeAnkleR_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'], 0],
+            #     'Back1Back12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],buffer],
+            #     'Back1Back12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],0],
+            #     'Tail1Tail12_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],buffer],
+            #     'Tail1Tail12_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],0],
+            #     'NoseBack1_side_zref_buff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],buffer],
+            #     'NoseBack1_side_zref_nobuff': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],0],
+            #     'Back1Back12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],buffer],
+            #     'Back1Back12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],0],
+            #     'Tail1Tail12_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], buffer],
+            #     'Tail1Tail12_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'], 0],
+            #     'NoseBack1_overhead_xref_buff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], buffer],
+            #     'NoseBack1_overhead_xref_nobuff': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'], 0],
+            # }
         },
         'single_val_measure_list': {
             'stride_duration': [],
@@ -343,40 +346,64 @@ def measures_list(buffer): ## add in displacement??
             'swing_duration': [],
             'cadence': [],
             'duty_factor': [],
+            'brake_prop_duration': {
+                'type': ['brake', 'propulsion'],
+            },
             'walking_speed': {
                 'bodypart': ['Back6','Tail1'],
-                'speed_correct': [True,False]
+                'speed_correct': [True]
             },
             'swing_velocity': {
-                'speed_correct': [True,False]
+                'speed_correct': [True]
             },
             'stride_length': {
-                'speed_correct': [True,False]
+                'speed_correct': [True]
             },
-            'x': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True,False],
+            'stance_phase': {
+                'stance_limb': ['contra_front', 'contra_hind', 'ipsi_hind']
+            },
+            'nose_tail_phase': {
+                'bodypart': ['Nose', 'Tail1'],
+                'frontback': ['front', 'hind'],
+                'coord': ['x', 'y', 'z'],
+            },
+            'double_support': {
+                'type': ['frontonly', 'homolateral', 'diagonal'],
+            },
+            'triple_support': {
+                'mode': ['any', 'front_hind'],
+            },
+            'quadruple_support': [],
+            'net_displacement_rel': {
+                'coord': ['x','y','z'],
+                'bodypart': ['Nose','Back1','Back6','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
             },
-            'y': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'step_phase': ['0', '1', None],
+            'distance_to_transition': {
+                'step_phase': ['0', '1'],
                 'all_vals': [False],
-                'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'full_stride': [False],
+                'buffer_size': [0]
             },
-            'z': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'step_phase': ['0', '1', None],
+            'distance_from_midline': {
+                'step_phase': ['0', '1'],
                 'all_vals': [False],
-                'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'distance_from_belt_surface': {
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'excursion': {
+                'bodypart': ['Nose','Back1','Back6','Tail1','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
+                'coord': ['x','y','z'],
+                'buffer_size': [0]
             },
             'coo_xyz': {
                 'xyz': ['x','y','z']
@@ -389,40 +416,61 @@ def measures_list(buffer): ## add in displacement??
             'ptp_amplitude_stride': {
                 'bodypart': ['Tail1','Back6']
             },
-            'body_distance': {
+            'body_length': {
                 'bodyparts': [['Back1','Back12']],
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
             },
             'back_height': {
                 'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
             },
             'tail_height': {
                 'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
             },
-            'double_support': [],
             'back_skew': {
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
             },
             'limb_rel_to_body': {
                 'time': ['start','end'],
                 'step_phase': ['0', '1', None],
                 'all_vals': [False],
                 'full_stride': [True, False],
-                'buffer_size': [0, buffer]
+                'buffer_size': [0]
+            },
+            'signed_angle': {
+                'ToeKnuckle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeKnuckle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'Back1Back12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'NoseBack1_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Back1Back12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'NoseBack1_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeKnuckle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeKnuckle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'Back1Back12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'NoseBack1_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Back1Back12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'NoseBack1_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
             }
         }
     }
@@ -434,6 +482,9 @@ measures_list_feature_reduction = {
             'swing_duration': [],
             'cadence': [],
             'duty_factor': [],
+            'brake_prop_duration': {
+                'type': ['brake', 'propulsion'],
+            },
             'walking_speed': {
                 'bodypart': ['Back6','Tail1'],
                 'speed_correct': [True]
@@ -444,29 +495,50 @@ measures_list_feature_reduction = {
             'stride_length': {
                 'speed_correct': [True]
             },
-            'x': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
-                'speed_correct': [True],
+            'stance_phase': {
+                'stance_limb': ['contra_front', 'contra_hind', 'ipsi_hind']
+            },
+            'nose_tail_phase': {
+                'bodypart': ['Nose', 'Tail1'],
+                'frontback': ['front', 'hind'],
+                'coord': ['x', 'y', 'z'],
+            },
+            'double_support': {
+                'type': ['frontonly', 'homolateral', 'diagonal'],
+            },
+            'triple_support': {
+                'mode': ['any', 'front_hind'],
+            },
+            'quadruple_support': [],
+            'net_displacement_rel': {
+                'coord': ['x','y','z'],
+                'bodypart': ['Nose','Back1','Back6','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
+                'step_phase': ['0', '1', None],
+                'all_vals': [False],
+                'full_stride': [True, False],
+                'buffer_size': [0]
+            },
+            'distance_to_transition': {
                 'step_phase': ['0', '1'],
                 'all_vals': [False],
                 'full_stride': [False],
                 'buffer_size': [0]
             },
-            'y': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+            'distance_from_midline': {
                 'step_phase': ['0', '1'],
                 'all_vals': [False],
                 'full_stride': [False],
                 'buffer_size': [0]
             },
-            'z': {
-                # this is displacement
-                'bodypart': ['Nose','Back1','Back6','Back12','Tail1','Tail6','Tail12','ForepawToeR','ForepawToeL','ForepawAnkleR','ForepawAnkleL'],
+            'distance_from_belt_surface': {
                 'step_phase': ['0', '1'],
                 'all_vals': [False],
                 'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'excursion': {
+                'bodypart': ['Nose','Back1','Back6','Tail1','Tail6','Tail12','FrontIpsi','FrontContra','HindIpsi','HindContra'],
+                'coord': ['x','y','z'],
                 'buffer_size': [0]
             },
             'coo_xyz': {
@@ -480,42 +552,62 @@ measures_list_feature_reduction = {
             'ptp_amplitude_stride': {
                 'bodypart': ['Tail1','Back6']
             },
-            'body_distance': {
+            'body_length': {
                 'bodyparts': [['Back1','Back12']],
-                'step_phase': ['0', '1'],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
-                'full_stride': [False],
+                'full_stride': [True, False],
                 'buffer_size': [0]
             },
             'back_height': {
                 'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
-                'step_phase': ['0', '1'],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
-                'full_stride': [False],
+                'full_stride': [True, False],
                 'buffer_size': [0]
             },
             'tail_height': {
                 'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
-                'step_phase': ['0', '1'],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
-                'full_stride': [False],
+                'full_stride': [True, False],
                 'buffer_size': [0]
             },
-            'double_support': [],
             'back_skew': {
-                'step_phase': ['0', '1'],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
-                'full_stride': [False],
+                'full_stride': [True, False],
                 'buffer_size': [0]
             },
             'limb_rel_to_body': {
                 'time': ['start','end'],
-                'step_phase': ['0', '1'],
+                'step_phase': ['0', '1', None],
                 'all_vals': [False],
-                'full_stride': [False],
+                'full_stride': [True, False],
                 'buffer_size': [0]
+            },
+            'signed_angle': {
+                'ToeKnuckle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeKnuckle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'Back1Back12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'NoseBack1_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Back1Back12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'NoseBack1_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeKnuckle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeKnuckle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'Back1Back12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'NoseBack1_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Back1Back12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'NoseBack1_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
             }
-        }
-
+}
 
 

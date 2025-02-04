@@ -70,22 +70,28 @@ class PrepareSingleConditionFiles():
             days = []
             mouse_data = {}
             days_offset = 0
+            frame_offset = 0  # initialize cumulative frame offset
             for f in mouse_files:
                 match = re.search(r'Day(\d+)', f)
                 if match:
-                    day_num = int(match.group(1))
+                    day_num = int(match.group(1)) - 1  # assuming days start at 1, adjust to 0-based
                 else:
                     raise ValueError(f"Day number not found in file: {f}")
 
-                day_num -= 1
-
                 df = pd.read_hdf(f, key='real_world_coords_runs')
-                # Exclude prep runs
+                # Exclude prep runs and adjust Run index using days_offset
                 df = self.remove_prep_runs(df, prep_runs, days_offset)
-                mouse_data[day_num] = df
-                days.append(day_num)
 
-                # Update days offset
+                # Apply the cumulative frame offset to the FrameIdx index level
+                df = df.rename(index=lambda x: x + frame_offset, level='FrameIdx')
+
+                # Update frame_offset based on the maximum FrameIdx from the current day's data.
+                # Adding 1 ensures the next day's FrameIdx starts after the current max.
+                frame_offset = df.index.get_level_values('FrameIdx').max() + 1000
+
+                mouse_data[day_num] = df
+
+                # Update days_offset as you already do for runs
                 if mouse == '1035302' and self.speed == 'HighLow':
                     if day_num == 0:
                         days_offset += 20
@@ -304,9 +310,9 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Repeats
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
 
     # Extended
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended').get_dirs()

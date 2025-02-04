@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import pandas as pd
 import re
 import os
@@ -12,8 +13,6 @@ from Helpers.Config_23 import *
 
 from Analysis.MeasuresByStride import CalculateMeasuresByStride, RunMeasures
 from Analysis.MeasuresByRun import CalculateMeasuresByRun
-
-
 
 class Save():
     def __init__(self, file, exp=None, speed=None, repeat_extend=None, exp_wash=None,
@@ -95,7 +94,7 @@ class Save():
                 SwSt.append(stsw)
             except:
                 pass
-                #print('Cant get stsw for run %s' %r)
+                #print(f'Cant get stsw for run {r}, mouse {mouseID}')
         SwSt_df = pd.concat(SwSt)
 
         return SwSt_df
@@ -170,6 +169,7 @@ class Save():
         try:
             # Process data for the given mouseID
             SwSt = self.find_pre_post_transition_strides_ALL_RUNS(mouseID=mouseID)
+            self.mirror_coordinates(SwSt=SwSt, mouseID=mouseID)
             single_byStride, multi_byStride, byRun = self.get_measures_byrun_bystride(SwSt=SwSt, mouseID=mouseID)
 
             # add mouseID to SwSt index
@@ -200,7 +200,38 @@ class Save():
         finally:
             self.error_logs = []  # Reset after processing
 
-    # Inside the Save class
+    def mirror_coordinates(self, SwSt, mouseID):
+        stepping_limb_runs = {}
+        for r in SwSt.index.get_level_values('Run').unique():
+            limb = SwSt.loc(axis=0)[r].xs('SwSt_discrete', level=1, axis=1).isna().any().index[
+            SwSt.loc(axis=0)[r].xs('SwSt_discrete', level=1, axis=1).isna().any()]
+            if len(limb) > 1:
+                raise ValueError("More than one stepping limb found")
+            else:
+                stepping_limb_runs[r] = limb[0]
+        stepping_limb_runs_df = pd.DataFrame.from_dict(stepping_limb_runs, orient='index', columns=['SteppingLimb'])
+
+        L_mask = np.array(stepping_limb_runs_df.values == 'ForepawL').flatten()
+        L_runs = stepping_limb_runs_df.index[L_mask]
+
+        y_midline = structural_stuff['belt_width'] / 2
+        data = self.XYZw[mouseID].copy(deep=True)
+
+        # Create a mask for the rows to update (runs where stepping limb is 'ForepawL')
+        left_mask = self.XYZw[mouseID].index.get_level_values('Run').isin(L_runs)
+
+        # Create a slice for selecting all 'y' columns for all body parts
+        cols_y = pd.IndexSlice[:, 'y']
+
+        # Calculate mirrored coordinates in one go (vectorized)
+        mirrored_coords = 2 * y_midline - data.loc[left_mask, cols_y]
+
+        # Update the data DataFrame
+        data.loc[left_mask, cols_y] = mirrored_coords
+
+        # Save the mirrored data back to self.XYZw for the mouseID
+        self.XYZw[mouseID] = data
+
     def process_mouse_data_wrapper(self, args):
         mouseID = args
         single_byStride, multi_byStride, byRun, SwSt = self.process_mouse_data(mouseID)
@@ -208,7 +239,7 @@ class Save():
 
     def save_all_measures_parallel(self):
         #pool = Pool(cpu_count())
-        pool = Pool(processes=8)
+        pool = Pool(processes=4)
         # Initialize multiprocessing Pool with number of CPU cores
         results = []
 
@@ -327,9 +358,9 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Repeats
-    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
-    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
-    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
 
     # Extended
     GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended').get_dirs()

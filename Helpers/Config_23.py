@@ -51,6 +51,20 @@ expstuff = {
             }
         }
     },
+    'condition_exp_runs_basic': {
+        'APAChar': {  # todo changed from apacharruns
+            'Repeats': {  # 10, 20, 10
+                'Baseline': np.arange(0, 10),  # todo also change from starting at 1 to 0
+                'APA': np.arange(10, 30),
+                'Washout': np.arange(30, 40)
+            },
+            'Extended': {  # 10, 50, 50, 50
+                'Baseline': np.arange(0, 10),
+                'APA': np.arange(10, 110),
+                'Washout': np.arange(110, 160),
+            }
+        }
+    },
     'setup': {
         'distancescm': [13,12,11.5,11.5], # goes 0: wall1-wall0,  1: wall2-wall1, 3: wall3-wall2, 4: wall4-wall3
         'transition_mm': 470, # mm

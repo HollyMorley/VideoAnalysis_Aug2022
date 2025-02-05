@@ -25,7 +25,7 @@ class CalculateMeasuresByStride():
 
     def calculate_belt_speed(self): # mm/s
         speed_condition = self.conditions['speed']
-        run_phases = expstuff['condition_exp_runs'][self.conditions['exp']][self.conditions['repeat_extend']]
+        run_phases = expstuff['condition_exp_runs_basic'][self.conditions['exp']][self.conditions['repeat_extend']]
         for phase_name, run_array in run_phases.items():
             if self.r in run_array:
                 run_phase = phase_name

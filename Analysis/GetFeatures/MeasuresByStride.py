@@ -1,8 +1,7 @@
 import warnings
+import re
 import pandas as pd
 import itertools
-from scipy.signal import savgol_filter
-import re
 from scipy.signal import correlate
 from scipy.signal import savgol_filter
 

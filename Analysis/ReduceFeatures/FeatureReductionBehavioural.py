@@ -1,13 +1,12 @@
 import pandas as pd
 import numpy as np
-import itertools
-import os  # For directory operations
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+import os
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 import seaborn as sns
+import itertools
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.preprocessing import StandardScaler
 
 from Helpers.Config_23 import *
 

@@ -5,7 +5,7 @@ from matplotlib.cm import ScalarMappable
 import pandas as pd
 import Helpers.utils as utils
 import Helpers.GetRuns as GetRuns
-# from Helpers.Config import *
+# from ReduceFeatures.Config import *
 from Helpers.Config_23 import *
 from Archive import Plot
 import scipy

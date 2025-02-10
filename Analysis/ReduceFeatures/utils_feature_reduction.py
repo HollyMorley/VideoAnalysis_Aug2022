@@ -8,6 +8,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from scipy.signal import medfilt
 
 
 def plot_pairwise_cosine_similarity(pivot_df, save_path):
@@ -78,68 +81,148 @@ def aggregate_feature_contributions(contrib_list):
     return pivot_df
 
 
-def compute_feature_importances_regression(X, y, cv=5):
+def balanced_accuracy(y_true, y_pred):
     """
-    Computes the full model cvR², the cvR² for each single-feature model,
-    and the unique contribution (ΔR²) for each feature, where
-      ΔR² = full_model_cvR² - cvR²(without the feature).
+    Calculate balanced accuracy: average of sensitivity and specificity.
 
-    Parameters:
-        X (pd.DataFrame): Standardized data (PCs by runs).
-        y (np.array): Binary labels (e.g. 1 for phase1, 0 for phase2).
-        cv (int): Number of cross-validation folds.
+    Args:
+        y_true: True labels (0 or 1)
+        y_pred: Predicted labels (0 or 1)
 
     Returns:
-        full_R2 (float): The full model cross-validated R².
-        single_cvR2 (dict): Dictionary mapping feature name -> cvR² using only that feature.
-        unique_delta_R2 (dict): Dictionary mapping feature name -> unique ΔR².
+        float: balanced accuracy score
     """
-    model = LogisticRegression()
-    full_R2 = np.mean(cross_val_score(model, X, y, cv=cv, scoring='balanced_accuracy')) #dont want to cross validate the full model
+    # Calculate true positives and true negatives
+    tp = sum((yt == 1 and yp == 1) for yt, yp in zip(y_true, y_pred))
+    tn = sum((yt == 0 and yp == 0) for yt, yp in zip(y_true, y_pred))
 
-    model.fit(X, y)
-    ws = model.coef_
-    w = np.mean(ws, axis=1)[0]
+    # Calculate false positives and false negatives
+    fp = sum((yt == 0 and yp == 1) for yt, yp in zip(y_true, y_pred))
+    fn = sum((yt == 1 and yp == 0) for yt, yp in zip(y_true, y_pred))
 
-    single_cvR2 = {}
-    unique_delta_R2 = {}
+    # Calculate sensitivity (true positive rate)
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
 
-    for feature in X.columns:
-        # Single-feature model
-        X_feature = X[[feature]]
-        cvR2_feature = np.mean(cross_val_score(model, X_feature, y, cv=cv, scoring='balanced_accuracy'))
-        single_cvR2[feature] = cvR2_feature
+    # Calculate specificity (true negative rate)
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
 
-        # Reduced model (all features except this one)
-        X_reduced = X.drop(columns=[feature])
-        cvR2_reduced = np.mean(cross_val_score(model, X_reduced, y, cv=cv, scoring='balanced_accuracy'))
-        unique_delta_R2[feature] = full_R2 - cvR2_reduced
+    # Balanced accuracy is the average of sensitivity and specificity
+    return (sensitivity + specificity)/2
 
-    return full_R2, single_cvR2, unique_delta_R2, w
+def shuffle_single(feature, raw_features):
+    shuffled = raw_features.copy()
+    for col in raw_features.columns:
+        if col != feature:
+            shuffled[col] = np.random.permutation(shuffled[col].values)
+    return shuffled
+
+def shuffle_unique(feature, raw_features):
+    shuffled = raw_features.copy()
+    shuffled.loc(axis=0)[feature] = np.random.permutation(shuffled.loc(axis=0)[feature].values)
+    return shuffled
 
 
-def plot_feature_accuracy(single_cvR2, save_path, title_suffix="Single_Feature_cvR2"):
+def plot_feature_accuracy(single_cvaccuracy, save_path, title_suffix="Single_Feature_cvaccuracy"):
     """
-    Plots the single-feature model cvR² values.
+    Plots the single-feature model accuracy values.
 
     Parameters:
-        single_cvR2 (dict): Mapping of feature names to cvR² values.
+        single_cvaccuracy (dict): Mapping of feature names to accuracy values.
         save_path (str): Directory where the plot will be saved.
         title_suffix (str): Suffix for the plot title and filename.
     """
-    df = pd.DataFrame(list(single_cvR2.items()), columns=['Feature', 'cvR2'])
+    df = pd.DataFrame(list(single_cvaccuracy.items()), columns=['Feature', 'cvaccuracy'])
     # Replace the separator so that group headers appear as "Group: FeatureName"
     df['Display'] = df['Feature'].apply(lambda x: x.replace('|', ': '))
-    #df = df.sort_values(by='cvR2', ascending=False)
+    #df = df.sort_values(by='cvaccuracy', ascending=False)
 
     plt.figure(figsize=(14, max(8, len(df) * 0.3)))
-    sns.barplot(data=df, x='cvR2', y='Display', palette='viridis')
+    sns.barplot(data=df, x='cvaccuracy', y='Display', palette='viridis')
     plt.title('Single Feature Model accuracy ' + title_suffix)
     plt.xlabel('accuracy')
     plt.ylabel('Feature (Group: FeatureName)')
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f"Single_Feature_cvR2_{title_suffix}.png"), dpi=300)
+    plt.savefig(os.path.join(save_path, f"Single_Feature_cvaccuracy_{title_suffix}.png"), dpi=300)
     plt.close()
+
+def plot_unique_delta_accuracy(unique_delta_accuracy, save_path, title_suffix="Unique_Δaccuracy"):
+    """
+    Plots the unique contribution (Δaccuracy) for each feature.
+
+    Parameters:
+        unique_delta_accuracy (dict): Mapping of feature names to unique Δaccuracy.
+        save_path (str): Directory where the plot will be saved.
+        title_suffix (str): Suffix for the plot title and filename.
+    """
+
+    df = pd.DataFrame(list(unique_delta_accuracy.items()), columns=['Feature', 'Unique_Δaccuracy'])
+    df['Display'] = df['Feature'].apply(lambda x: x.replace('|', ': '))
+    #df = df.sort_values(by='Unique_Δaccuracy', ascending=False)
+
+    plt.figure(figsize=(14, max(8, len(df) * 0.3)))
+    sns.barplot(data=df, x='Unique_Δaccuracy', y='Display', palette='magma')
+    plt.title('Unique Feature Contributions (Δaccuracy) ' + title_suffix)
+    plt.xlabel('Δaccuracy')
+    plt.ylabel('Feature (Group: FeatureName)')
+    plt.axvline(0, color='black', linestyle='--')
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, f"Unique_delta_accuracy_{title_suffix}.png"), dpi=300)
+    plt.close()
+
+def plot_run_prediction(scaled_data_df, run_pred, save_path, mouse_id, phase1, phase2, suffix):
+    # median filter smoothing on run_pred
+    run_pred_smoothed = medfilt(run_pred[0], kernel_size=3)
+
+    # plot run prediction
+    plt.figure(figsize=(16, 6))
+    plt.plot(scaled_data_df.index, run_pred[0], color='black', label='Prediction')
+    plt.plot(scaled_data_df.index, run_pred_smoothed, color='black', ls='--', label='Smoothed Prediction')
+    # Exp phases
+    plt.vlines(x=9.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='red', linestyle='--')
+    plt.vlines(x=109.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='red', linestyle='--')
+    # Days
+    plt.vlines(x=39.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='black', linestyle='--', alpha=0.5)
+    plt.vlines(x=79.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='black', linestyle='--', alpha=0.5)
+    plt.vlines(x=39.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='black', linestyle='--', alpha=0.5)
+    plt.vlines(x=119.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='black', linestyle='--', alpha=0.5)
+
+    # plot a shaded box over x=60 to x=110 and x=135 to x=159, ymin to ymax
+    plt.fill_between(x=range(60, 110), y1=run_pred[0].min(), y2=run_pred[0].max(), color='gray', alpha=0.1)
+    plt.fill_between(x=range(135, 160), y1=run_pred[0].min(), y2=run_pred[0].max(), color='gray', alpha=0.1)
+
+    plt.title(f'Run Prediction for Mouse {mouse_id} - {phase1} vs {phase2}')
+    plt.xlabel('Run Number')
+    plt.ylabel('Prediction')
+
+    legend_elements = [Line2D([0], [0], color='red', linestyle='--', label='Experimental Phases'),
+                          Line2D([0], [0], color='black', linestyle='--', label='Days'),
+                          Patch(facecolor='gray', edgecolor='black', alpha=0.1, label='Training Portion'),
+                          Line2D([0], [0], color='black', label='Prediction', linestyle='-'),
+                          Line2D([0], [0], color='black', label='Smoothed Prediction', linestyle='--')]
+    plt.legend(handles=legend_elements, loc='upper right')
+    plt.grid(False)
+    # horizontal grid lines only
+    plt.gca().yaxis.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, f"Run_Prediction_{phase1}_vs_{phase2}_{suffix}.png"), dpi=300)
+
+# def corss_validate_logistic_regression(X, y, cv=5):
+
+
+def cross_validate_knn(X, y, k, cv=5):
+    """
+    Find number of neighbors that gives the best cross-validated accuracy.
+    """
+    best_k = 0
+    best_acc = 0
+    for i in range(1, k+1):
+        acc = np.mean(cross_val_score(KNeighborsClassifier(n_neighbors=i), X, y, cv=cv))
+        if acc > best_acc:
+            best_k = i
+            best_acc = acc
+    return best_k, best_acc
+
+
 
 
 def create_save_directory(base_dir, mouse_id, stride_number, phase1, phase2):
@@ -200,32 +283,6 @@ def determine_stepping_limbs(stride_data, mouse_id, run, stride_number):
     else:
         return paws[0]
 
-def plot_unique_delta_accuracy(unique_delta_R2, save_path, title_suffix="Unique_ΔR2"):
-    """
-    Plots the unique contribution (ΔR²) for each feature.
-
-    Parameters:
-        unique_delta_R2 (dict): Mapping of feature names to unique ΔR².
-        save_path (str): Directory where the plot will be saved.
-        title_suffix (str): Suffix for the plot title and filename.
-    """
-    import matplotlib.pyplot as plt
-    import pandas as pd
-    import seaborn as sns
-
-    df = pd.DataFrame(list(unique_delta_R2.items()), columns=['Feature', 'Unique_ΔR2'])
-    df['Display'] = df['Feature'].apply(lambda x: x.replace('|', ': '))
-    #df = df.sort_values(by='Unique_ΔR2', ascending=False)
-
-    plt.figure(figsize=(14, max(8, len(df) * 0.3)))
-    sns.barplot(data=df, x='Unique_Δaccuracy', y='Display', palette='magma')
-    plt.title('Unique Feature Contributions (Δaccuracy) ' + title_suffix)
-    plt.xlabel('Δaccuracy')
-    plt.ylabel('Feature (Group: FeatureName)')
-    plt.axvline(0, color='black', linestyle='--')
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f"Unique_delta_R2_{title_suffix}.png"), dpi=300)
-    plt.close()
 
 
 def build_desired_columns(measures_list_feature_reduction, data, separator=', '):

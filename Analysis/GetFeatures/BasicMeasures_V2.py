@@ -1,18 +1,18 @@
-import matplotlib.pyplot as plt
 import pandas as pd
-import re
 import os
 import pickle
 import warnings
 from tqdm import tqdm
-from multiprocessing import Pool, cpu_count
 
-from Helpers.ConditionsFinder import BaseConditionFiles
+from multiprocessing import Pool
+
+
 from Helpers import utils
 from Helpers.Config_23 import *
 
-from Analysis.MeasuresByStride import CalculateMeasuresByStride, RunMeasures
-from Analysis.MeasuresByRun import CalculateMeasuresByRun
+from Helpers.ConditionsFinder import BaseConditionFiles
+from Analysis.GetFeatures.MeasuresByStride import CalculateMeasuresByStride, RunMeasures
+from Analysis.GetFeatures.MeasuresByRun import CalculateMeasuresByRun
 
 class Save():
     def __init__(self, file, exp=None, speed=None, repeat_extend=None, exp_wash=None,
@@ -397,7 +397,7 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Extended
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs() # todo redo these with all analyses!!!!
+    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs() # todo redo these with all analyses!!!!
     GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs()
     GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended',  analyses=["behaviour", "single", "multi"]).get_dirs()
 

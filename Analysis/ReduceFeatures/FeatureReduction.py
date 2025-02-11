@@ -30,7 +30,7 @@ mouse_ids = [
 stride_numbers = [-1]  # List of stride numbers to filter data
 phases = ['APA2', 'Wash2']  # List of phases to compare
 base_save_dir = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round6-20250211')
-overwrite_FeatureSelection = True
+overwrite_FeatureSelection = False
 
 # ----------------------------
 # Function Definitions
@@ -230,7 +230,6 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
         all_feature_accuracies_df['iteration_diffs'] = all_feature_accuracies_df['iteration_diffs'].apply(ast.literal_eval)
         print("Feature selection results loaded from file.")
     else:
-        all_feature_accuracies = {}
         print("Running feature selection...")
         features = list(selected_scaled_data_df.index)
         # Process features in parallel (using all available cores; adjust n_jobs as needed)
@@ -249,77 +248,12 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
         # Combine results into a dictionary
         all_feature_accuracies = dict(results)
 
-        for feature in tqdm(selected_scaled_data_df.index):
-            X = selected_scaled_data_df.loc[feature].values
-
-            # Initialize containers for the current feature
-            fold_true_accuracies = []  # to keep each fold's true accuracy
-            iteration_diffs_all = {i: [] for i in range(n_iterations)}  # to collect diffs across folds
-
-            for fold in range(1,nFolds+1):
-                # Get feature values across runs in current fold
-                test_mask = np.array([fold_assignment[run] == fold for run in run_numbers])
-                train_mask = ~test_mask # invert mask
-
-                # ------- Train on the training set -------
-                X_fold_train = X[train_mask]
-                X_fold_train = X_fold_train.reshape(1, -1)
-                #  Create y (regression target) - 1 for phase1, 0 for phase2 - for this fold
-                y_reg_fold_train = y_reg[train_mask]
-                # Run logistic regression on single feature to get weights
-                w, feature_accuracy_train = compute_regression(X_fold_train, y_reg_fold_train)
-
-                # ------- Apply the model to the test set -------
-                X_fold_test = X[test_mask]
-                X_fold_test = X_fold_test.reshape(1, -1)
-                #  Create y (regression target) - 1 for phase1, 0 for phase2 - for this fold
-                y_reg_fold_test = y_reg[test_mask]
-                # get accuracy from test set
-                y_pred = np.dot(w, X_fold_test)
-                y_pred[y_pred > 0] = 1
-                y_pred[y_pred < 0] = 0
-                feature_accuracy_test = utils.balanced_accuracy(y_reg_fold_test.T, y_pred.T)
-                fold_true_accuracies.append(feature_accuracy_test)
-
-                # Shuffle feature values for this fold and run logistic regression over n_iterations
-                for i in range(n_iterations):
-                    X_shuffled = X.copy()
-                    random.shuffle(X_shuffled)
-
-                    # ----- Train on the training set -------
-                    X_shuffled_fold_train = X_shuffled[train_mask]
-                    X_shuffled_fold_train = X_shuffled_fold_train.reshape(1, -1)
-                    # Run logistic regression on shuffled feature
-                    w, shuffled_feature_accuracy = compute_regression(X_shuffled_fold_train, y_reg_fold_train)
-
-                    # ----- Apply the model to the test set -------
-                    X_shuffled_fold_test = X_shuffled[test_mask]
-                    X_shuffled_fold_test = X_shuffled_fold_test.reshape(1, -1)
-                    # get accuracy from test set
-                    y_pred_shuffle = np.dot(w, X_shuffled_fold_test)
-                    y_pred_shuffle[y_pred_shuffle > 0] = 1
-                    y_pred_shuffle[y_pred_shuffle < 0] = 0
-                    shuffled_feature_accuracy_test = utils.balanced_accuracy(y_reg_fold_test.T, y_pred_shuffle.T)
-
-                    # Find difference between feature and shuffled feature
-                    feature_diff = feature_accuracy_test - shuffled_feature_accuracy_test
-                    iteration_diffs_all[i].append(feature_diff)
-
-            # After processing all folds, average the feature differences for each iteration
-            avg_feature_diffs = {i: np.mean(iteration_diffs_all[i]) for i in range(n_iterations)}
-            avg_true_accuracy = np.mean(fold_true_accuracies)
-
-            # Store the results for the current feature
-            all_feature_accuracies[feature] = {
-                "true_accuracy": avg_true_accuracy,
-                "iteration_diffs": avg_feature_diffs
-            }
         all_feature_accuracies_df = pd.DataFrame.from_dict(all_feature_accuracies, orient='index')
 
         # find if true accuracy is significant compared to shuffled accuracies ie > than 95% of shuffled accuracies
         all_feature_accuracies_df['significant'] = 0 > \
                                                    all_feature_accuracies_df['iteration_diffs'].apply(
-                                                       lambda d: np.percentile(list(d.values()), 95))
+                                                       lambda d: np.percentile(list(d.values()), 90))
         # Save the feature selection results
         all_feature_accuracies_df.to_csv(os.path.join(save_path, 'feature_selection_results.csv'))
 
@@ -328,19 +262,36 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     # store significant features in a reduced df
     significant_features_accuracies = all_feature_accuracies_df.loc[significant_features]
     # plot significant features
-    if not os.path.exists(os.path.join(save_path, 'feature_significances')):
-        os.makedirs(os.path.join(save_path, 'feature_significances'))
-    for fidx, feature in enumerate(significant_features):
-        plt.figure()
-        sns.histplot(significant_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
-        plt.axvline(0, color='red', label='True Accuracy')
-        plt.title(feature)
-        plt.xlabel('True Accuracy - Shuffled Accuracy')
-        plt.ylabel('Frequency')
-        plt.legend()
-
-        plt.savefig(os.path.join(save_path, f'feature_significances\\feature{fidx}_feature_selection.png'))
-        plt.close()
+    # if not os.path.exists(os.path.join(save_path, 'feature_significances')):
+    #     os.makedirs(os.path.join(save_path, 'feature_significances'))
+    # for fidx, feature in enumerate(significant_features):
+    #     plt.figure()
+    #     sns.histplot(significant_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+    #     plt.axvline(0, color='red', label='True Accuracy')
+    #     plt.title(feature)
+    #     plt.xlabel('True Accuracy - Shuffled Accuracy')
+    #     plt.ylabel('Frequency')
+    #     plt.legend()
+    #
+    #     plt.savefig(os.path.join(save_path, f'feature_significances\\feature{fidx}_feature_selection.png'))
+    #     plt.close()
+    #
+    # nonsignificant_features = all_feature_accuracies_df[~all_feature_accuracies_df['significant']].index
+    # nonsignificant_features_accuracies = all_feature_accuracies_df.loc[nonsignificant_features]
+    # # plot non significant features
+    # if not os.path.exists(os.path.join(save_path, 'feature_nonsignificances')):
+    #     os.makedirs(os.path.join(save_path, 'feature_nonsignificances'))
+    # for fidx, feature in enumerate(nonsignificant_features):
+    #     plt.figure()
+    #     sns.histplot(nonsignificant_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+    #     plt.axvline(0, color='red', label='True Accuracy')
+    #     plt.title(feature)
+    #     plt.xlabel('True Accuracy - Shuffled Accuracy')
+    #     plt.ylabel('Frequency')
+    #     plt.legend()
+    #
+    #     plt.savefig(os.path.join(save_path, f'feature_nonsignificances\\feature{fidx}_feature_selection.png'))
+    #     plt.close()
 
     # Now reduce the data to only the significant features
     reduced_feature_data_df = scaled_data_df.loc(axis=1)[significant_features]
@@ -354,7 +305,7 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     plot_average_variance_explained_across_folds(fold_variances, reduced_feature_data_df)
 
     # Perform PCA.
-    pca, pcs, loadings_df = perform_pca(reduced_feature_data_df, n_components=11)
+    pca, pcs, loadings_df = perform_pca(reduced_feature_data_df, n_components=10)
 
     # Get PCs and labels for each phase.
     pcs_combined, labels, pcs_phase1, pcs_phase2 = get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2)

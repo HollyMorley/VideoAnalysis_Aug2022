@@ -151,7 +151,7 @@ def cross_validate_pca(scaled_data_df, save_path, n_folds=10):
         X_train = scaled_data_df.iloc[train_index]
         current_n_components = min(num_features, X_train.shape[0])
         max_n_components = max(max_n_components, current_n_components)
-        print(f"Fold {fold_idx + 1}: {current_n_components} components")
+        #print(f"Fold {fold_idx + 1}: {current_n_components} components")
 
         pca = PCA(n_components=current_n_components)
         pca.fit(X_train)

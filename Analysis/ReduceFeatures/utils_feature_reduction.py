@@ -13,6 +13,19 @@ from matplotlib.patches import Patch
 from scipy.signal import medfilt
 
 
+def normalize(Xdr):
+    normalize_mean = []
+    normalize_std = []
+    for row in range(Xdr.shape[0]):
+        mean = np.mean(Xdr[row, :])
+        std = np.std(Xdr[row, :])
+        Xdr[row, :] = (Xdr[row, :] - mean) / std
+        normalize_mean.append(mean)
+        normalize_std.append(std)
+    normalize_std = np.array(normalize_std)
+    normalize_mean = np.array(normalize_mean)
+    return Xdr, normalize_mean, normalize_std
+
 def plot_pairwise_cosine_similarity(pivot_df, save_path):
     """
     Computes the pairwise cosine similarity between mice based on their unique contributions,
@@ -121,7 +134,6 @@ def shuffle_unique(feature, raw_features):
     shuffled.loc(axis=0)[feature] = np.random.permutation(shuffled.loc(axis=0)[feature].values)
     return shuffled
 
-
 def plot_feature_accuracy(single_cvaccuracy, save_path, title_suffix="Single_Feature_cvaccuracy"):
     """
     Plots the single-feature model accuracy values.
@@ -171,12 +183,12 @@ def plot_unique_delta_accuracy(unique_delta_accuracy, save_path, title_suffix="U
 
 def plot_run_prediction(scaled_data_df, run_pred, save_path, mouse_id, phase1, phase2, suffix):
     # median filter smoothing on run_pred
-    run_pred_smoothed = medfilt(run_pred[0], kernel_size=3)
+    run_pred_smoothed = medfilt(run_pred[0], kernel_size=5)
 
     # plot run prediction
     plt.figure(figsize=(16, 6))
-    plt.plot(scaled_data_df.index, run_pred[0], color='black', label='Prediction')
-    plt.plot(scaled_data_df.index, run_pred_smoothed, color='black', ls='--', label='Smoothed Prediction')
+    plt.plot(scaled_data_df.index, run_pred[0], color='lightblue', ls='--', label='Prediction')
+    plt.plot(scaled_data_df.index, run_pred_smoothed, color='blue', ls='-', label='Smoothed Prediction')
     # Exp phases
     plt.vlines(x=9.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='red', linestyle='--')
     plt.vlines(x=109.5, ymin=run_pred[0].min(), ymax=run_pred[0].max(), color='red', linestyle='--')
@@ -197,14 +209,15 @@ def plot_run_prediction(scaled_data_df, run_pred, save_path, mouse_id, phase1, p
     legend_elements = [Line2D([0], [0], color='red', linestyle='--', label='Experimental Phases'),
                           Line2D([0], [0], color='black', linestyle='--', label='Days'),
                           Patch(facecolor='gray', edgecolor='black', alpha=0.1, label='Training Portion'),
-                          Line2D([0], [0], color='black', label='Prediction', linestyle='-'),
-                          Line2D([0], [0], color='black', label='Smoothed Prediction', linestyle='--')]
+                          Line2D([0], [0], color='lightblue', label='Prediction', linestyle='--'),
+                          Line2D([0], [0], color='blue', label='Smoothed Prediction', linestyle='-')]
     plt.legend(handles=legend_elements, loc='upper right')
     plt.grid(False)
     # horizontal grid lines only
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f"Run_Prediction_{phase1}_vs_{phase2}_{suffix}.png"), dpi=300)
+    plt.close()
 
 # def corss_validate_logistic_regression(X, y, cv=5):
 

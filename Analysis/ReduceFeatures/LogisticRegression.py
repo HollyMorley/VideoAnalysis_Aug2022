@@ -18,6 +18,22 @@ def compute_regression(X, y):
 
     return w, bal_acc
 
+def compute_lasso_regression(X, y):
+    # Use L1 penalty for Lasso-style logistic regression.
+    model = LogisticRegression(penalty='l1', solver='liblinear', fit_intercept=False, C=1.0)
+    model.fit(X.T, y)
+    w = model.coef_
+
+    y_pred = np.dot(w, X)
+    # change y_pred +ves to 1 and -ves to 0
+    y_pred[y_pred > 0] = 1
+    y_pred[y_pred < 0] = 0
+
+    bal_acc = balanced_accuracy(y.T, y_pred.T)
+
+    return w, bal_acc
+
+
 def find_unique_and_single_contributions(selected_scaled_data_df, loadings_df, normalize_mean, normalize_std, y_reg, full_accuracy):
     single_all = []
     unique_all = []
@@ -60,4 +76,6 @@ def find_full_shuffle_accuracy(selected_scaled_data_df, loadings_df, normalize_m
     shuffle_all = ((shuffle_all.T - normalize_mean) / normalize_std).T
     _, full_accuracy_shuffled = compute_regression(shuffle_all, y_reg)
     return full_accuracy_shuffled
+
+
 

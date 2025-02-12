@@ -186,7 +186,7 @@ def plot_run_prediction(scaled_data_df, run_pred, save_path, mouse_id, phase1, p
     run_pred_smoothed = medfilt(run_pred[0], kernel_size=5)
 
     # plot run prediction
-    plt.figure(figsize=(16, 6))
+    plt.figure(figsize=(8, 6))
     plt.plot(scaled_data_df.index, run_pred[0], color='lightblue', ls='--', label='Prediction')
     plt.plot(scaled_data_df.index, run_pred_smoothed, color='blue', ls='-', label='Smoothed Prediction')
     # Exp phases

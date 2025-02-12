@@ -25,16 +25,18 @@ from Helpers.Config_23 import *
 # ----------------------------
 
 # Set your parameters here
-global_fs_mouse_ids = ['1035243', '1035250']
-mouse_ids = ['1035243', '1035250']
-# mouse_ids = [
-#     '1035243', '1035244', '1035245', '1035246',
-#     '1035249', '1035250', '1035297', '1035298',
-#     '1035299', '1035301', '1035302'
-# ]  # List of mouse IDs to analyze
+# global_fs_mouse_ids = ['1035243', '1035250']
+global_fs_mouse_ids = ['1035243', '1035244', '1035245', '1035246',
+    '1035250','1035299', '1035301'] # excluding 249 and 302 as missing data for them, and 297, 298 as not good mice
+# mouse_ids = ['1035243', '1035250']
+mouse_ids = [
+    '1035243', '1035244', '1035245', '1035246',
+    '1035249', '1035250', '1035297', '1035298',
+    '1035299', '1035301', '1035302'
+]  # List of mouse IDs to analyze
 stride_numbers = [-1]  # List of stride numbers to filter data
 phases = ['APA2', 'Wash2']  # List of phases to compare
-base_save_dir = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round9-20250212-global-lasso')
+base_save_dir = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round9-20250212-global-rfecv-allmice-c=1')
 overwrite_FeatureSelection = False
 
 n_iterations_selection = 100
@@ -153,17 +155,23 @@ def get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2):
 
     return pcs_combined, labels, pcs_phase1, pcs_phase2
 
-def rfe_feature_selection(selected_scaled_data_df, y, cv=5):
+def rfe_feature_selection(selected_scaled_data_df, y, cv=5, min_features_to_select=5, C=0.01):
     """
     Performs feature selection using RFECV with L1-regularized logistic regression.
-    Assumes selected_scaled_data_df has features as rows and samples as columns.
+    Parameters:
+      - selected_scaled_data_df: DataFrame with features as rows and samples as columns.
+      - y: target vector.
+      - cv: number of folds for cross-validation.
+      - min_features_to_select: minimum number of features RFECV is allowed to select.
+      - C: Inverse regularization strength (higher values reduce regularization).
     """
     from sklearn.feature_selection import RFECV
     from sklearn.linear_model import LogisticRegression
     # Transpose so that rows are samples and columns are features.
     X = selected_scaled_data_df.T
-    estimator = LogisticRegression(penalty='l1', solver='liblinear', fit_intercept=False, C=1.0)
-    rfecv = RFECV(estimator=estimator, step=1, cv=cv, scoring='balanced_accuracy')
+    estimator = LogisticRegression(penalty='l1', solver='liblinear', fit_intercept=False, C=C)
+    rfecv = RFECV(estimator=estimator, step=1, cv=cv, scoring='balanced_accuracy',
+                  min_features_to_select=min_features_to_select)
     rfecv.fit(X, y)
     selected_features = selected_scaled_data_df.index[rfecv.support_]
     print(f"RFECV selected {rfecv.n_features_} features.")
@@ -184,8 +192,7 @@ def random_forest_feature_selection(selected_scaled_data_df, y):
     print(f"Random Forest selected {len(selected_features)} features (threshold: {threshold:.4f}).")
     return selected_features, rf
 
-
-def unified_feature_selection(feature_data_df, y, method='rfecv', cv=nFolds_selection, n_iterations=n_iterations_selection, fold_assignment=None):
+def unified_feature_selection(feature_data_df, y, method='regression', cv=nFolds_selection, n_iterations=n_iterations_selection, fold_assignment=None, save_file=None):
     """
     Unified feature selection function that can be used both in local (single-mouse)
     and global (aggregated) cases.
@@ -197,22 +204,41 @@ def unified_feature_selection(feature_data_df, y, method='rfecv', cv=nFolds_sele
       - cv: number of folds for cross-validation (if applicable)
       - n_iterations: number of shuffles for regression-based selection
       - fold_assignment: optional pre-computed fold assignment dictionary for regression-based selection.
+      - save_file: if provided, a file path to load/save results.
 
     Returns:
-      - selected_features: the index (or list) of features that were selected.
+      - selected_features: the list (or index) of selected features.
+      - results: For 'regression' method, a DataFrame of per-feature results; otherwise, None.
     """
+    # Check if a results file exists and we are not overwriting.
+    if save_file is not None and os.path.exists(save_file) and not overwrite_FeatureSelection:
+        if method == 'regression':
+            all_feature_accuracies_df = pd.read_csv(save_file, index_col=0)
+            # Convert the string representation back into dictionaries.
+            all_feature_accuracies_df['iteration_diffs'] = all_feature_accuracies_df['iteration_diffs'].apply(
+                ast.literal_eval)
+            print("Global feature selection results loaded from file.")
+            selected_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
+            return selected_features, all_feature_accuracies_df
+        else:
+            df = pd.read_csv(save_file)
+            # Assuming selected features were saved in a column 'selected_features'
+            selected_features = df['selected_features'].tolist()
+            print("Global feature selection results loaded from file.")
+            return selected_features, None
+
+    # Compute feature selection using the chosen method.
     if method == 'rfecv':
-        # Use RFECV for the entire data matrix.
-        selected_features, rfecv_model = rfe_feature_selection(feature_data_df, y, cv=cv)
+        print("Running RFECV for feature selection.")
+        selected_features, rfecv_model = rfe_feature_selection(feature_data_df, y, cv=cv, min_features_to_select=5, C=0.1)
         print(f"RFECV selected {rfecv_model.n_features_} features.")
-        return selected_features
+        results = None
     elif method == 'rf':
-        # Use a Random Forest to rank features.
+        print("Running Random Forest for feature selection.")
         selected_features, rf_model = random_forest_feature_selection(feature_data_df, y)
         print(f"Random Forest selected {len(selected_features)} features.")
-        return selected_features
+        results = None
     elif method == 'regression':
-        # Fall back to your current per-feature method.
         N = feature_data_df.shape[1]
         if fold_assignment is None:
             indices = list(range(N))
@@ -233,11 +259,27 @@ def unified_feature_selection(feature_data_df, y, method='rfecv', cv=nFolds_sele
         )
         all_feature_accuracies = dict(results)
         all_feature_accuracies_df = pd.DataFrame.from_dict(all_feature_accuracies, orient='index')
-        # Select features where the true accuracy is significantly better than shuffled.
+        # Mark features as significant if the 99th percentile of shuffled differences is below zero.
+        all_feature_accuracies_df['significant'] = 0 > all_feature_accuracies_df['iteration_diffs'].apply(
+            lambda d: np.percentile(list(d.values()), 99)
+        )
         selected_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
-        return selected_features
+        results = all_feature_accuracies_df
     else:
         raise ValueError("Unknown method specified for feature selection.")
+
+    # Save results if a file path is provided.
+    if save_file is not None:
+        if method == 'regression':
+            results.to_csv(save_file)
+        else:
+            # Save the list of selected features in a simple CSV.
+            pd.DataFrame({'selected_features': selected_features}).to_csv(save_file, index=False)
+
+    if method == 'regression':
+        return selected_features, results
+    else:
+        return selected_features, None
 
 
 def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFolds, n_iterations):
@@ -285,7 +327,7 @@ def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFol
             X_shuffled_fold_train = X_shuffled[train_mask].reshape(1, -1)
             # Run logistic regression on shuffled data
             w, _ = compute_lasso_regression(X_shuffled_fold_train, y_reg_fold_train)
-            w, _ = compute_regression(X_shuffled_fold_train, y_reg_fold_train)
+            #w, _ = compute_regression(X_shuffled_fold_train, y_reg_fold_train)
             # knn.fit(X_shuffled_fold_train.T, y_reg_fold_train)
 
             X_shuffled_fold_test = X_shuffled[test_mask].reshape(1, -1)
@@ -307,14 +349,8 @@ def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFol
 
 
 def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition, exp, day, stride_data, save_dir,
-                             nFolds=nFolds_selection, n_iterations=n_iterations_selection):
+                             nFolds=nFolds_selection, n_iterations=n_iterations_selection, method='regression'):
     results_file = os.path.join(save_dir, 'global_feature_selection_results.csv')
-    if os.path.exists(results_file) and not overwrite_FeatureSelection:
-        all_feature_accuracies_df = pd.read_csv(results_file, index_col=0)
-        all_feature_accuracies_df['iteration_diffs'] = all_feature_accuracies_df['iteration_diffs'].apply(ast.literal_eval)
-        print("Global feature selection results loaded from file.")
-        significant_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
-        return significant_features, all_feature_accuracies_df
 
     aggregated_data_list = []
     aggregated_y_list = []
@@ -339,44 +375,51 @@ def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition,
     # Combine data across mice.
     aggregated_data_df = pd.concat(aggregated_data_list, axis=1)
     aggregated_y = np.concatenate(aggregated_y_list)
-    N = aggregated_data_df.shape[1]
 
-    # Create a fold assignment mapping for the aggregated runs.
-    indices = list(range(N))
-    random.shuffle(indices)
-    fold_assignment = {i: (j % nFolds + 1) for j, i in enumerate(indices)}
-    features = list(aggregated_data_df.index)
+    # Call unified_feature_selection (choose method as desired: 'rfecv', 'rf', or 'regression')
+    selected_features, fs_results_df = unified_feature_selection(
+                                        aggregated_data_df,
+                                        aggregated_y,
+                                        method=method,  # change as desired
+                                        cv=nFolds_selection,
+                                        n_iterations=n_iterations_selection,
+                                        save_file=results_file
+                                    )
+    print("Global selected features:", selected_features)
+    return selected_features, fs_results_df
 
-    # Run feature selection in parallel (using your existing process_single_feature).
-    results = Parallel(n_jobs=-1)(
-        delayed(process_single_feature)(
-            feature,
-            aggregated_data_df.loc[feature].values,
-            fold_assignment,
-            aggregated_y,
-            list(range(N)),
-            nFolds,
-            n_iterations
-        )
-        for feature in tqdm(features, desc="Global feature selection")
-    )
+def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2,
+                                 condition, exp, day, stride_data, selected_features,
+                                 n_components=10):
+    """
+    Aggregates data from all mice in global_mouse_ids (using only runs for phase1 and phase2),
+    restricts to the globally selected features, and computes PCA.
+    """
+    aggregated_data = []
+    for mouse_id in global_mouse_ids:
+        scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        # Get run masks for the two phases.
+        run_numbers, stepping_limbs, mask_phase1, mask_phase2 = get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2)
+        # Select only runs corresponding to the phases.
+        selected_mask = mask_phase1 | mask_phase2
+        selected_data = scaled_data_df.loc[selected_mask]
+        # Restrict to the globally selected features.
+        reduced_data = selected_data[selected_features]
+        aggregated_data.append(reduced_data)
+    # Concatenate all runs (rows) across mice.
+    global_data = pd.concat(aggregated_data)
+    # Compute PCA on the aggregated data.
+    pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
+    return pca, loadings_df
 
-    all_feature_accuracies = dict(results)
-    all_feature_accuracies_df = pd.DataFrame.from_dict(all_feature_accuracies, orient='index')
-    # Determine significance (as in your original code).
-    all_feature_accuracies_df['significant'] = 0 > all_feature_accuracies_df['iteration_diffs'].apply(
-        lambda d: np.percentile(list(d.values()), 99)
-    )
-    significant_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
-    # Save the results.
-    all_feature_accuracies_df.to_csv(results_file)
-    return significant_features, all_feature_accuracies_df
 
 
 # -----------------------------------------------------
 # Main Processing Function for Each Phase Comparison
 # -----------------------------------------------------
-def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, condition, exp, day, base_save_dir_condition, selected_features=None, fs_df=None):
+def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, condition, exp, day,
+                             base_save_dir_condition, selected_features=None, fs_df=None, method='regression',
+                             global_pca=None):
     """
     Process a single phase comparison for a given mouse. If selected_features is provided,
     that global feature set is used; otherwise local feature selection is performed.
@@ -397,98 +440,62 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     selected_scaled_data_df = scaled_data_df.loc[selected_mask].T
 
     if selected_features is None:
-        # Assign each run randomly a number from 1 to 10 (for 10 folds) for cross-validation
-        nFolds = nFolds_selection
-        n_iterations = n_iterations_selection
-        # Shuffle the list randomly
-        run_numbers_shuffled = run_numbers.copy()
-        random.shuffle(run_numbers_shuffled)
-        # Assign fold numbers 1-10 in a round-robin fashion
-        fold_assignment = {run: (i % nFolds + 1) for i, run in enumerate(run_numbers_shuffled)}
         y_reg = np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))])
-
-        # ---------------- Feature Selection ----------------
-
-        # Check if the feature selection results have already been computed
-        if os.path.exists(os.path.join(save_path, 'feature_selection_results.csv')) and overwrite_FeatureSelection == False:
-            all_feature_accuracies_df = pd.read_csv(os.path.join(save_path, 'feature_selection_results.csv'), index_col=0)
-            all_feature_accuracies_df['iteration_diffs'] = all_feature_accuracies_df['iteration_diffs'].apply(ast.literal_eval)
-            print("Feature selection results loaded from file.")
-        else:
-            print("Running feature selection...")
-            features = list(selected_scaled_data_df.index)
-            # Process features in parallel (using all available cores; adjust n_jobs as needed)
-            results = Parallel(n_jobs=-1)(
-                delayed(process_single_feature)(
-                    feature,
-                    selected_scaled_data_df.loc[feature].values,
-                    fold_assignment,
-                    y_reg,
-                    run_numbers,
-                    nFolds,
-                    n_iterations
-                )
-                for feature in tqdm(features, desc="Processing features single mouse")
-            )
-            # Combine results into a dictionary
-            all_feature_accuracies = dict(results)
-
-            all_feature_accuracies_df = pd.DataFrame.from_dict(all_feature_accuracies, orient='index')
-
-            # find if true accuracy is significant compared to shuffled accuracies ie > than 95% of shuffled accuracies
-            all_feature_accuracies_df['significant'] = 0 > \
-                                                       all_feature_accuracies_df['iteration_diffs'].apply(
-                                                           lambda d: np.percentile(list(d.values()), 99))
-            # Save the feature selection results
-            all_feature_accuracies_df.to_csv(os.path.join(save_path, 'feature_selection_results.csv'))
-        # find features that are significant
-        significant_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
+        # For local selection you might choose not to save to file (or provide a unique save_file path).
+        selected_features, _ = unified_feature_selection(
+            selected_scaled_data_df,
+            y_reg,
+            method=method,  # or 'rf' or 'regression'
+            cv=nFolds_selection,
+            n_iterations=n_iterations_selection,
+            save_file=None
+        )
+        print("Selected features (local):", selected_features)
     else:
         print("Using globally selected features for feature reduction.")
-        significant_features = selected_features
-        all_feature_accuracies_df = fs_df
+        fs_df = fs_df
 
+    if fs_df is not None:
+        # Detailed regression results are available; proceed with plotting.
+        selected_features_accuracies = fs_df.loc[selected_features]
+        print(f"Length of significant features: {len(selected_features)}")
 
-    # store significant features in a reduced df
-    significant_features_accuracies = all_feature_accuracies_df.loc[significant_features]
-    print(f"Length of significant features: {len(significant_features)}")
+        # Plot significant features.
+        if not os.path.exists(os.path.join(save_path, 'feature_significances')):
+            os.makedirs(os.path.join(save_path, 'feature_significances'))
+        for fidx, feature in enumerate(selected_features):
+            plt.figure()
+            sns.histplot(selected_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+            plt.axvline(0, color='red', label='True Accuracy')
+            plt.title(feature)
+            plt.xlabel('Shuffled Accuracy - True Accuracy')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.savefig(os.path.join(save_path, f'feature_significances\\feature{fidx}_feature_selection.png'))
+            plt.close()
 
-    # plot significant features
-    if not os.path.exists(os.path.join(save_path, 'feature_significances')):
-        os.makedirs(os.path.join(save_path, 'feature_significances'))
-    for fidx, feature in enumerate(significant_features):
-        plt.figure()
-        sns.histplot(significant_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
-        plt.axvline(0, color='red', label='True Accuracy')
-        plt.title(feature)
-        plt.xlabel('Shuffled Accuracy - True Accuracy')
-        plt.ylabel('Frequency')
-        plt.legend()
-
-        plt.savefig(os.path.join(save_path, f'feature_significances\\feature{fidx}_feature_selection.png'))
-        plt.close()
-
-    nonsignificant_features = all_feature_accuracies_df[~all_feature_accuracies_df['significant']].index
-    nonsignificant_features_accuracies = all_feature_accuracies_df.loc[nonsignificant_features]
-    # plot non significant features
-    if not os.path.exists(os.path.join(save_path, 'feature_nonsignificances')):
-        os.makedirs(os.path.join(save_path, 'feature_nonsignificances'))
-    for fidx, feature in enumerate(nonsignificant_features):
-        plt.figure()
-        sns.histplot(nonsignificant_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
-        plt.axvline(0, color='red', label='True Accuracy')
-        plt.title(feature)
-        plt.xlabel('Shuffled Accuracy - True Accuracy')
-        plt.ylabel('Frequency')
-        plt.legend()
-
-        plt.savefig(os.path.join(save_path, f'feature_nonsignificances\\feature{fidx}_feature_selection.png'))
-        plt.close()
+        # Plot non-significant features.
+        nonselected_features = fs_df[~fs_df['significant']].index
+        nonselected_features_accuracies = fs_df.loc[nonselected_features]
+        if not os.path.exists(os.path.join(save_path, 'feature_nonsignificances')):
+            os.makedirs(os.path.join(save_path, 'feature_nonsignificances'))
+        for fidx, feature in enumerate(nonselected_features):
+            plt.figure()
+            sns.histplot(nonselected_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+            plt.axvline(0, color='red', label='True Accuracy')
+            plt.title(feature)
+            plt.xlabel('Shuffled Accuracy - True Accuracy')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.savefig(os.path.join(save_path, f'feature_nonsignificances\\feature{fidx}_feature_selection.png'))
+            plt.close()
+    else:
+        # Detailed per-feature results are not available (i.e. when using RFECV or RF).
+        print("No detailed per-feature selection results available for plotting; skipping per-feature plots.")
 
     # Now reduce the data to only the significant features
-    reduced_feature_data_df = scaled_data_df.loc(axis=1)[significant_features]
-    reduced_feature_selected_data_df = selected_scaled_data_df.loc[significant_features]
-    # todo might want to also remove instances where have full stride AND both swing and stance for a single measure
+    reduced_feature_data_df = scaled_data_df.loc(axis=1)[selected_features]
+    reduced_feature_selected_data_df = selected_scaled_data_df.loc[selected_features]
 
     # ---------------- PCA Analysis ----------------
 
@@ -497,7 +504,7 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     plot_average_variance_explained_across_folds(fold_variances, reduced_feature_data_df)
 
     # Perform PCA.
-    pca, pcs, loadings_df = perform_pca(reduced_feature_data_df, n_components=10)
+    pca, pcs, loadings_df = perform_pca(reduced_feature_data_df, n_components=3)
 
     # Get PCs and labels for each phase.
     pcs_combined, labels, pcs_phase1, pcs_phase2 = get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2)
@@ -541,8 +548,8 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     print(f"Full model shuffled accuracy: {full_shuffled_accuracy:.3f}")
 
     # Plot unique and single feature contributions
-    utils.plot_unique_delta_accuracy(unique_all_dict, save_path, title_suffix=f"{phase1}_vs_{phase2}")
-    utils.plot_feature_accuracy(single_all_dict, save_path, title_suffix=f"{phase1}_vs_{phase2}")
+    utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
+    utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
 
     # Apply the full model to all runs (scaled and unscaled)
     all_trials_dr = np.dot(loadings_df.T, reduced_feature_data_df.T)
@@ -561,7 +568,7 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
 # -----------------------------------------------------
 # Main Execution Function
 # -----------------------------------------------------
-def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, allmice=False):
+def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, allmice=False, method='regression'):
     # construct path
     if exp == 'Extended':
         stride_data_path = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\MEASURES_StrideInfo.h5")
@@ -579,15 +586,16 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
         global_fs_results = {}
         for phase1, phase2 in itertools.combinations(phases, 2):
             print(f"Performing global feature selection for {phase1} vs {phase2}")
-            significant_features, fs_df = global_feature_selection(
+            selected_features, fs_df = global_feature_selection(
                 global_fs_mouse_ids,
                 stride_numbers[0],
                 phase1, phase2,
                 condition, exp, day,
                 stride_data,
-                global_fs_dir
+                global_fs_dir,
+                method=method
             )
-            global_fs_results[(phase1, phase2)] = (significant_features, fs_df)
+            global_fs_results[(phase1, phase2)] = (selected_features, fs_df)
 
 
     all_contributions = []  # list to store each mouse's contributions
@@ -608,7 +616,7 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
                         mouse_id, stride_number, phase1, phase2,
                         stride_data, condition, exp, day,
                         base_save_dir_condition,
-                        selected_features=selected_features, fs_df=fs_df
+                        selected_features=selected_features, fs_df=fs_df, method=method
                     )
                 except ValueError as e:
                     print(f"Error processing {mouse_id}, stride {stride_number}, {phase1} vs {phase2}: {e}")
@@ -629,6 +637,9 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
 # ----------------------------
 
 if __name__ == "__main__":
-    main(mouse_ids, stride_numbers, phases, condition='APAChar_LowHigh', exp='Extended',day=None,allmice=True)
+    """
+    method: regression (change within to switch knn, reg, lasso), rfecv, rf
+    """
+    main(mouse_ids, stride_numbers, phases, condition='APAChar_LowHigh', exp='Extended',day=None,allmice=True, method='rfecv')
     # main(mouse_ids, stride_numbers, phases, condition='APAChar_LowMid', exp='Extended', day=None)
     # main(mouse_ids, stride_numbers, phases, condition='APAChar_HighLow', exp='Extended', day=None)

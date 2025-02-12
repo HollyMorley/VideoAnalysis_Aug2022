@@ -134,7 +134,7 @@ def shuffle_unique(feature, raw_features):
     shuffled.loc(axis=0)[feature] = np.random.permutation(shuffled.loc(axis=0)[feature].values)
     return shuffled
 
-def plot_feature_accuracy(single_cvaccuracy, save_path, title_suffix="Single_Feature_cvaccuracy"):
+def plot_feature_accuracy(single_cvaccuracy, mouseID, save_path, title_suffix="Single_Feature_cvaccuracy"):
     """
     Plots the single-feature model accuracy values.
 
@@ -150,14 +150,14 @@ def plot_feature_accuracy(single_cvaccuracy, save_path, title_suffix="Single_Fea
 
     plt.figure(figsize=(14, max(8, len(df) * 0.3)))
     sns.barplot(data=df, x='cvaccuracy', y='Display', palette='viridis')
-    plt.title('Single Feature Model accuracy ' + title_suffix)
+    plt.title(f'{mouseID}\nSingle Feature Model accuracy ' + title_suffix)
     plt.xlabel('accuracy')
     plt.ylabel('Feature (Group: FeatureName)')
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f"Single_Feature_cvaccuracy_{title_suffix}.png"), dpi=300)
     plt.close()
 
-def plot_unique_delta_accuracy(unique_delta_accuracy, save_path, title_suffix="Unique_Δaccuracy"):
+def plot_unique_delta_accuracy(unique_delta_accuracy, mouseID, save_path, title_suffix="Unique_Δaccuracy"):
     """
     Plots the unique contribution (Δaccuracy) for each feature.
 
@@ -173,7 +173,7 @@ def plot_unique_delta_accuracy(unique_delta_accuracy, save_path, title_suffix="U
 
     plt.figure(figsize=(14, max(8, len(df) * 0.3)))
     sns.barplot(data=df, x='Unique_Δaccuracy', y='Display', palette='magma')
-    plt.title('Unique Feature Contributions (Δaccuracy) ' + title_suffix)
+    plt.title(f'{mouseID}\nUnique Feature Contributions (Δaccuracy) ' + title_suffix)
     plt.xlabel('Δaccuracy')
     plt.ylabel('Feature (Group: FeatureName)')
     plt.axvline(0, color='black', linestyle='--')

@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
+from scipy.signal import medfilt
 
 from Analysis.ReduceFeatures import utils_feature_reduction as utils
 
@@ -76,6 +77,71 @@ def find_full_shuffle_accuracy(selected_scaled_data_df, loadings_df, normalize_m
     shuffle_all = ((shuffle_all.T - normalize_mean) / normalize_std).T
     _, full_accuracy_shuffled = compute_regression(shuffle_all, y_reg)
     return full_accuracy_shuffled
+
+def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2):
+    # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
+    Xdr = np.dot(loadings_df.T, reduced_feature_selected_data_df)
+
+    # Normalize X
+    Xdr, normalize_mean, normalize_std = utils.normalize(Xdr)
+
+    # Create y (regression target) - 1 for phase1, 0 for phase2
+    y_reg = np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))])
+
+    # Run logistic regression on the full model
+    w, full_accuracy = compute_regression(Xdr, y_reg)
+    print(f"Full model accuracy: {full_accuracy:.3f}")
+    return w, normalize_mean, normalize_std, y_reg, full_accuracy
+
+
+def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, condition_name):
+    # Apply the full model to all runs (scaled and unscaled)
+    all_trials_dr = np.dot(loadings_df.T, reduced_feature_data_df.T)
+    all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T
+    run_pred = np.dot(w, np.dot(loadings_df.T, reduced_feature_data_df.T))
+    run_pred_scaled = np.dot(w, all_trials_dr)
+
+    # Compute smoothed scaled predictions for aggregation.
+    smoothed_pred = medfilt(run_pred[0], kernel_size=5)
+    smoothed_scaled_pred = medfilt(run_pred_scaled[0], kernel_size=5)
+
+    # Plot run prediction
+    utils.plot_run_prediction(reduced_feature_data_df, run_pred, smoothed_pred, save_path, mouse_id, phase1, phase2,
+                              scale_suffix="", dataset_suffix=condition_name)
+    utils.plot_run_prediction(reduced_feature_data_df, run_pred_scaled, smoothed_scaled_pred, save_path, mouse_id, phase1, phase2,
+                              scale_suffix="scaled", dataset_suffix=condition_name)
+    return smoothed_scaled_pred
+
+def regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, save_path, normalize_mean, normalize_std, y_reg, full_accuracy):
+    # Shuffle features and run logistic regression to find unique contributions and single feature contributions
+    single_all_dict, unique_all_dict = find_unique_and_single_contributions(reduced_feature_selected_data_df,
+                                                                            loadings_df, normalize_mean,
+                                                                            normalize_std, y_reg, full_accuracy)
+
+    # Find full shuffled accuracy (one shuffle may not be enough)
+    full_shuffled_accuracy = find_full_shuffle_accuracy(reduced_feature_selected_data_df, loadings_df,
+                                                        normalize_mean, normalize_std, y_reg, full_accuracy)
+    print(f"Full model shuffled accuracy: {full_shuffled_accuracy:.3f}")
+
+    # Plot unique and single feature contributions
+    utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
+    utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
+
+def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, save_path, condition):
+    w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
+
+    # Compute feature contributions
+    regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
+
+    # Compute feature-space weights for this mouse
+    feature_weights = loadings_df.dot(w.T).squeeze()
+    # Plot the weights in the original feature space
+    utils.plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2)
+
+    # Predict runs using the full model
+    smoothed_scaled_pred = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, condition)
+
+    return smoothed_scaled_pred, feature_weights, w
 
 
 

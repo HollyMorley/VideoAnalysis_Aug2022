@@ -5,6 +5,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
+from Analysis.ReduceFeatures import utils_feature_reduction as utils
+
 
 
 def perform_pca(scaled_data_df, n_components):
@@ -205,3 +207,28 @@ def plot_average_variance_explained_across_folds(fold_variances, scaled_data_df)
     plt.tight_layout()
     plt.savefig("Average_PCA_CV_Scree_Plot.png", dpi=300)
     plt.close()
+
+
+def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2,
+                                 condition, exp, day, stride_data, selected_features,
+                                 n_components=10):
+    """
+    Aggregates data from all mice in global_mouse_ids (using only runs for phase1 and phase2),
+    restricts to the globally selected features, and computes PCA.
+    """
+    aggregated_data = []
+    for mouse_id in global_mouse_ids:
+        scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        # Get run masks for the two phases.
+        run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2)
+        # Select only runs corresponding to the phases.
+        selected_mask = mask_phase1 | mask_phase2
+        selected_data = scaled_data_df.loc[selected_mask]
+        # Restrict to the globally selected features.
+        reduced_data = selected_data[selected_features]
+        aggregated_data.append(reduced_data)
+    # Concatenate all runs (rows) across mice.
+    global_data = pd.concat(aggregated_data)
+    # Compute PCA on the aggregated data.
+    pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
+    return pca, loadings_df

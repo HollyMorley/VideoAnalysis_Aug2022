@@ -43,3 +43,31 @@ def random_forest_feature_selection(selected_scaled_data_df, y):
     selected_features = selected_scaled_data_df.index[importances > threshold]
     print(f"Random Forest selected {len(selected_features)} features (threshold: {threshold:.4f}).")
     return selected_features, rf
+
+def sequential_feature_selector(X, y):
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.feature_selection import SequentialFeatureSelector
+
+    # Instantiate your random forest regressor.
+    rf_estimator = RandomForestRegressor(n_estimators=100, random_state=42)
+
+    # Set up the sequential feature selector.
+    # 'forward' selection means we start with no features and add one at a time.
+    # Adjust 'n_features_to_select' to a desired number or use 'auto' to determine automatically.
+    sfs = SequentialFeatureSelector(
+        rf_estimator,
+        n_features_to_select='auto',  # or an integer value
+        direction='forward',
+        cv=5,  # 5-fold cross-validation
+        scoring='r2',  # or another metric appropriate for your regression task
+        n_jobs=-1
+    )
+
+    # Assume X is your feature matrix and y is your target variable.
+    # You might, for example, get X from your `selected_scaled_data_df.T` and define y accordingly.
+    sfs.fit(X, y)
+
+    # After fitting, sfs.get_support() returns a boolean mask of selected features.
+    selected_features = X.columns[sfs.get_support()]
+    print("Selected features:", selected_features)
+

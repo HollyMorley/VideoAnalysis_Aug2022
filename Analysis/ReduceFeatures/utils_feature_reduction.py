@@ -161,7 +161,7 @@ def plot_run_prediction(scaled_data_df, run_pred, run_pred_smoothed, save_path, 
     plt.close()
 
 
-def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, condition_label, normalization_method='maxabs'):
+def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, stride_number, condition_label, normalization_method='maxabs'):
     """
     aggregated_data: list of tuples (mouse_id, x_values, smoothed_scaled_pred)
     normalization_method: 'maxabs' or 'zscore'
@@ -216,7 +216,7 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, c
     # Optionally add vertical lines (e.g., at x=9.5 and 109.5).
     plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
 
-    plt.title(f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}\n{condition_label}')
+    plt.title(f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}')
     plt.xlabel('Run Number')
     plt.ylabel('Normalized Prediction (Smoothed)')
     if normalization_method == 'maxabs':
@@ -227,7 +227,7 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, c
     plt.tight_layout()
 
     save_path = os.path.join(save_dir,
-                             f"Aggregated_{normalization_method.upper()}_Run_Predictions_{phase1}_vs_{phase2}_{condition_label}.png")
+                             f"Aggregated_{normalization_method.upper()}_Run_Predictions_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
 
@@ -319,7 +319,7 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     df = pd.DataFrame({'feature': feature_weights.index, 'weight': feature_weights.values})
 
     #sort df by weight
-    df = df.sort_values(by='weight', ascending=False)
+    #df = df.sort_values(by='weight', ascending=False)
 
     plt.figure(figsize=(12, 8))
     sns.barplot(x='weight', y='feature', data=df, palette='viridis')
@@ -334,7 +334,7 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
 
 
-def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2):
+def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2, stride_number, condition_label):
     """
     Plot aggregated feature-space weights across mice for a specific phase pair,
     summarizing the mean (with error bars) for each feature while overlaying individual mouse lines.
@@ -348,8 +348,8 @@ def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2):
     # Filter weights for the current phase pair.
     filtered_weights = {
         mouse_id: weights
-        for (mouse_id, p1, p2), weights in weights_dict.items()
-        if p1 == phase1 and p2 == phase2
+        for (mouse_id, p1, p2, s), weights in weights_dict.items()
+        if p1 == phase1 and p2 == phase2 and s == stride_number
     }
 
     if not filtered_weights:
@@ -382,16 +382,91 @@ def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2):
 
     ax.set_xlabel('Weight Value')
     ax.set_ylabel('Feature')
-    ax.set_title(f'Aggregated Feature Space Weights Across Mice ({phase1} vs {phase2})')
+    ax.set_title(f'Aggregated Feature Space Weights Across Mice ({phase1} vs {phase2}), stride {stride_number}\n{condition_label}')
     plt.tight_layout()
     plt.legend(title='Mouse ID / Summary', loc='upper right')
 
-    output_file = os.path.join(save_path, f'aggregated_feature_weights_{phase1}_vs_{phase2}.png')
+    output_file = os.path.join(save_path, f'aggregated_feature_weights_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png')
     plt.savefig(output_file)
     plt.close()
     print(f"Aggregated feature weights plot saved to: {output_file}")
 
-def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2):
+
+def plot_aggregated_feature_weights_comparison(weights_dict1, weights_dict2, save_path, phase1, phase2, cond1_label,
+                                               cond2_label):
+    """
+    Plot the average (with SEM error bars) aggregated feature weights for two conditions on the same plot.
+    Features are ordered by the absolute mean weight (descending) of condition 1.
+
+    Parameters:
+      - weights_dict1: dict for condition 1 (keys: (mouse_id, phase1, phase2), values: pandas Series of feature weights)
+      - weights_dict2: dict for condition 2 (same format as weights_dict1)
+      - save_path: directory where the resulting plot is saved.
+      - phase1, phase2: phase names (for the plot title).
+      - cond1_label, cond2_label: labels for condition 1 and condition 2.
+    """
+    # Extract aggregated weights for each condition.
+    def aggregate_weights(weights_dict):
+        # Filter weights for the given phase pair.
+        filtered = {
+            mouse_id: weights
+            for (mouse_id, p1, p2), weights in weights_dict.items()
+            if p1 == phase1 and p2 == phase2
+        }
+        if not filtered:
+            raise ValueError("No weights found for the specified phase pair.")
+        # Build a DataFrame (rows = features, columns = mouse IDs)
+        df = pd.DataFrame(filtered).sort_index()
+        # Scale weights (optional; here we keep as-is; remove or adjust scaling as needed)
+        df = df / df.abs().max()
+        return df
+
+    df1 = aggregate_weights(weights_dict1)
+    df2 = aggregate_weights(weights_dict2)
+
+    # Compute mean and SEM for each feature
+    mean1 = df1.mean(axis=1)
+    sem1 = df1.std(axis=1) / np.sqrt(df1.shape[1])
+    mean2 = df2.mean(axis=1)
+    sem2 = df2.std(axis=1) / np.sqrt(df2.shape[1])
+
+    # Order features by descending absolute mean from condition 1
+    ordered_features = mean1.abs().sort_values(ascending=False).index.tolist()
+
+    # Reorder statistics accordingly.
+    mean1 = mean1.loc[ordered_features]
+    sem1 = sem1.loc[ordered_features]
+    mean2 = mean2.loc[ordered_features]
+    sem2 = sem2.loc[ordered_features]
+
+    # Create the plot.
+    fig, ax = plt.subplots(figsize=(10, len(ordered_features) * 0.3 + 3))
+
+    # Plot condition 1: horizontal errorbar (mean ± SEM)
+    ax.errorbar(mean1, ordered_features, xerr=sem1, fmt='o-', color='blue',
+                label=f'{cond1_label} Mean ± SEM', capsize=3, linewidth=2)
+
+    # Plot condition 2: horizontal errorbar (mean ± SEM)
+    ax.errorbar(mean2, ordered_features, xerr=sem2, fmt='s-', color='green',
+                label=f'{cond2_label} Mean ± SEM', capsize=3, linewidth=2)
+
+    # Vertical reference line at 0
+    ax.axvline(x=0, color='red', linestyle='--')
+
+    ax.set_xlabel('Weight Value')
+    ax.set_ylabel('Feature')
+    ax.set_title(f'Comparison of Aggregated Feature Weights ({phase1} vs {phase2})')
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+
+    output_file = os.path.join(save_path,
+                               f'aggregated_feature_weights_comparison_{phase1}_vs_{phase2}_{cond1_label}_vs_{cond2_label}.png')
+    plt.savefig(output_file)
+    plt.close()
+    print(f"Comparison plot saved to: {output_file}")
+
+
+def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2, stride_number):
     """
     Plot aggregated raw features across mice for a specific phase pair,
     summarizing the mean (with error bars) for each feature while overlaying individual mouse lines.
@@ -405,8 +480,8 @@ def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2):
     # Filter raw features for the current phase pair.
     filtered_features = {
         mouse_id: features
-        for (mouse_id, p1, p2), features in raw_features_dict.items()
-        if p1 == phase1 and p2 == phase2
+        for (mouse_id, p1, p2, s), features in raw_features_dict.items()
+        if p1 == phase1 and p2 == phase2 and s == stride_number
     }
 
     if not filtered_features:
@@ -460,13 +535,13 @@ def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2):
 
         ax.set_xlabel('Run')
         ax.set_ylabel(f'{feature}')
-        ax.set_title(f'Aggregated {feature} Across Mice ({phase1} vs {phase2})')
+        ax.set_title(f'Aggregated {feature} Across Mice ({phase1} vs {phase2}), stride {stride_number}')
         plt.tight_layout()
         plt.legend(title='Mouse ID / Summary', loc='upper right')
         plt.grid(False)
         plt.gca().yaxis.grid(True)
 
-        filename = f"{feature}_{phase1}_vs_{phase2}"
+        filename = f"{feature}_{phase1}_vs_{phase2}_stride{stride_number}"
         safe_filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
         safe_filename = re.sub(r'\s+', '_', safe_filename)
 
@@ -493,13 +568,13 @@ def cluster_regression_weights_across_mice(aggregated_feature_weights, phase_pai
       - cluster_df: DataFrame mapping mouse_id to its assigned cluster.
       - kmeans: The fitted KMeans model.
     """
-    phase1, phase2 = phase_pair
+    phase1, phase2, stride_number = phase_pair
     weights_list = []
     mouse_ids = []
 
     # Collect weights for the given phase pair.
-    for (mouse_id, p1, p2), weights in aggregated_feature_weights.items():
-        if p1 == phase1 and p2 == phase2:
+    for (mouse_id, p1, p2, s), weights in aggregated_feature_weights.items():
+        if p1 == phase1 and p2 == phase2 and s == stride_number:
             weights_list.append(weights)
             mouse_ids.append(mouse_id)
 
@@ -538,12 +613,12 @@ def cluster_regression_weights_across_mice(aggregated_feature_weights, phase_pai
         ax.text(pcs[i, 0] + 0.02, pcs[i, 1] + 0.02, str(mouse),
                 fontsize=9, color='black', weight='bold')
 
-    ax.set_title(f"Clustering of Regression Weights across Mice: {phase1} vs {phase2}")
+    ax.set_title(f"Clustering of Regression Weights across Mice: {phase1} vs {phase2}, stride {stride_number}")
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     plt.legend(title="Cluster")
 
-    plot_path = os.path.join(save_dir, f"regression_weights_clustering_{phase1}_vs_{phase2}.png")
+    plot_path = os.path.join(save_dir, f"regression_weights_clustering_{phase1}_vs_{phase2}_stride{stride_number}.png")
     plt.savefig(plot_path)
     plt.close()
 

@@ -185,7 +185,7 @@ settings = {
 # }
 paths = {
         'filtereddata_folder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25', #todo changed 03/12/24 Round4_Oct24
-        'plotting_destfolder': r'H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\Plots\Jan25',
+        'plotting_destfolder': r'H:\Dual-belt_APAs\Plots\Jan25',
         'video_folder': r"X:\hmorley\Dual-belt_APAs\videos\Round_3",
         'data_folder': r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles"
 }

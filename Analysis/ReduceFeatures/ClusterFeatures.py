@@ -1,160 +1,317 @@
-import matplotlib.pyplot as plt
-import pandas as pd
-import itertools
 import os
-from sklearn.preprocessing import StandardScaler
-import seaborn as sns
-import random
+import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.decomposition import PCA
+from sklearn.model_selection import KFold
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+import joblib
 
-from Helpers.Config_23 import *
-import Analysis.ReduceFeatures.utils_feature_reduction as utils
+from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.ReduceFeatures.config import base_save_dir_no_c
 
-# ----------------------------
-# Configuration Section
-# ----------------------------
-
-mouse_ids = [
-    '1035243', '1035244', '1035245', '1035246',
-    '1035249', '1035250', '1035297', '1035298',
-    '1035299', '1035301', '1035302'
-]  # List of mouse IDs to analyze
-stride_numbers = [-1]  # List of stride numbers to filter data
-phases = ['APA2', 'Wash2']  # List of phases to compare
-exp = 'Extended'
-day = None
-# The two conditions want to process:
-condition = 'APAChar_LowHigh'
-
-base_save_dir = os.path.join(paths['plotting_destfolder'], 'FeatureReduction', 'Round11-20250217-ClusterFeatures')
-
-overwrite_FeatureSelection = False
-
-n_iterations_selection = 100
-nFolds_selection = 5
-
-# ----------------------------
-# Function Definitions
-# ----------------------------
-sns.set(style="whitegrid")
-random.seed(42)
-np.random.seed(42)
-
-
-def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
+def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2):
     """
-    Load data for the specified mouse and preprocess it by selecting desired features,
-    imputing missing values, and standardizing.
+    Build the global runs-by-features matrix from the provided mouse IDs.
+    Returns the transposed feature matrix (rows = features, columns = runs).
     """
-    if exp == 'Extended':
-        filepath = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\MEASURES_single_kinematics_runXstride.h5")
-    elif exp == 'Repeats':
-        filepath = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\Wash\\Exp\\{day}\\MEASURES_single_kinematics_runXstride.h5")
-    else:
-        raise ValueError(f"Unknown experiment type: {exp}")
-    data_allmice = pd.read_hdf(filepath, key='single_kinematics')
+    all_runs_data = []
+    for mouse in global_fs_mouse_ids:
+        data = utils.load_and_preprocess_data(mouse, stride_number, condition, exp, day)
+        # Get runs for the two phases; here we use phase1 and phase2 for example.
+        run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, stride_number, phase1,
+                                                                  phase2)
+        selected_mask = mask_phase1 | mask_phase2
+        run_data = data.loc[selected_mask]
+        all_runs_data.append(run_data)
 
-    try:
-        data = data_allmice.loc[mouse_id]
-    except KeyError:
-        raise ValueError(f"Mouse ID {mouse_id} not found in the dataset.")
+    if not all_runs_data:
+        raise ValueError("No run data found for global clustering.")
 
-    # Build desired columns using the simplified build_desired_columns function
-    measures = measures_list_feature_reduction
+    global_data = pd.concat(all_runs_data, axis=0)
+    # Transpose so that rows are features, columns are runs.
+    feature_matrix = global_data.T
+    return feature_matrix
 
-    col_names = []
-    for feature in measures.keys():
-        if any(measures[feature]):
-            if feature != 'signed_angle':
-                for param in itertools.product(*measures[feature].values()):
-                    param_names = list(measures[feature].keys())
-                    formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
-                    col_names.append((feature, formatted_params))
+
+def cross_validate_db_score_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+                                  phase2, k_range=range(2, 11), n_splits=10, n_init=10):
+    """
+    Build the global feature matrix and perform k-fold cross-validation to select the optimal number
+    of clusters using the Davies–Bouldin score.
+
+    For each fold, KMeans is fitted on the training subset, and the DB score is computed on the test subset.
+
+    Returns:
+      - avg_db_scores: dict mapping each k to its average Davies–Bouldin score across folds.
+    """
+    # Build the global feature matrix (features as rows, runs as columns)
+    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+                                               phase1, phase2)
+
+    # Prepare KFold cross-validation over features (rows of feature_matrix)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    db_scores = {k: [] for k in k_range}
+
+    for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
+        train_data = feature_matrix.iloc[train_idx]
+        test_data = feature_matrix.iloc[test_idx]
+
+        for k in k_range:
+            # Use built-in n_init for efficiency.
+            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+            kmeans.fit(train_data)
+            # Predict test labels.
+            test_labels = kmeans.predict(test_data)
+            # Compute the Davies–Bouldin score on the test data.
+            db_score = davies_bouldin_score(test_data, test_labels)
+            db_scores[k].append(db_score)
+
+    # Average DB scores across folds for each candidate k.
+    avg_db_scores = {k: np.mean(scores) for k, scores in db_scores.items()}
+    for k, score in avg_db_scores.items():
+        print(f"k={k}, Average Davies–Bouldin Score (CV): {score:.3f}")
+    return avg_db_scores
+
+def cross_validate_inertia_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+                                 phase2, k_range=range(2, 11), n_splits=10, n_init=10):
+    """
+    Build the global feature matrix and perform k-fold cross-validation to evaluate the average inertia
+    (within-cluster sum-of-squares) for each candidate number of clusters k.
+    Returns:
+      - avg_inertia: dict mapping each k to its average inertia across folds.
+    """
+    # Build the global feature matrix (features as rows, runs as columns)
+    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+                                               phase1, phase2)
+
+    # Prepare KFold cross-validation over features (rows of feature_matrix)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    inertia_scores = {k: [] for k in k_range}
+
+    for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
+        train_data = feature_matrix.iloc[train_idx]
+        test_data = feature_matrix.iloc[test_idx]
+
+        for k in k_range:
+            # Use built-in n_init for efficiency.
+            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+            kmeans.fit(train_data)
+            # Compute inertia on the test set by assigning test_data to the nearest cluster center.
+            # (This is a simple approximation; you could also compute it on the training set.)
+            test_labels = kmeans.predict(test_data)
+            inertia = kmeans.inertia_  # inertia from the training set.
+            inertia_scores[k].append(inertia)
+
+    # Average inertia scores across folds for each candidate k.
+    avg_inertia = {k: np.mean(scores) for k, scores in inertia_scores.items()}
+    for k, inertia in avg_inertia.items():
+        print(f"k={k}, Average Inertia (CV): {inertia:.3f}")
+    return avg_inertia
+
+def cross_validate_k_clusters_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+                                    phase2,
+                                    k_range=range(2, 11), n_splits=10, n_init=10):
+    """
+    Build the global feature matrix and perform k-fold cross-validation to select the optimal number
+    of clusters. In each fold, the clustering model is fit on the training subset of features and then
+    applied to the test subset to compute the silhouette score.
+
+    Parameters:
+      - global_fs_mouse_ids: list of mouse IDs for global feature selection.
+      - stride_number, condition, exp, day, stride_data, phase1, phase2: parameters used to load data.
+      - k_range: range of candidate k values (number of clusters).
+      - n_splits: number of folds in the KFold cross-validation.
+      - n_init: number of random initializations per fold for stability.
+
+    Returns:
+      - optimal_k: the k value with the highest average silhouette score across folds.
+      - avg_sil_scores: dict mapping each k to its average silhouette score.
+    """
+    # Build the global feature matrix (features as rows, runs as columns)
+    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+                                               phase1, phase2)
+
+    # Prepare KFold cross-validation over features (rows of feature_matrix)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    # Dictionary to store silhouette scores per candidate k for each fold.
+    fold_scores = {k: [] for k in k_range}
+
+    # Wrap the outer loop with tqdm to show fold progress.
+    for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
+        train_data = feature_matrix.iloc[train_idx]
+        test_data = feature_matrix.iloc[test_idx]
+
+        for k in k_range:
+            # Use built-in n_init instead of manual loop.
+            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+            kmeans.fit(train_data)
+            test_labels = kmeans.predict(test_data)
+            score = silhouette_score(test_data, test_labels)
+            fold_scores[k].append(score)
+
+    # Average silhouette scores across folds for each candidate k.
+    avg_sil_scores = {k: np.mean(scores_list) for k, scores_list in fold_scores.items()}
+    for k, score in avg_sil_scores.items():
+        print(f"k={k}, Average Silhouette Score (CV): {score:.3f}")
+
+    # Select the k with the highest average silhouette score.
+    optimal_k = max(avg_sil_scores, key=avg_sil_scores.get)
+    print(f"Optimal k determined to be: {optimal_k}")
+    return optimal_k, avg_sil_scores
+
+def cross_validate_k_clusters_folds_pca(global_fs_mouse_ids, stride_number, condition, exp, day,
+                                        stride_data, phase1, phase2,
+                                        n_components=10,
+                                        k_range=range(2, 11),
+                                        n_splits=10, n_init=10):
+    """
+    Build the global feature matrix, apply PCA to reduce its dimensionality, and then perform
+    k-fold cross-validation to select the optimal number of clusters using the silhouette score.
+
+    Parameters:
+      - global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2:
+          parameters used to load data.
+      - n_components: number of PCA components to retain.
+      - k_range: range of candidate k values.
+      - n_splits: number of folds in the KFold cross-validation.
+      - n_init: number of initializations for KMeans.
+
+    Returns:
+      - optimal_k: the k value with the highest average silhouette score across folds.
+      - avg_sil_scores: dict mapping each k to its average silhouette score.
+    """
+    # Build the global feature matrix (rows = features, columns = runs)
+    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day,
+                                               stride_data, phase1, phase2)
+    # Apply PCA to reduce dimensionality
+    pca = PCA(n_components=n_components)
+    X_reduced = pca.fit_transform(feature_matrix.values)
+    # Reconstruct a DataFrame with the same feature index.
+    X_reduced_df = pd.DataFrame(X_reduced, index=feature_matrix.index)
+
+    # Prepare KFold cross-validation over the features (rows of X_reduced_df)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    fold_scores = {k: [] for k in k_range}
+
+    # Wrap the outer loop with tqdm to show progress.
+    for train_idx, test_idx in tqdm(list(kf.split(X_reduced_df)), total=n_splits, desc="PCA Folds"):
+        train_data = X_reduced_df.iloc[train_idx]
+        test_data = X_reduced_df.iloc[test_idx]
+
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+            kmeans.fit(train_data)
+            test_labels = kmeans.predict(test_data)
+            score = silhouette_score(test_data, test_labels)
+            fold_scores[k].append(score)
+
+    # Average the silhouette scores over folds for each candidate k.
+    avg_sil_scores = {k: np.mean(scores) for k, scores in fold_scores.items()}
+    for k, score in avg_sil_scores.items():
+        print(f"k={k}, Average Silhouette Score (CV, PCA): {score:.3f}")
+
+    # Select the k with the highest average silhouette score.
+    optimal_k = max(avg_sil_scores, key=avg_sil_scores.get)
+    print(f"Optimal k (after PCA) determined to be: {optimal_k}")
+    return optimal_k, avg_sil_scores
+
+
+def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2,
+                               n_clusters, save_file='feature_clusters.pkl'):
+    """
+    Build the global runs-by-features matrix, transpose it so that rows are features,
+    cluster the features using k-means with n_clusters, and save the mapping.
+    Returns:
+      cluster_mapping: dict mapping feature names to cluster labels.
+    """
+    os.makedirs(os.path.dirname(save_file), exist_ok=True)
+    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+                                               phase1, phase2)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(feature_matrix)
+
+    # Mapping: feature -> cluster label
+    cluster_mapping = dict(zip(feature_matrix.index, kmeans.labels_))
+    joblib.dump(cluster_mapping, save_file)
+    print(f"Feature clustering done and saved to {save_file} using k={n_clusters}.")
+    return cluster_mapping
+
+
+def plot_feature_clustering(feature_matrix, cluster_mapping, save_file="feature_clustering.png"):
+    """
+    Projects the features into 2D using PCA and plots them colored by cluster.
+    Each point represents a feature (from the rows of feature_matrix).
+    """
+    # Perform PCA on the feature matrix (rows are features)
+    pca = PCA(n_components=2)
+    X_reduced = pca.fit_transform(feature_matrix.values)
+
+    # Get cluster label for each feature
+    features = feature_matrix.index
+    clusters = [cluster_mapping.get(feat, -1) for feat in features]
+
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(X_reduced[:, 0], X_reduced[:, 1], c=clusters, cmap="tab10", s=50)
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.title("Feature Clustering (PCA Projection)")
+    plt.colorbar(scatter, label="Cluster")
+
+    # Optionally annotate features (can be crowded if many features)
+    # for i, feat in enumerate(features):
+    #     plt.annotate(feat, (X_reduced[i, 0], X_reduced[i, 1]), fontsize=6, alpha=0.7)
+
+    plt.tight_layout()
+    save_path = os.path.join(base_save_dir_no_c, save_file)
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+    print(f"Saved feature clustering plot to {save_path}")
+
+
+def plot_feature_clusters_chart(cluster_mapping, save_file="feature_clusters_chart.png"):
+    """
+    Creates and saves a chart that arranges feature names by their assigned cluster.
+    Each column represents one cluster.
+    """
+    import matplotlib.pyplot as plt
+
+    # Invert the cluster_mapping: cluster -> list of features
+    clusters = {}
+    for feat, cl in cluster_mapping.items():
+        clusters.setdefault(cl, []).append(feat)
+
+    # Sort clusters by cluster id and sort features within each cluster (optional)
+    sorted_clusters = {cl: sorted(feats) for cl, feats in sorted(clusters.items())}
+    k = len(sorted_clusters)
+
+    # Find the maximum number of features in any cluster
+    max_features = max(len(feats) for feats in sorted_clusters.values())
+
+    # Build table data: each column corresponds to a cluster.
+    table_data = []
+    for i in range(max_features):
+        row = []
+        for cl in sorted(sorted_clusters.keys()):
+            feats = sorted_clusters[cl]
+            if i < len(feats):
+                row.append(feats[i])
             else:
-                for combo in measures['signed_angle'].keys():
-                    col_names.append((feature, combo))
-        else:
-            col_names.append((feature, 'no_param'))
+                row.append("")  # empty if no feature for this row in the cluster
+        table_data.append(row)
 
-    col_names_trimmed = []
-    for c in col_names:
-        if np.logical_and('full_stride:True' in c[1], 'step_phase:None' not in c[1]):
-            pass
-        elif np.logical_and('full_stride:False' in c[1], 'step_phase:None' in c[1]):
-            pass
-        else:
-            col_names_trimmed.append(c)
-
-    selected_columns = col_names_trimmed
-
-
-    filtered_data = data.loc[:, selected_columns]
-
-    separator = '|'
-    # Collapse MultiIndex columns to single-level strings including group info.
-    filtered_data.columns = [
-        f"{measure}{separator}{params}" if params != 'no_param' else f"{measure}"
-        for measure, params in filtered_data.columns
-    ]
-
-    try:
-        filtered_data = filtered_data.xs(stride_number, level='Stride', axis=0)
-    except KeyError:
-        raise ValueError(f"Stride number {stride_number} not found in the data.")
-
-    filtered_data_imputed = filtered_data.fillna(filtered_data.mean())
-
-    if filtered_data_imputed.isnull().sum().sum() > 0:
-        print("Warning: There are still missing values after imputation.")
-    else:
-        print("All missing values have been handled.")
-
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(filtered_data_imputed)
-    scaled_data_df = pd.DataFrame(scaled_data, index=filtered_data_imputed.index,
-                                  columns=filtered_data_imputed.columns)
-    return scaled_data_df
-
-def select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2):
-    # Load and preprocess data.
-    scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp,
-                                              day)  # Load data for the specified mouse and preprocess it by selecting desired features, imputing missing values, and standardizing.
-    print('Data loaded and preprocessed.')
-
-    # Get runs and stepping limbs for each phase.
-    run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id,
-                                                                     stride_number, phase1, phase2)
-
-    # Select only runs from the two phases in feature data
-    selected_mask = mask_phase1 | mask_phase2
-    selected_scaled_data_df = scaled_data_df.loc[selected_mask].T
-
-    return scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2
-
-def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, condition, exp, day,
-                             base_save_dir_condition):
-    """
-    Process a single phase comparison for a given mouse. If selected_features is provided,
-    that global feature set is used; otherwise local feature selection is performed.
-    """
-    # Create directory for saving plots.
-    save_path = utils.create_save_directory(base_save_dir_condition, mouse_id, stride_number, phase1, phase2)
-    save_path = "\\\\?\\" + save_path
-    print(f"Processing Mouse {mouse_id}, Stride {stride_number}: {phase1} vs {phase2} (saving to {save_path})")
-
-    scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2)
-
-    print(f"Selected {selected_scaled_data_df.shape[0]} features for analysis.")
-
-def main():
-    stride_data_path = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\MEASURES_StrideInfo.h5")
-    stride_data = utils.load_stride_data(stride_data_path)
-
-    for mouse_id in mouse_ids:
-        for stride_number in stride_numbers:
-            for phase1, phase2 in itertools.combinations(phases, 2):
-                process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, condition, exp, day,
-                             base_save_dir)
-
-
-if __name__ == "__main__":
-    main()
+    # Create the figure and table
+    fig, ax = plt.subplots(figsize=(k * 8, max_features * 0.5 + 1))
+    ax.axis("tight")
+    ax.axis("off")
+    col_labels = [f"Cluster {cl}" for cl in sorted(sorted_clusters.keys())]
+    table = ax.table(cellText=table_data, colLabels=col_labels, loc="center", cellLoc="left")
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    fig.tight_layout()
+    save_path = os.path.join(base_save_dir_no_c, save_file)
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+    print(f"Saved feature clusters chart to {save_path}")

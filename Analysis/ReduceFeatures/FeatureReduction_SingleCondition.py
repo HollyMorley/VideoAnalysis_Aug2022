@@ -1,484 +1,56 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 import itertools
+import datetime
+import inspect
 import os
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics.pairwise import cosine_similarity
 import seaborn as sns
 import random
-from tqdm import tqdm
-import ast
-from joblib import Parallel, delayed
-from collections import Counter
 
-from Analysis.ReduceFeatures.PCA import perform_pca, plot_pca, plot_scree, cross_validate_pca, plot_average_variance_explained_across_folds
-from Analysis.ReduceFeatures.LogisticRegression import compute_regression, compute_lasso_regression, run_regression, predict_runs
+from Analysis.ReduceFeatures.PCA import perform_pca, plot_pca, plot_scree, cross_validate_pca, plot_average_variance_explained_across_folds, compute_global_pca_for_phase
+from Analysis.ReduceFeatures.LogisticRegression import compute_regression, compute_lasso_regression, run_regression, predict_runs, predict_compare_condition, compute_global_regression_model
 from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
+from Analysis.ReduceFeatures.ClusterFeatures import cross_validate_k_clusters_folds_pca, cluster_features_run_space, get_global_feature_matrix, plot_feature_clustering, plot_feature_clusters_chart
+from Analysis.ReduceFeatures.FindMousePools import compute_mouse_similarity, get_loading_matrix_from_nested, pool_mice_by_similarity
 from Analysis.ReduceFeatures import utils_feature_reduction as utils
 from Helpers.Config_23 import *
+from Analysis.ReduceFeatures.config import base_save_dir_no_c, global_settings, condition_specific_settings, instance_settings
 
-# ----------------------------
-# Configuration Section
-# ----------------------------
-
-# Set your parameters here
-# global_fs_mouse_ids = ['1035243', '1035250']
-# global_fs_mouse_ids = ['1035243', '1035244', '1035245', '1035246',
-#     '1035250','1035301', '1035302'] # --- HighLow
-# global_fs_mouse_ids = ['1035243', '1035244', '1035245', '1035246',
-#     '1035250','1035299','1035301'] # excluding 249 and 302 as missing data for them, and 297, 298 as not good mice # --- LowHigh
-# mouse_ids = ['1035243', '1035250']
-condition_configurations = {
-    'APAChar_LowHigh': {
-        'c': 1,
-        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246', '1035250','1035299','1035301'],
-    },
-    'APAChar_HighLow': {
-        'c': 0.5,
-        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246','1035250','1035301', '1035302'],
-    },
-}
-mouse_ids = [
-    '1035243', '1035244', '1035245', '1035246',
-    '1035249', '1035250', '1035297', '1035298',
-    '1035299', '1035301', '1035302'
-]  # List of mouse IDs to analyze
-stride_numbers = [-3,-2,-1,0]  # List of stride numbers to filter data
-phases = ['APA1','APA2','Wash1','Wash2']  # List of phases to compare
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
-overwrite_FeatureSelection = False
-
-n_iterations_selection = 100
-nFolds_selection = 5
-
-# ----------------------------
-# Function Definitions
-# ----------------------------
 sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
 
-
-def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
+# ----------------------------
+# Function Definitions
+# ----------------------------
+def log_settings(settings, log_dir):
     """
-    Load data for the specified mouse and preprocess it by selecting desired features,
-    imputing missing values, and standardizing.
+    Save the provided settings (a dict) to a timestamped log file.
+    Also include the name of the running script and the current date.
     """
-    if exp == 'Extended':
-        filepath = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\MEASURES_single_kinematics_runXstride.h5")
-    elif exp == 'Repeats':
-        filepath = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\Wash\\Exp\\{day}\\MEASURES_single_kinematics_runXstride.h5")
-    else:
-        raise ValueError(f"Unknown experiment type: {exp}")
-    data_allmice = pd.read_hdf(filepath, key='single_kinematics')
+    os.makedirs(log_dir, exist_ok=True)
+    # Get the name of the current script file
+    script_name = os.path.basename(inspect.getfile(inspect.currentframe()))
+    # Get the current datetime as string
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    try:
-        data = data_allmice.loc[mouse_id]
-    except KeyError:
-        raise ValueError(f"Mouse ID {mouse_id} not found in the dataset.")
+    # Build the content of the log file.
+    log_content = f"Script: {script_name}\nDate: {datetime.datetime.now()}\n\nSettings:\n"
+    for key, value in settings.items():
+        log_content += f"{key}: {value}\n"
 
-    # Build desired columns using the simplified build_desired_columns function
-    measures = measures_list_feature_reduction
-
-    col_names = []
-    for feature in measures.keys():
-        if any(measures[feature]):
-            if feature != 'signed_angle':
-                for param in itertools.product(*measures[feature].values()):
-                    param_names = list(measures[feature].keys())
-                    formatted_params = ', '.join(f"{key}:{value}" for key, value in zip(param_names, param))
-                    col_names.append((feature, formatted_params))
-            else:
-                for combo in measures['signed_angle'].keys():
-                    col_names.append((feature, combo))
-        else:
-            col_names.append((feature, 'no_param'))
-
-    col_names_trimmed = []
-    for c in col_names:
-        if np.logical_and('full_stride:True' in c[1], 'step_phase:None' not in c[1]):
-            pass
-        elif np.logical_and('full_stride:False' in c[1], 'step_phase:None' in c[1]):
-            pass
-        else:
-            col_names_trimmed.append(c)
-
-    selected_columns = col_names_trimmed
-
-
-    filtered_data = data.loc[:, selected_columns]
-
-    separator = '|'
-    # Collapse MultiIndex columns to single-level strings including group info.
-    filtered_data.columns = [
-        f"{measure}{separator}{params}" if params != 'no_param' else f"{measure}"
-        for measure, params in filtered_data.columns
-    ]
-
-    try:
-        filtered_data = filtered_data.xs(stride_number, level='Stride', axis=0)
-    except KeyError:
-        raise ValueError(f"Stride number {stride_number} not found in the data.")
-
-    filtered_data_imputed = filtered_data.fillna(filtered_data.mean())
-
-    if filtered_data_imputed.isnull().sum().sum() > 0:
-        print("Warning: There are still missing values after imputation.")
-
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(filtered_data_imputed)
-    scaled_data_df = pd.DataFrame(scaled_data, index=filtered_data_imputed.index,
-                                  columns=filtered_data_imputed.columns)
-    return scaled_data_df
-
-def select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2):
-    # Load and preprocess data.
-    scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp,
-                                              day)  # Load data for the specified mouse and preprocess it by selecting desired features, imputing missing values, and standardizing.
-    print('Data loaded and preprocessed.')
-
-    # Get runs and stepping limbs for each phase.
-    run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id,
-                                                                     stride_number, phase1, phase2)
-
-    # Select only runs from the two phases in feature data
-    selected_mask = mask_phase1 | mask_phase2
-    selected_scaled_data_df = scaled_data_df.loc[selected_mask].T
-
-    return scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2
-
-
-def unified_feature_selection(feature_data_df, y, c, method='regression', cv=5, n_iterations=100, fold_assignment=None, save_file=None, overwrite_FeatureSelection=False):
-    """
-    Unified feature selection function that can be used both in local (single-mouse)
-    and global (aggregated) cases.
-
-    Parameters:
-      - feature_data_df: DataFrame with features as rows and samples as columns.
-      - y: target vector (e.g. binary labels)
-      - method: 'rfecv', 'rf', or 'regression'
-      - cv: number of folds for cross-validation (if applicable)
-      - n_iterations: number of shuffles for regression-based selection
-      - fold_assignment: optional pre-computed fold assignment dictionary for regression-based selection.
-      - save_file: if provided, a file path to load/save results.
-
-    Returns:
-      - selected_features: the list (or index) of selected features.
-      - results: For 'regression' method, a DataFrame of per-feature results; otherwise, None.
-    """
-    # Check if a results file exists and we are not overwriting.
-    if save_file is not None and os.path.exists(save_file) and not overwrite_FeatureSelection:
-        if method == 'regression':
-            all_feature_accuracies_df = pd.read_csv(save_file, index_col=0)
-            # Convert the string representation back into dictionaries.
-            all_feature_accuracies_df['iteration_diffs'] = all_feature_accuracies_df['iteration_diffs'].apply(
-                ast.literal_eval)
-            print("Global feature selection results loaded from file.")
-            selected_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
-            return selected_features, all_feature_accuracies_df
-        else:
-            df = pd.read_csv(save_file)
-            # Assuming selected features were saved in a column 'selected_features'
-            selected_features = df['selected_features'].tolist()
-            print("Global feature selection results loaded from file.")
-            return selected_features, None
-
-    # Compute feature selection using the chosen method.
-    if method == 'rfecv':
-        print("Running RFECV for feature selection.")
-        selected_features, rfecv_model = rfe_feature_selection(feature_data_df, y, cv=cv, min_features_to_select=5, C=c)
-        print(f"RFECV selected {rfecv_model.n_features_} features.")
-        results = None
-    elif method == 'rf':
-        print("Running Random Forest for feature selection.")
-        selected_features, rf_model = random_forest_feature_selection(feature_data_df, y)
-        print(f"Random Forest selected {len(selected_features)} features.")
-        results = None
-    elif method == 'regression':
-        N = feature_data_df.shape[1]
-        if fold_assignment is None:
-            indices = list(range(N))
-            random.shuffle(indices)
-            fold_assignment = {i: (j % cv + 1) for j, i in enumerate(indices)}
-        features = list(feature_data_df.index)
-        results = Parallel(n_jobs=-1)(
-            delayed(process_single_feature)(
-                feature,
-                feature_data_df.loc[feature].values,
-                fold_assignment,
-                y,
-                list(range(N)),
-                cv,
-                n_iterations
-            )
-            for feature in tqdm(features, desc="Unified regression-based feature selection")
-        )
-        all_feature_accuracies = dict(results)
-        all_feature_accuracies_df = pd.DataFrame.from_dict(all_feature_accuracies, orient='index')
-        # Mark features as significant if the 99th percentile of shuffled differences is below zero.
-        all_feature_accuracies_df['significant'] = 0 > all_feature_accuracies_df['iteration_diffs'].apply(
-            lambda d: np.percentile(list(d.values()), 99)
-        )
-        selected_features = all_feature_accuracies_df[all_feature_accuracies_df['significant']].index
-        results = all_feature_accuracies_df
-    else:
-        raise ValueError("Unknown method specified for feature selection.")
-
-    # Save results if a file path is provided.
-    if save_file is not None:
-        if method == 'regression':
-            results.to_csv(save_file)
-        else:
-            # Save the list of selected features in a simple CSV.
-            pd.DataFrame({'selected_features': selected_features}).to_csv(save_file, index=False)
-
-    if method == 'regression':
-        return selected_features, results
-    else:
-        return selected_features, None
-
-def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFolds, n_iterations):
-    fold_true_accuracies = []
-    iteration_diffs_all = {i: [] for i in range(n_iterations)}
-    #knn = KNeighborsClassifier(n_neighbors=5)
-    # find custom weights based on class imbalance
-    class_counts = Counter(y_reg)
-    n_samples = len(y_reg)
-    custom_weights = {
-        cls: n_samples / (len(class_counts) * count)
-        for cls, count in class_counts.items()
-    }
-    #knn = ImbalancedKNN(n_neighbors=5, weights=custom_weights)
-
-    # Loop over folds
-    for fold in range(1, nFolds + 1):
-        test_mask = np.array([fold_assignment[run] == fold for run in run_numbers])
-        train_mask = ~test_mask
-
-        # Training on the training set
-        X_fold_train = X[train_mask].reshape(1, -1) # Get feature values across training runs in current fold
-        y_reg_fold_train = y_reg[train_mask]  #  Create y (regression target) - 1 for phase1, 0 for phase2 - for this fold
-
-        w, _ = compute_lasso_regression(X_fold_train, y_reg_fold_train) # Run logistic regression on single feature to get weights
-        #w, _ = compute_regression(X_fold_train, y_reg_fold_train) # Run logistic regression on single feature to get weights
-        #knn.fit(X_fold_train.T, y_reg_fold_train)
-
-        # Testing on the test set
-        X_fold_test = X[test_mask].reshape(1, -1) # Get feature values across test runs in current fold
-        y_reg_fold_test = y_reg[test_mask] # Create y (regression target) - 1 for phase1, 0 for phase2 - for this fold
-        y_pred = np.dot(w, X_fold_test) # Get accuracy from test set
-        y_pred[y_pred > 0] = 1 # change y_pred +ves to 1 and -ves to 0
-        y_pred[y_pred < 0] = 0 # change y_pred +ves to 1 and -ves to 0
-        #y_pred = knn.predict(X_fold_test.T) ## add in weights for
-        feature_accuracy_test = utils.balanced_accuracy(y_reg_fold_test.T, y_pred.T) # Get balanced accuracy from test set
-        fold_true_accuracies.append(feature_accuracy_test)
-
-
-        # For each iteration: shuffle and compute difference in accuracy.
-        for i in range(n_iterations):
-            X_shuffled = X.copy()
-            random.shuffle(X_shuffled)
-
-            X_shuffled_fold_train = X_shuffled[train_mask].reshape(1, -1)
-            # Run logistic regression on shuffled data
-            w, _ = compute_lasso_regression(X_shuffled_fold_train, y_reg_fold_train)
-            #w, _ = compute_regression(X_shuffled_fold_train, y_reg_fold_train)
-            # knn.fit(X_shuffled_fold_train.T, y_reg_fold_train)
-
-            X_shuffled_fold_test = X_shuffled[test_mask].reshape(1, -1)
-            y_pred_shuffle = np.dot(w, X_shuffled_fold_test)
-            y_pred_shuffle[y_pred_shuffle > 0] = 1
-            y_pred_shuffle[y_pred_shuffle < 0] = 0
-            # y_pred_shuffle = knn.predict(X_shuffled_fold_test.T)
-            shuffled_feature_accuracy_test = utils.balanced_accuracy(y_reg_fold_test.T, y_pred_shuffle.T)
-
-            # Difference between true and shuffled accuracy.
-            feature_diff = shuffled_feature_accuracy_test - feature_accuracy_test #feature_accuracy_test - shuffled_feature_accuracy_test
-            iteration_diffs_all[i].append(feature_diff)
-
-    # Average differences across folds
-    avg_feature_diffs = {i: np.mean(iteration_diffs_all[i]) for i in range(n_iterations)}
-    avg_true_accuracy = np.mean(fold_true_accuracies)
-
-    return feature, {"true_accuracy": avg_true_accuracy, "iteration_diffs": avg_feature_diffs}
-
-
-def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition, exp, day, stride_data, save_dir,
-                             nFolds=nFolds_selection, n_iterations=n_iterations_selection, method='regression'):
-    results_file = os.path.join(save_dir, f'global_feature_selection_results_{phase1}_{phase2}_stride{stride_number}.csv')
-
-    aggregated_data_list = []
-    aggregated_y_list = []
-    total_run_numbers = []
-
-    for mouse_id in mice_ids:
-        # Load and preprocess data for each mouse.
-        scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
-        # Get runs and phase masks.
-        run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
-                                                            phase1, phase2)
-        selected_mask = mask_phase1 | mask_phase2
-        # Transpose so that rows are features and columns are runs.
-        selected_data = scaled_data_df.loc[selected_mask].T
-        aggregated_data_list.append(selected_data)
-        # Create the regression target.
-        y_reg = np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))])
-        aggregated_y_list.append(y_reg)
-        # (Store run indices as simple integers for each mouse.)
-        total_run_numbers.extend(list(range(selected_data.shape[1])))
-
-    # Combine data across mice.
-    aggregated_data_df = pd.concat(aggregated_data_list, axis=1)
-    aggregated_y = np.concatenate(aggregated_y_list)
-
-    # Call unified_feature_selection (choose method as desired: 'rfecv', 'rf', or 'regression')
-    selected_features, fs_results_df = unified_feature_selection(
-                                        feature_data_df=aggregated_data_df,
-                                        y=aggregated_y,
-                                        c=condition_configurations[condition]['c'],
-                                        method=method,  # change as desired
-                                        cv=nFolds_selection,
-                                        n_iterations=n_iterations_selection,
-                                        save_file=results_file,
-                                        overwrite_FeatureSelection=overwrite_FeatureSelection
-                                    )
-    print(f"Global selected features: {selected_features}, \nLength: {len(selected_features)}")
-    return selected_features, fs_results_df
-
-
-def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2,
-                                 condition, exp, day, stride_data, selected_features,
-                                 n_components=10):
-    """
-    Aggregates data from all mice in global_mouse_ids (using only runs for phase1 and phase2),
-    restricts to the globally selected features, and computes PCA.
-    """
-    aggregated_data = []
-    for mouse_id in global_mouse_ids:
-        scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
-        # Get run masks for the two phases.
-        run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2)
-        # Select only runs corresponding to the phases.
-        selected_mask = mask_phase1 | mask_phase2
-        selected_data = scaled_data_df.loc[selected_mask]
-        # Restrict to the globally selected features.
-        reduced_data = selected_data[selected_features]
-        aggregated_data.append(reduced_data)
-    # Concatenate all runs (rows) across mice.
-    global_data = pd.concat(aggregated_data)
-    # Compute PCA on the aggregated data.
-    # check if n_components is less than the number of features
-    if n_components > global_data.shape[1]:
-        n_components = global_data.shape[1]
-    pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
-    return pca, loadings_df
-
-def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, day, stride_data_compare, phase1, phase2, selected_features, loadings_df, w, save_path):
-    # Retrieve reduced feature data for the comparison condition
-    # _, comparison_selected_scaled_data, _, _, _, _ = select_runs_data(mouse_id, stride_number, compare_condition, exp, day, stride_data_compare, phase1, phase2)
-    comparison_scaled_data = load_and_preprocess_data(mouse_id, stride_number, compare_condition, exp, day)
-    comparison_reduced_feature_data_df = comparison_scaled_data.loc(axis=1)[selected_features]
-    runs = list(comparison_reduced_feature_data_df.index)
-
-    # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
-    Xdr = np.dot(loadings_df.T, comparison_reduced_feature_data_df.T)
-    # Normalize X
-    Xdr, normalize_mean, normalize_std = utils.normalize(Xdr)
-
-    save_path_compare = os.path.join(save_path, f"vs_{compare_condition}")
-    # prefix path wth \\?\ to avoid Windows path length limit
-    save_path_compare = "\\\\?\\" + save_path_compare
-    os.makedirs(save_path_compare, exist_ok=True)
-    smoothed_scaled_pred = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, compare_condition)
-
-    return smoothed_scaled_pred, runs
-
-
-def compute_global_regression_model(global_mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
-                                    selected_features, loadings_df):
-    aggregated_data_list = []
-    y_list = []
-    for mouse_id in global_mouse_ids:
-        scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
-        # Get phase masks and runs.
-        run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
-                                                            phase1, phase2)
-        selected_mask = mask_phase1 | mask_phase2
-        selected_data = scaled_data_df.loc[selected_mask][selected_features]
-        aggregated_data_list.append(selected_data)
-        # Create labels: 1 for phase1, 0 for phase2.
-        y_list.append(np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))]))
-
-    # Combine all data across mice.
-    global_data_df = pd.concat(aggregated_data_list)
-    y_global = np.concatenate(y_list)
-
-    # Project aggregated data into PCA space using the global loadings.
-    Xdr = np.dot(loadings_df.T, global_data_df.T)
-    Xdr, norm_mean, norm_std = utils.normalize(Xdr)
-
-    # Compute regression weights (using your chosen regression function).
-    w, full_accuracy = compute_regression(Xdr, y_global)
-    print(f"Global regression model accuracy for {phase1} vs {phase2}: {full_accuracy:.3f}")
-
-    return {'w': w, 'norm_mean': norm_mean, 'norm_std': norm_std, 'selected_features': selected_features,
-            'loadings_df': loadings_df}
-
-
-def compute_cosine_similarity_local(aggregated_feature_weights, phase_pair, mouse_ids):
-    """
-    Compute cosine similarity for a given phase pair between weight vectors for each mouse.
-
-    Parameters:
-      - aggregated_feature_weights: dict keyed by (mouse_id, phase1, phase2) with each value being {feature: weight}
-      - phase_pair: tuple (phase1, phase2) to select the relevant weights.
-      - mouse_ids: list of mouse IDs to consider.
-
-    Returns:
-      - sim_df: A DataFrame containing the cosine similarity matrix.
-    """
-    weights_dict = {}
-    for mouse in mouse_ids:
-        key = (mouse, phase_pair[0], phase_pair[1])
-        if key in aggregated_feature_weights:
-            weights_dict[mouse] = aggregated_feature_weights[key]
-
-    # Create the union of all features across mice.
-    all_features = set()
-    for w in weights_dict.values():
-        all_features.update(w.keys())
-    all_features = sorted(all_features)
-
-    # Build a weight vector for each mouse.
-    mouse_vectors = {}
-    for mouse, w in weights_dict.items():
-        mouse_vectors[mouse] = np.array([w.get(feat, 0) for feat in all_features])
-
-    # Create a matrix where each row corresponds to a mouse.
-    sorted_mice = sorted(mouse_vectors.keys())
-    matrix = np.array([mouse_vectors[mouse] for mouse in sorted_mice])
-
-    # Compute the cosine similarity matrix.
-    sim_matrix = cosine_similarity(matrix)
-    sim_df = pd.DataFrame(sim_matrix, index=sorted_mice, columns=sorted_mice)
-    return sim_df
-
-def plot_cosine_similarity(sim_df, title='Cosine Similarity of Regression Weights'):
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(sim_df, annot=True, cmap='viridis', fmt=".2f")
-    plt.title(title)
-    plt.xlabel("Mouse ID")
-    plt.ylabel("Mouse ID")
-    plt.tight_layout()
-    plt.show()
+    # Define the log file name.
+    log_file = os.path.join(log_dir, f"settings_log_{now_str}.txt")
+    with open(log_file, "w") as f:
+        f.write(log_content)
+    print(f"Settings logged to {log_file}")
 
 
 # -----------------------------------------------------
 # Main Processing Function for Each Phase Comparison
 # -----------------------------------------------------
 def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, stride_data_compare, condition, exp, day,
-                             base_save_dir_condition, allmice, selected_features=None, fs_df=None, method='regression',
-                             global_pca=None, compare_condition=None, select_features=True):
+                             base_save_dir_condition, selected_features=None, fs_df=None,
+                             global_pca=None, compare_condition=None, cluster_mapping=None):
     """
     Process a single phase comparison for a given mouse. If selected_features is provided,
     that global feature set is used; otherwise local feature selection is performed.
@@ -488,24 +60,24 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     #save_path = "\\\\?\\" + save_path
     print(f"Processing Mouse {mouse_id}, Stride {stride_number}: {phase1} vs {phase2} (saving to {save_path})")
 
-    scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2)
+    scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2)
 
-    if selected_features is None and select_features == True:
+    if selected_features is None and global_settings["select_features"] == True:
         y_reg = np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))])
         # For local selection you might choose not to save to file (or provide a unique save_file path).
-        selected_features, _ = unified_feature_selection(
+        selected_features, _ = utils.unified_feature_selection(
             feature_data_df=selected_scaled_data_df,
             y=y_reg,
-            c=condition_configurations[condition]['c'],
-            method=method,  # or 'rf' or 'regression'
-            cv=nFolds_selection,
-            n_iterations=n_iterations_selection,
+            c=condition_specific_settings[condition]['c'],
+            method=global_settings["method"],  # or 'rf' or 'regression'
+            cv=global_settings["nFolds_selection"],
+            n_iterations=global_settings["n_iterations_selection"],
             save_file=None,
-            overwrite_FeatureSelection=overwrite_FeatureSelection
+            overwrite_FeatureSelection=global_settings["overwrite_FeatureSelection"]
         )
         print("Selected features (local):", selected_features)
     else:
-        if select_features == True:
+        if global_settings["select_features"] == True:
             print("Using globally selected features for feature reduction.")
         else:
             print("Using all features for feature reduction.")
@@ -575,7 +147,8 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
         # Local PCA (existing behavior).
         fold_variances = cross_validate_pca(reduced_feature_data_df, save_path, n_folds=10)
         plot_average_variance_explained_across_folds(fold_variances, reduced_feature_data_df)
-        n_components = 10 #if allmice else 4
+        #n_components = 10 if allmice else 4
+        n_components = 10 if len(selected_features) > 10 else len(selected_features)
         pca, pcs, loadings_df = perform_pca(reduced_feature_data_df, n_components=n_components)
         pcs_combined, labels, pcs_phase1, pcs_phase2 = utils.get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2)
         plot_pca(pca, pcs_combined, labels, stepping_limbs, run_numbers, mouse_id, save_path)
@@ -585,14 +158,36 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
     # ---------------- Prediction - Regression-Based Feature Contributions ----------------
     smoothed_scaled_pred, feature_weights, w = run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, save_path, condition)
 
-    return (mouse_id, list(reduced_feature_data_df.index), smoothed_scaled_pred), feature_weights, reduced_feature_data_df
+    # ---------------- Map selected features to respective clusters ----------------
+    if global_settings["allmice"] == False: # todo maybe extend this to allmice too
+        #cluster_mapping = joblib.load('feature_clusters.pkl')
+
+        # For the selected features (from local selection), map them to clusters.
+        feature_cluster_assignments = {feat: cluster_mapping.get(feat, -1) for feat in selected_features}
+
+        # Sum the regression loadings by cluster.
+        cluster_loadings = {}
+        for feat, weight in feature_weights.items():
+            cluster = feature_cluster_assignments.get(feat)
+            if cluster is not None and cluster != -1:
+                cluster_loadings[cluster] = cluster_loadings.get(cluster, 0) + weight
+
+        # Optionally, store this info for later aggregated plotting:
+        # (e.g., add it to the tuple returned by process_phase_comparison)
+        print(f"Mouse {mouse_id} - Cluster loadings: {cluster_loadings}")
+    else:
+        cluster_loadings = None
+
+    return (mouse_id, list(reduced_feature_data_df.index),
+                smoothed_scaled_pred), feature_weights, reduced_feature_data_df, cluster_loadings
+
 
 
 
 # -----------------------------------------------------
 # Main Execution Function
 # -----------------------------------------------------
-def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, allmice=False, method='regression', compare_condition='None', select_features=True):
+def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, compare_condition='None'):
     # construct path
     stride_data_path = None
     stride_data_path_compare = None
@@ -607,11 +202,30 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
     stride_data = utils.load_stride_data(stride_data_path)
     stride_data_compare = utils.load_stride_data(stride_data_path_compare)
 
-    cval = condition_configurations[condition]['c']
+    cval = condition_specific_settings[condition]['c']
     base_save_dir = base_save_dir_no_c + f'-c={cval}'
     base_save_dir_condition = os.path.join(base_save_dir, f'{condition}_{exp}')
 
-    if allmice:
+    for stride_number in stride_numbers:
+        for phase1, phase2 in itertools.combinations(phases, 2):
+            # get feature clusters
+            # find k
+            optimal_k, avg_sil_scores = cross_validate_k_clusters_folds_pca(
+                condition_specific_settings[condition]['global_fs_mouse_ids'], stride_number, condition, exp, day,
+                stride_data, phase1, phase2)
+            print(f"Optimal k based on silhouette score is: {optimal_k}")
+
+            save_file = os.path.join(base_save_dir_condition,
+                                     f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
+            cluster_mapping = cluster_features_run_space(condition_specific_settings[condition]['global_fs_mouse_ids'],
+                                                         stride_number, condition, exp, day, stride_data, phase1,
+                                                         phase2, n_clusters=optimal_k, save_file=save_file)
+            feature_matrix = get_global_feature_matrix(condition_specific_settings[condition]['global_fs_mouse_ids'], stride_number, condition, exp, day,
+                                                       stride_data, phase1, phase2)
+            plot_feature_clustering(feature_matrix, cluster_mapping, save_file=f"feature_clustering_{phase1}_vs_{phase2}_stride{stride_number}.png")
+            plot_feature_clusters_chart(cluster_mapping, save_file=f"feature_clusters_chart_{phase1}_vs_{phase2}_stride{stride_number}.png")
+
+    if global_settings["allmice"]:
         # Directory for global feature selection.
         global_fs_dir = os.path.join(base_save_dir, f'GlobalFeatureSelection_{condition}_{exp}')
         os.makedirs(global_fs_dir, exist_ok=True)
@@ -621,19 +235,23 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
         for phase1, phase2 in itertools.combinations(phases, 2):
             for stride_number in stride_numbers:
                 print(f"Performing global feature selection for {phase1} vs {phase2}, stride {stride_number}.")
-                selected_features, fs_df = global_feature_selection(
-                    condition_configurations[condition]['global_fs_mouse_ids'],
+                selected_features, fs_df = utils.global_feature_selection(
+                    condition_specific_settings[condition]['global_fs_mouse_ids'],
                     stride_number,
                     phase1, phase2,
                     condition, exp, day,
                     stride_data,
-                    global_fs_dir,
-                    method=method
+                    save_dir=global_fs_dir,
+                    c=condition_specific_settings[condition]['c'],
+                    nFolds=global_settings["nFolds_selection"],
+                    n_iterations=global_settings["n_iterations_selection"],
+                    overwrite=global_settings["overwrite_FeatureSelection"],
+                    method=global_settings["method"]
                 )
                 global_fs_results[(phase1, phase2, stride_number)] = (selected_features, fs_df)
 
                 # Compute global PCA using the selected features.
-                pca, loadings_df = compute_global_pca_for_phase(condition_configurations[condition]['global_fs_mouse_ids'],
+                pca, loadings_df = compute_global_pca_for_phase(condition_specific_settings[condition]['global_fs_mouse_ids'],
                                                                 stride_number,
                                                                 phase1, phase2,
                                                                 condition, exp, day,
@@ -645,12 +263,13 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
     aggregated_predictions = {}
     aggregated_feature_weights = {}
     aggregated_raw_features = {}
+    aggregated_cluster_loadings = {}
 
     for mouse_id in mouse_ids:
         for stride_number in stride_numbers:
             for phase1, phase2 in itertools.combinations(phases, 2):
                 try:
-                    if allmice:
+                    if global_settings["allmice"]:
                         tup = global_fs_results.get((phase1, phase2, stride_number), None)
                         if tup is not None:
                             selected_features, fs_df = tup
@@ -661,20 +280,22 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
                         selected_features, fs_df, global_pca = None, None, None
 
                     # Process phase comparison and collect aggregated info
-                    agg_info, feature_weights, raw_features = process_phase_comparison(
+                    agg_info, feature_weights, raw_features, cluster_loadings = process_phase_comparison(
                         mouse_id, stride_number, phase1, phase2,
                         stride_data, stride_data_compare, condition, exp, day,
-                        base_save_dir_condition, allmice=allmice,
+                        base_save_dir_condition, allmice=global_settings["allmice"],
                         selected_features=selected_features, fs_df=fs_df,
-                        method=method,
+                        method=global_settings["method"],
                         global_pca=global_pca,
                         compare_condition=compare_condition,
-                        select_features=select_features
+                        select_features=global_settings["select_features"],
+                        cluster_mapping=cluster_mapping
                     )
                     # agg_info is a tuple: (mouse_id, x_vals, smoothed_scaled_pred)
                     aggregated_predictions.setdefault((phase1, phase2, stride_number), []).append(agg_info)
                     aggregated_feature_weights[(mouse_id, phase1, phase2, stride_number)] = feature_weights
                     aggregated_raw_features[(mouse_id, phase1, phase2, stride_number)] = raw_features
+                    aggregated_cluster_loadings.setdefault((phase1, phase2, stride_number), {})[mouse_id] = cluster_loadings
                 except ValueError as e:
                     print(f"Error processing {mouse_id}, stride {stride_number}, {phase1} vs {phase2}: {e}")
 
@@ -687,10 +308,22 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
     aggregated_save_dir = os.path.join(base_save_dir_condition, "Aggregated")
     os.makedirs(aggregated_save_dir, exist_ok=True)
 
+    aggregated_save_dir = os.path.join(base_save_dir_condition, "Aggregated")
+    utils.plot_cluster_loadings(aggregated_cluster_loadings, aggregated_save_dir)
+
+    mouse_groups = {}
     for (phase1, phase2, stride_number), agg_data in aggregated_predictions.items():
         utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_aggregated_feature_weights(aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_aggregated_raw_features(aggregated_raw_features, aggregated_save_dir, phase1, phase2, stride_number)
+
+        # -------------------------- Process global clustering --------------------------
+        loading_df = get_loading_matrix_from_nested(aggregated_cluster_loadings, (phase1, phase2, stride_number))
+        loading_dict = loading_df.to_dict(orient="index")
+        sim_df, loading_matrix = compute_mouse_similarity(loading_dict)
+        groups = pool_mice_by_similarity(sim_df, threshold=global_settings["mouse_pool_thresh"])
+        mouse_groups[(phase1, phase2, stride_number)] = groups
+
 
     unique_phase_pairs = set((p1, p2, s) for (_, p1, p2, s) in aggregated_feature_weights.keys())
 
@@ -710,7 +343,7 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
             pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
 
             regression_params = compute_global_regression_model(
-                condition_configurations[condition]['global_fs_mouse_ids'],
+                condition_specific_settings[condition]['global_fs_mouse_ids'],
                 stride_number,
                 phase1, phase2,
                 condition, exp, day,
@@ -721,7 +354,7 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
 
     aggregated_compare_predictions = {}
     if compare_condition != 'None':
-        compare_mouse_ids = condition_configurations[compare_condition]['global_fs_mouse_ids']
+        compare_mouse_ids = condition_specific_settings[compare_condition]['global_fs_mouse_ids']
         for phase1, phase2 in itertools.combinations(phases, 2):
             for stride_number in stride_numbers:
                 # Retrieve regression parameters computed from the base condition.
@@ -758,6 +391,7 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
         for (phase1, phase2, stride_number), agg_data in aggregated_compare_predictions.items():
             utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=f"vs_{compare_condition}")
 
+
     # # After processing all mice, aggregate the contributions.
     # # You can choose a save directory for these summary plots:
     # summary_save_path = os.path.join(base_save_dir_condition, 'Summary_Cosine_Similarity')
@@ -774,9 +408,28 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
 # ----------------------------
 
 if __name__ == "__main__":
-    """
-    method: regression (change within to switch knn, reg, lasso), rfecv, rf
-    """
-    main(mouse_ids, stride_numbers, phases, condition='APAChar_LowHigh', exp='Extended',day=None,allmice=True, method='rfecv', compare_condition='APAChar_HighLow', select_features=True)
-    # main(mouse_ids, stride_numbers, phases, condition='APAChar_LowMid', exp='Extended', day=None)
-    main(mouse_ids, stride_numbers, phases, condition='APAChar_HighLow', exp='Extended', day=None, allmice=True, method='rfecv', compare_condition='APAChar_LowHigh')
+    # add flattened LowHigh etc settings to global_settings for log
+    global_settings["LowHigh_c"] = condition_specific_settings['APAChar_LowHigh']['c']
+    global_settings["HighLow_c"] = condition_specific_settings['APAChar_HighLow']['c']
+    global_settings["LowHigh_mice"] = condition_specific_settings['APAChar_LowHigh']['global_fs_mouse_ids']
+    global_settings["HighLow_mice"] = condition_specific_settings['APAChar_HighLow']['global_fs_mouse_ids']
+
+    # Combine the settings in a single dict to log.
+    settings_to_log = {
+        "global_settings": global_settings,
+        "instance_settings": instance_settings
+    }
+    # Log the settings.
+    log_settings(settings_to_log, base_save_dir_no_c)
+
+    # Run each instance.
+    for inst in instance_settings:
+        main(
+            global_settings["mouse_ids"],
+            global_settings["stride_numbers"],
+            global_settings["phases"],
+            condition=inst["condition"],
+            exp=inst["exp"],
+            day=inst["day"],
+            compare_condition=inst["compare_condition"],
+        )

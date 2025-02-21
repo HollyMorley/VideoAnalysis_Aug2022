@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import os
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
 from scipy.signal import medfilt
@@ -144,4 +146,54 @@ def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selecte
     return smoothed_scaled_pred, feature_weights, w
 
 
+def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, day, stride_data_compare, phase1, phase2, selected_features, loadings_df, w, save_path):
+    # Retrieve reduced feature data for the comparison condition
+    # _, comparison_selected_scaled_data, _, _, _, _ = select_runs_data(mouse_id, stride_number, compare_condition, exp, day, stride_data_compare, phase1, phase2)
+    comparison_scaled_data = utils.load_and_preprocess_data(mouse_id, stride_number, compare_condition, exp, day)
+    comparison_reduced_feature_data_df = comparison_scaled_data.loc(axis=1)[selected_features]
+    runs = list(comparison_reduced_feature_data_df.index)
+
+    # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
+    Xdr = np.dot(loadings_df.T, comparison_reduced_feature_data_df.T)
+    # Normalize X
+    Xdr, normalize_mean, normalize_std = utils.normalize(Xdr)
+
+    save_path_compare = os.path.join(save_path, f"vs_{compare_condition}")
+    # prefix path wth \\?\ to avoid Windows path length limit
+    save_path_compare = "\\\\?\\" + save_path_compare
+    os.makedirs(save_path_compare, exist_ok=True)
+    smoothed_scaled_pred = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, compare_condition)
+
+    return smoothed_scaled_pred, runs
+
+
+def compute_global_regression_model(global_mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
+                                    selected_features, loadings_df):
+    aggregated_data_list = []
+    y_list = []
+    for mouse_id in global_mouse_ids:
+        scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        # Get phase masks and runs.
+        run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
+                                                            phase1, phase2)
+        selected_mask = mask_phase1 | mask_phase2
+        selected_data = scaled_data_df.loc[selected_mask][selected_features]
+        aggregated_data_list.append(selected_data)
+        # Create labels: 1 for phase1, 0 for phase2.
+        y_list.append(np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))]))
+
+    # Combine all data across mice.
+    global_data_df = pd.concat(aggregated_data_list)
+    y_global = np.concatenate(y_list)
+
+    # Project aggregated data into PCA space using the global loadings.
+    Xdr = np.dot(loadings_df.T, global_data_df.T)
+    Xdr, norm_mean, norm_std = utils.normalize(Xdr)
+
+    # Compute regression weights (using your chosen regression function).
+    w, full_accuracy = compute_regression(Xdr, y_global)
+    print(f"Global regression model accuracy for {phase1} vs {phase2}: {full_accuracy:.3f}")
+
+    return {'w': w, 'norm_mean': norm_mean, 'norm_std': norm_std, 'selected_features': selected_features,
+            'loadings_df': loadings_df}
 

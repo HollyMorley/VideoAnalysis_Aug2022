@@ -19,35 +19,80 @@ sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
 
-# ----------------------------
-# Function Definitions
-# ----------------------------
-def log_settings(settings, log_dir):
-    """
-    Save the provided settings (a dict) to a timestamped log file.
-    Also include the name of the running script and the current date.
-    """
-    os.makedirs(log_dir, exist_ok=True)
-    # Get the name of the current script file
-    script_name = os.path.basename(inspect.getfile(inspect.currentframe()))
-    # Get the current datetime as string
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-    # Build the content of the log file.
-    log_content = f"Script: {script_name}\nDate: {datetime.datetime.now()}\n\nSettings:\n"
-    for key, value in settings.items():
-        log_content += f"{key}: {value}\n"
-
-    # Define the log file name.
-    log_file = os.path.join(log_dir, f"settings_log_{now_str}.txt")
-    with open(log_file, "w") as f:
-        f.write(log_content)
-    print(f"Settings logged to {log_file}")
-
-
+# -----------------------------------------------------
+# Helper Functions
+# -----------------------------------------------------
+def run_grouped_mice(aggregated_predictions, aggregated_cluster_loadings, stride_data, condition, exp, day, base_save_dir_condition, aggregated_save_dir):
+    mouse_groups = {}
+    for (phase1, phase2, stride_number), agg_data in aggregated_predictions.items():
+        loading_df = get_loading_matrix_from_nested(aggregated_cluster_loadings, (phase1, phase2, stride_number))
+        loading_dict = loading_df.to_dict(orient="index")
+        sim_df, loading_matrix = compute_mouse_similarity(loading_dict)
+        groups = pool_mice_by_similarity(sim_df, threshold=global_settings["mouse_pool_thresh"])
+        mouse_groups[(phase1, phase2, stride_number)] = groups
+        for group_id, group_mouse_ids in groups.items():
+            stride_data_group = stride_data.loc[group_mouse_ids]
+            group_predictions, group_features = process_mouse_group(
+                group_id=group_id,
+                mouse_ids=group_mouse_ids,
+                stride_number=stride_number,
+                phase1=phase1,
+                phase2=phase2,
+                condition=condition,
+                exp=exp,
+                day=day,
+                stride_data=stride_data_group,
+                base_save_dir_condition=base_save_dir_condition,
+                c=condition_specific_settings[condition]['c'],
+                nFolds=global_settings["nFolds_selection"],
+                n_iterations=global_settings["n_iterations_selection"],
+                overwrite=global_settings["overwrite_FeatureSelection"],
+                method=global_settings["method"]
+            )
+            # Store predictions with an extra group label.
+            # For instance, extend aggregated_predictions to include group info:
+            aggregated_predictions.setdefault((phase1, phase2, stride_number), []).extend(
+                [(mouse_id, x_vals, smoothed_pred, group_id) for mouse_id, x_vals, smoothed_pred in
+                 group_predictions]
+            )
+        # Plot aggregated predictions for each group.
+        utils.plot_aggregated_run_predictions_by_group(aggregated_predictions, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
 # -----------------------------------------------------
 # Main Processing Function for Each Phase Comparison
 # -----------------------------------------------------
+def process_mouse_group(group_id, mouse_ids, stride_number, phase1, phase2,
+                        condition, exp, day, stride_data, base_save_dir_condition,
+                        c, nFolds, n_iterations, overwrite, method):
+    print(f"Processing Group {group_id} with mice {mouse_ids} for {phase1} vs {phase2}, stride {stride_number}")
+
+    # Run group-level feature selection and PCA.
+    selected_features, fs_df, group_pca, loadings_df = select_global_features_and_run_global_PCA(
+        mouse_ids=mouse_ids, stride_number=stride_number, phase1=phase1, phase2=phase2,
+        condition=condition, exp=exp, day=day, stride_data=stride_data,
+        c=c, nFolds=nFolds, n_iterations=n_iterations, overwrite=overwrite, method=method,
+        global_fs_dir=os.path.join(base_save_dir_condition, f'Group_{group_id}_GlobalFS')
+    )
+
+    # Now, for each mouse in the group, re-run the prediction steps using the group PCA.
+    group_predictions = []
+    for mouse_id in mouse_ids:
+        agg_info, feature_weights, raw_features, cluster_loadings = process_phase_comparison(
+            mouse_id=mouse_id, stride_number=stride_number,
+            phase1=phase1, phase2=phase2,
+            stride_data=stride_data, stride_data_compare=None,  # adjust as needed if compare data is used
+            condition=condition, exp=exp, day=day,
+            base_save_dir_condition=base_save_dir_condition,
+            selected_features=selected_features, fs_df=fs_df,
+            global_pca=(group_pca, loadings_df),  # use group PCA for the mouse
+            compare_condition='None',  # or adjust if needed
+            cluster_mapping={}  # if grouping, you might not need this here
+        )
+        # agg_info is (mouse_id, x_vals, smoothed_scaled_pred)
+        group_predictions.append(agg_info)
+
+    # Optionally, compute aggregated feature weights / loadings at the group level here.
+    return group_predictions, selected_features
+
 def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_data, stride_data_compare, condition, exp, day,
                              base_save_dir_condition, selected_features=None, fs_df=None,
                              global_pca=None, compare_condition=None, cluster_mapping=None):
@@ -186,20 +231,15 @@ def process_phase_comparison(mouse_id, stride_number, phase1, phase2, stride_dat
 # -----------------------------------------------------
 # Main Execution Function
 # -----------------------------------------------------
-def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, compare_condition='None', settings_to_log=None):
+
+
+def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended', day=None, compare_condition='None'):
     """
     Main function to process a single condition and experiment.
     """
 
-    """
-        # -------- Initial Setup --------
-    """
-    # Get the stride data for the base condition and the comparison condition.
-    stride_data, stride_data_compare = utils.collect_stride_data(condition, exp, day, compare_condition)
-    # Set the base save directory for this condition and experiment.
-    base_save_dir, base_save_dir_condition = utils.set_up_save_dir(condition, exp, condition_specific_settings[condition]['c'], base_save_dir_no_c)
-    # Log the settings.
-    log_settings(settings_to_log, base_save_dir) #todo this includes all instance settings, other than current instance
+    # Initialize the experiment.
+    stride_data, stride_data_compare, base_save_dir, base_save_dir_condition = utils.initialize_experiment(condition, exp, day, compare_condition, settings_to_log, base_save_dir_no_c, condition_specific_settings)
 
     """
         # -------- Feature Clustering --------
@@ -332,21 +372,13 @@ def main(mouse_ids, stride_numbers, phases, condition='LowHigh', exp='Extended',
                                         global_fs_results=global_fs_results, global_pca_results=global_pca_results)
 
     #### -------- ** OPTION 2 ** Pool Mice by Similarity and then re-run feature selection, PCA and prediction --------
-    else:
-        mouse_groups = {}
-        for (phase1, phase2, stride_number), agg_data in aggregated_predictions.items():
-            loading_df = get_loading_matrix_from_nested(aggregated_cluster_loadings, (phase1, phase2, stride_number))
-            loading_dict = loading_df.to_dict(orient="index")
-            sim_df, loading_matrix = compute_mouse_similarity(loading_dict)
-            groups = pool_mice_by_similarity(sim_df, threshold=global_settings["mouse_pool_thresh"])
-            mouse_groups[(phase1, phase2, stride_number)] = groups
+    elif global_settings["pool_mice"]:
+        run_grouped_mice(aggregated_predictions, aggregated_cluster_loadings, stride_data, condition, exp, day, base_save_dir_condition, aggregated_save_dir)
+
 
             # Instructions for chatgpt:
             # todo now have mouse groups, go back and select features from mice within each group (ie if have 4 groups, should have 4 sets of features)
             # todo then run PCA and regression for each mouse like we do for allmice=True. Plot individual mice and aggregated plots as usual but there should be x ngroups aggregated features plots. In the aggregated run predictions, maybe now colour indivdual mice lines by group
-
-            # Get the selected features for each group of mice.
-
 
 # ----------------------------
 # Execute Main Function

@@ -21,12 +21,43 @@ from joblib import Parallel, delayed
 import random
 from collections import Counter
 from tqdm import tqdm
-
+import datetime
+import inspect
 
 from Helpers.Config_23 import *
 from Analysis.ReduceFeatures.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
 from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
 
+def log_settings(settings, log_dir):
+    """
+    Save the provided settings (a dict) to a timestamped log file.
+    Also include the name of the running script and the current date.
+    """
+    os.makedirs(log_dir, exist_ok=True)
+    # Get the name of the current script file
+    script_name = os.path.basename(inspect.getfile(inspect.currentframe()))
+    # Get the current datetime as string
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Build the content of the log file.
+    log_content = f"Script: {script_name}\nDate: {datetime.datetime.now()}\n\nSettings:\n"
+    for key, value in settings.items():
+        log_content += f"{key}: {value}\n"
+
+    # Define the log file name.
+    log_file = os.path.join(log_dir, f"settings_log_{now_str}.txt")
+    with open(log_file, "w") as f:
+        f.write(log_content)
+    print(f"Settings logged to {log_file}")
+
+def initialize_experiment(condition, exp, day, compare_condition, settings_to_log, base_save_dir_no_c, condition_specific_settings):
+    # Get the stride data for the base condition and the comparison condition.
+    stride_data, stride_data_compare = collect_stride_data(condition, exp, day, compare_condition)
+    # Set the base save directory for this condition and experiment.
+    base_save_dir, base_save_dir_condition = set_up_save_dir(condition, exp, condition_specific_settings[condition]['c'], base_save_dir_no_c)
+    # Log the settings.
+    log_settings(settings_to_log, base_save_dir) #todo this includes all instance settings, other than current instance
+    return stride_data, stride_data_compare, base_save_dir, base_save_dir_condition
 
 def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
     """
@@ -434,9 +465,6 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, s
     This function interpolates each curve onto a common x-axis, plots individual curves (with lower alpha),
     and plots the mean curve.
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-
     plt.figure(figsize=(10, 8))
 
     # Determine a common x-axis.
@@ -492,6 +520,66 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, s
 
     save_path = os.path.join(save_dir,
                              f"Aggregated_{normalization_method.upper()}_Run_Predictions_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+
+
+def plot_aggregated_run_predictions_by_group(aggregated_data, save_dir, phase1, phase2, stride_number, condition_label,
+                                             normalization_method='maxabs'):
+    plt.figure(figsize=(10, 8))
+    all_x_vals = []
+    group_ids = []
+    for data in aggregated_data:
+        # Expect each data to be (mouse_id, x_vals, smoothed_pred, group_id)
+        _, x_vals, _, group_id = data
+        all_x_vals.extend(x_vals)
+        group_ids.append(group_id)
+    global_min_x = min(all_x_vals)
+    global_max_x = max(all_x_vals)
+    common_npoints = max(len(data[1]) for data in aggregated_data)
+    common_x = np.linspace(global_min_x, global_max_x, common_npoints)
+
+    # Define a color mapping for groups.
+    unique_groups = sorted(set(group_ids))
+    cmap = plt.get_cmap("tab10")
+    group_color_dict = {group: cmap(i) for i, group in enumerate(unique_groups)}
+
+    interpolated_curves = []
+    for mouse_id, x_vals, smoothed_pred, group_id in aggregated_data:
+        # Normalize curve (same as before)
+        if normalization_method == 'zscore':
+            mean_val = np.mean(smoothed_pred)
+            std_val = np.std(smoothed_pred)
+            normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
+        elif normalization_method == 'maxabs':
+            max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+            normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
+        else:
+            normalized_curve = smoothed_pred
+
+        interp_curve = np.interp(common_x, x_vals, normalized_curve)
+        interpolated_curves.append(interp_curve)
+
+        # Plot with the group color.
+        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id} (Group {group_id})', alpha=0.3,
+                 color=group_color_dict[group_id])
+
+    all_curves_array = np.vstack(interpolated_curves)
+    mean_curve = np.mean(all_curves_array, axis=0)
+    plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
+    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    plt.title(
+        f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}')
+    plt.xlabel('Run Number')
+    plt.ylabel('Normalized Prediction (Smoothed)')
+    if normalization_method == 'maxabs':
+        plt.ylim(-1, 1)
+    plt.legend(loc='upper right')
+    plt.grid(False)
+    plt.gca().yaxis.grid(True)
+    plt.tight_layout()
+    save_path = os.path.join(save_dir,
+                             f"Aggregated_{normalization_method.upper()}_Run_Predictions_ByGroup_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
 

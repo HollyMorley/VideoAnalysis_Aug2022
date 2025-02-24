@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 
 from Helpers.Config_23 import *
-from Analysis.ReduceFeatures.LogisticRegression import compute_regression, compute_lasso_regression, run_regression, predict_runs
+from Analysis.ReduceFeatures.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
 from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
 
 
@@ -99,6 +99,21 @@ def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
     scaled_data_df = pd.DataFrame(scaled_data, index=filtered_data_imputed.index,
                                   columns=filtered_data_imputed.columns)
     return scaled_data_df
+
+def collect_stride_data(condition, exp, day, compare_condition):
+    stride_data_path = None
+    stride_data_path_compare = None
+    if exp == 'Extended':
+        stride_data_path = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\MEASURES_StrideInfo.h5")
+        if compare_condition != 'None':
+            stride_data_path_compare = os.path.join(paths['filtereddata_folder'], f"{compare_condition}\\{exp}\\MEASURES_StrideInfo.h5")
+    elif exp == 'Repeats':
+        stride_data_path = os.path.join(paths['filtereddata_folder'], f"{condition}\\{exp}\\{day}\\MEASURES_StrideInfo.h5")
+        if compare_condition != 'None':
+            stride_data_path_compare = os.path.join(paths['filtereddata_folder'], f"{compare_condition}\\{exp}\\{day}\\MEASURES_StrideInfo.h5")
+    stride_data = load_stride_data(stride_data_path)
+    stride_data_compare = load_stride_data(stride_data_path_compare)
+    return stride_data, stride_data_compare
 
 
 def select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2):
@@ -270,49 +285,6 @@ def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFol
     avg_true_accuracy = np.mean(fold_true_accuracies)
 
     return feature, {"true_accuracy": avg_true_accuracy, "iteration_diffs": avg_feature_diffs}
-
-
-def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition, exp, day, stride_data, save_dir,
-                             c, nFolds, n_iterations, overwrite, method='regression'):
-    results_file = os.path.join(save_dir, f'global_feature_selection_results_{phase1}_{phase2}_stride{stride_number}.csv')
-
-    aggregated_data_list = []
-    aggregated_y_list = []
-    total_run_numbers = []
-
-    for mouse_id in mice_ids:
-        # Load and preprocess data for each mouse.
-        scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
-        # Get runs and phase masks.
-        run_numbers, _, mask_phase1, mask_phase2 = get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
-                                                            phase1, phase2)
-        selected_mask = mask_phase1 | mask_phase2
-        # Transpose so that rows are features and columns are runs.
-        selected_data = scaled_data_df.loc[selected_mask].T
-        aggregated_data_list.append(selected_data)
-        # Create the regression target.
-        y_reg = np.concatenate([np.ones(np.sum(mask_phase1)), np.zeros(np.sum(mask_phase2))])
-        aggregated_y_list.append(y_reg)
-        # (Store run indices as simple integers for each mouse.)
-        total_run_numbers.extend(list(range(selected_data.shape[1])))
-
-    # Combine data across mice.
-    aggregated_data_df = pd.concat(aggregated_data_list, axis=1)
-    aggregated_y = np.concatenate(aggregated_y_list)
-
-    # Call unified_feature_selection (choose method as desired: 'rfecv', 'rf', or 'regression')
-    selected_features, fs_results_df = unified_feature_selection(
-                                        feature_data_df=aggregated_data_df,
-                                        y=aggregated_y,
-                                        c=c,
-                                        method=method,
-                                        cv=nFolds,
-                                        n_iterations=n_iterations,
-                                        save_file=results_file,
-                                        overwrite_FeatureSelection=overwrite
-                                    )
-    print(f"Global selected features: {selected_features}, \nLength: {len(selected_features)}")
-    return selected_features, fs_results_df
 
 def normalize(Xdr):
     normalize_mean = []
@@ -787,6 +759,9 @@ def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2, s
         feature_df = features_df[feature]
         # make mousid the column
         feature_df = feature_df.unstack(level=0)
+        feature_df = feature_df.apply(pd.to_numeric, errors='coerce')
+        #feature_df = feature_df.applymap(lambda x: x.filled(np.nan) if hasattr(x, "filled") else x)
+
         #smooth the data with median filter
         #feature_df = feature_df.apply(lambda x: medfilt(x, kernel_size=5), axis=0)
 
@@ -794,7 +769,10 @@ def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2, s
 
         # Plot a faint line for each mouse
         for mouse in feature_df.columns:
-            ax.plot(feature_df.index, feature_df.loc(axis=1)[mouse], alpha=0.3,
+            ydata = feature_df.loc(axis=1)[mouse].values
+            if np.ma.is_masked(ydata):
+                ydata = np.ma.filled(ydata, np.nan)
+            ax.plot(feature_df.index, ydata, alpha=0.3,
                     marker='o', markersize=3, linestyle='-', label=mouse)
 
         # Compute summary statistics: mean and standard error (SEM) for each feature
@@ -973,45 +951,38 @@ def plot_cluster_loadings_lines(aggregated_cluster_loadings, save_dir):
     """
     For each (phase1, phase2, stride) combination, create a line plot where each mouse
     is represented by a single line that shows its regression loading across clusters.
+    If a mouse does not have a value for a given cluster, it is plotted as zero.
     """
     os.makedirs(save_dir, exist_ok=True)
 
-    def plot_cluster_loadings_lines(aggregated_cluster_loadings, save_dir):
-        """
-        For each (phase1, phase2, stride) combination, create a line plot where each mouse
-        is represented by a single line that shows its regression loading across clusters.
-        If a mouse does not have a value for a given cluster, it is plotted as zero.
-        """
-        os.makedirs(save_dir, exist_ok=True)
+    for key, mouse_cluster_dict in aggregated_cluster_loadings.items():
+        phase1, phase2, stride_number = key
 
-        for key, mouse_cluster_dict in aggregated_cluster_loadings.items():
-            phase1, phase2, stride_number = key
+        # Compute the union of all cluster IDs for this key.
+        all_clusters = set()
+        for cl_loadings in mouse_cluster_dict.values():
+            all_clusters.update(cl_loadings.keys())
+        sorted_clusters = sorted(all_clusters)
 
-            # Compute the union of all cluster IDs for this key.
-            all_clusters = set()
-            for cl_loadings in mouse_cluster_dict.values():
-                all_clusters.update(cl_loadings.keys())
-            sorted_clusters = sorted(all_clusters)
+        plt.figure(figsize=(10, 6))
 
-            plt.figure(figsize=(10, 6))
+        for mouse, cl_loadings in mouse_cluster_dict.items():
+            # For each cluster in the union, get the loading, or 0 if missing.
+            loadings = [cl_loadings.get(cluster, 0) for cluster in sorted_clusters]
+            # scale loadings
+            loadings = np.array(loadings) / np.max(np.abs(loadings))
+            plt.plot(sorted_clusters, loadings, marker='o', label=mouse)
 
-            for mouse, cl_loadings in mouse_cluster_dict.items():
-                # For each cluster in the union, get the loading, or 0 if missing.
-                loadings = [cl_loadings.get(cluster, 0) for cluster in sorted_clusters]
-                # scale loadings
-                loadings = np.array(loadings) / np.max(np.abs(loadings))
-                plt.plot(sorted_clusters, loadings, marker='o', label=mouse)
-
-            plt.title(f"Regression Loadings by Cluster: {phase1} vs {phase2} | Stride {stride_number}")
-            plt.xlabel("Cluster")
-            plt.ylabel("Regression Loading")
-            plt.legend(title="Mouse ID")
-            plt.grid(True)
-            plt.tight_layout()
-            save_path = os.path.join(save_dir, f'cluster_loadings_lines_{phase1}_{phase2}_stride{stride_number}.png')
-            plt.savefig(save_path, dpi=300)
-            plt.close()
-            print(f"Saved cluster loading line plot to {save_path}")
+        plt.title(f"Regression Loadings by Cluster: {phase1} vs {phase2} | Stride {stride_number}")
+        plt.xlabel("Cluster")
+        plt.ylabel("Regression Loading")
+        plt.legend(title="Mouse ID")
+        plt.grid(True)
+        plt.tight_layout()
+        save_path = os.path.join(save_dir, f'cluster_loadings_lines_{phase1}_{phase2}_stride{stride_number}.png')
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+        print(f"Saved cluster loading line plot to {save_path}")
 
 
 def create_save_directory(base_dir, mouse_id, stride_number, phase1, phase2):
@@ -1050,6 +1021,11 @@ def load_stride_data(stride_data_path):
     """
     stride_data = pd.read_hdf(stride_data_path, key='stride_info')
     return stride_data
+
+def set_up_save_dir(condition, exp, c, base_save_dir_no_c):
+    base_save_dir = base_save_dir_no_c + f'-c={c}'
+    base_save_dir_condition = os.path.join(base_save_dir, f'{condition}_{exp}')
+    return base_save_dir, base_save_dir_condition
 
 
 def determine_stepping_limbs(stride_data, mouse_id, run, stride_number):
@@ -1104,6 +1080,65 @@ def get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2):
     pcs_combined = np.vstack([pcs_phase1, pcs_phase2])
 
     return pcs_combined, labels, pcs_phase1, pcs_phase2
+
+def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compare_condition, exp, day, stride_data, stride_data_compare, phases,
+                              stride_numbers, base_save_dir_condition, aggregated_save_dir,
+                              global_fs_results, global_pca_results):
+    global_regression_params = {}
+    for phase1, phase2 in itertools.combinations(phases, 2):
+        for stride_number in stride_numbers:
+            selected_features, fs_df = global_fs_results[(phase1, phase2, stride_number)]
+            pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
+
+            regression_params = compute_global_regression_model(
+                mouseIDs_base,
+                stride_number,
+                phase1, phase2,
+                condition, exp, day,
+                stride_data,
+                selected_features, loadings_df
+            )
+            global_regression_params[(phase1, phase2, stride_number)] = regression_params
+
+    aggregated_compare_predictions = {}
+    if compare_condition != 'None':
+        compare_mouse_ids = mouseIDs_compare
+        for phase1, phase2 in itertools.combinations(phases, 2):
+            for stride_number in stride_numbers:
+                # Retrieve regression parameters computed from the base condition.
+                regression_params = global_regression_params.get((phase1, phase2, stride_number), None)
+                if regression_params is None:
+                    print(f"No regression model for phase pair {phase1} vs {phase2}, stride {stride_number}.")
+                    continue
+                w = regression_params['w']
+                loadings_df = regression_params['loadings_df']
+                selected_features = regression_params['selected_features']
+
+                for mouse_id in compare_mouse_ids:
+                    try:
+                        compare_save_path = os.path.join(base_save_dir_condition, f"{compare_condition}_predictions",
+                                                         mouse_id)
+                        os.makedirs(compare_save_path, exist_ok=True)
+
+                        smoothed_scaled_pred, runs = predict_compare_condition(
+                            mouse_id, compare_condition, stride_number, exp, day,
+                            stride_data_compare, phase1, phase2,
+                            selected_features, loadings_df, w, compare_save_path
+                        )
+
+                        #x_vals = np.arange(len(smoothed_scaled_pred))
+                        aggregated_compare_predictions.setdefault((phase1, phase2, stride_number), []).append(
+                            (mouse_id, runs, smoothed_scaled_pred)
+                        )
+
+                    except Exception as e:
+                        print(
+                            f"Error processing compare condition for mouse {mouse_id}, phase pair {phase1} vs {phase2}: {e}")
+
+        # Plot aggregated compare predictions.
+        for (phase1, phase2, stride_number), agg_data in aggregated_compare_predictions.items():
+            plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=f"vs_{compare_condition}")
+
 
 
 

@@ -21,7 +21,7 @@ Description of global_settings:
 ############################################################################################################
 
 # ----------------------------- Save path: -----------------------------------
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round13-20250220-single-rfecv-SingleCon-featureclusters')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round14-20250221-single-rfecv-SingleCon-featureclusters')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
 
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
@@ -47,6 +47,7 @@ global_settings = {
     "allmice": False,
     "method": 'rfecv',
     "select_features": True,
+    "pool_mice": True,
     "overwrite_FeatureSelection": False,
     # less frequently changed settings:
     "n_iterations_selection": 100,

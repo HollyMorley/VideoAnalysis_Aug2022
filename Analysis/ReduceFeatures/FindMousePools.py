@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics.pairwise import cosine_similarity
 
 def compute_mouse_similarity(cluster_loadings_dict):
@@ -76,7 +78,6 @@ def pool_mice_by_similarity(sim_df, threshold=0.8):
     """
     Given a similarity matrix DataFrame (sim_df) with mouse IDs as both rows and columns,
     create groups (connected components) of mice with similarity above the threshold.
-    Instead of using a representative mouse, assign a numeric group id to each group.
 
     Parameters:
       - sim_df: DataFrame where sim_df.loc[i, j] is the cosine similarity between mouse i and mouse j.
@@ -105,3 +106,20 @@ def pool_mice_by_similarity(sim_df, threshold=0.8):
         groups[idx] = list(comp)
 
     return groups
+
+def plot_similarity_matrix_threshold(sim_df, threshold=0.5, title="Mouse Loading Similarity (values > 0.5)", save_file=None):
+    # Create a copy and mask values below or equal to the threshold.
+    masked_sim_df = sim_df.copy()
+    masked_sim_df[masked_sim_df <= threshold] = np.nan
+
+    plt.figure(figsize=(10, 8))
+    ax = sns.heatmap(masked_sim_df, annot=True, cmap="viridis", fmt=".2f",
+                     mask=masked_sim_df.isna(), cbar_kws={'label': 'Cosine Similarity'})
+    plt.title(title)
+    plt.xlabel("Mouse ID")
+    plt.ylabel("Mouse ID")
+    plt.tight_layout()
+    if save_file:
+        plt.savefig(save_file, dpi=300)
+    plt.show()
+

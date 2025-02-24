@@ -10,7 +10,19 @@ import matplotlib.pyplot as plt
 import joblib
 
 from Analysis.ReduceFeatures import utils_feature_reduction as utils
-from Analysis.ReduceFeatures.config import base_save_dir_no_c
+
+
+def find_feature_clusters(mouseIDs, stride_number, condition, exp, day, stride_data, phase1, phase2, save_dir):
+    # find k
+    optimal_k, avg_sil_scores = cross_validate_k_clusters_folds_pca(mouseIDs, stride_number, condition, exp, day,
+        stride_data, phase1, phase2)
+
+    cluster_save_file = os.path.join(save_dir, f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
+    # cluster features
+    cluster_mapping, feature_matrix = cluster_features_run_space(mouseIDs,stride_number, condition, exp, day, stride_data, phase1,
+                                                 phase2, n_clusters=optimal_k, save_file=cluster_save_file)
+    return cluster_mapping, feature_matrix
+
 
 def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2):
     """
@@ -215,12 +227,12 @@ def cross_validate_k_clusters_folds_pca(global_fs_mouse_ids, stride_number, cond
 
     # Select the k with the highest average silhouette score.
     optimal_k = max(avg_sil_scores, key=avg_sil_scores.get)
-    print(f"Optimal k (after PCA) determined to be: {optimal_k}")
+    print(f"Optimal k based on silhoette score (after PCA) determined to be: {optimal_k}")
     return optimal_k, avg_sil_scores
 
 
 def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2,
-                               n_clusters, save_file='feature_clusters.pkl'):
+                               n_clusters, save_file):
     """
     Build the global runs-by-features matrix, transpose it so that rows are features,
     cluster the features using k-means with n_clusters, and save the mapping.
@@ -237,10 +249,10 @@ def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, ex
     cluster_mapping = dict(zip(feature_matrix.index, kmeans.labels_))
     joblib.dump(cluster_mapping, save_file)
     print(f"Feature clustering done and saved to {save_file} using k={n_clusters}.")
-    return cluster_mapping
+    return cluster_mapping, feature_matrix
 
 
-def plot_feature_clustering(feature_matrix, cluster_mapping, save_file="feature_clustering.png"):
+def plot_feature_clustering(feature_matrix, cluster_mapping, p1, p2, s, save_dir):
     """
     Projects the features into 2D using PCA and plots them colored by cluster.
     Each point represents a feature (from the rows of feature_matrix).
@@ -265,19 +277,17 @@ def plot_feature_clustering(feature_matrix, cluster_mapping, save_file="feature_
     #     plt.annotate(feat, (X_reduced[i, 0], X_reduced[i, 1]), fontsize=6, alpha=0.7)
 
     plt.tight_layout()
-    save_path = os.path.join(base_save_dir_no_c, save_file)
+    save_path = os.path.join(save_dir, f"feature_clustering_{p1}_vs_{p2}_stride{s}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
     print(f"Saved feature clustering plot to {save_path}")
 
 
-def plot_feature_clusters_chart(cluster_mapping, save_file="feature_clusters_chart.png"):
+def plot_feature_clusters_chart(cluster_mapping, p1, p2, s, save_dir):
     """
     Creates and saves a chart that arranges feature names by their assigned cluster.
     Each column represents one cluster.
     """
-    import matplotlib.pyplot as plt
-
     # Invert the cluster_mapping: cluster -> list of features
     clusters = {}
     for feat, cl in cluster_mapping.items():
@@ -311,7 +321,7 @@ def plot_feature_clusters_chart(cluster_mapping, save_file="feature_clusters_cha
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     fig.tight_layout()
-    save_path = os.path.join(base_save_dir_no_c, save_file)
+    save_path = os.path.join(save_dir, f"feature_clusters_chart_{p1}_vs_{p2}_stride{s}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
     print(f"Saved feature clusters chart to {save_path}")

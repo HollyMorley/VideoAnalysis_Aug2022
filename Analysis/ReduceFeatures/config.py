@@ -21,7 +21,7 @@ Description of global_settings:
 ############################################################################################################
 
 # ----------------------------- Save path: -----------------------------------
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round14-20250221-single-rfecv-SingleCon-featureclusters')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round16-20250226-SingleCon-allmice-ClstrSpStrds-stridecomp')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
 
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
@@ -41,13 +41,16 @@ instance_settings = [
 
 # --------------------------- Global settings: -------------------------------
 global_settings = {
-    "stride_numbers": [-1],
+    "stride_numbers": [-3,-2,-1],
     "phases": ['APA2','Wash2'],
     "script_version": 'SingleCondition', # todo if combine MultiCondition and SingleCondition this will determine which of those is run
-    "allmice": False,
+    "allmice": True,
     "method": 'rfecv',
+    "cluster_method": "kmeans",
+    "cluster_all_strides": False,
     "select_features": True,
-    "pool_mice": True,
+    "pool_mice": False,
+    "multi_strides": True,
     "overwrite_FeatureSelection": False,
     # less frequently changed settings:
     "n_iterations_selection": 100,

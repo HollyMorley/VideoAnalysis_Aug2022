@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
 from Analysis.ReduceFeatures import utils_feature_reduction as utils
-from Analysis.ReduceFeatures.PCA import compute_global_pca_for_phase
+# from Analysis.ReduceFeatures.PCA import compute_global_pca_for_phase
 
 
 def rfe_feature_selection(selected_scaled_data_df, y, cv=5, min_features_to_select=5, C=1.0):
@@ -118,15 +118,16 @@ def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition,
     return selected_features, fs_results_df
 
 
-def select_global_features_and_run_global_PCA(mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
-                                              c, nFolds, n_iterations, overwrite, method, global_fs_dir):
-    print(f"Performing global feature selection for {phase1} vs {phase2}, stride {stride_number}.")
-    # Perform global feature selection.
-    selected_features, fs_df = global_feature_selection(mouse_ids, stride_number, phase1, phase2, condition, exp, day,
-        stride_data, save_dir=global_fs_dir, c=c, nFolds=nFolds, n_iterations=n_iterations, overwrite=overwrite, method=method)
-
-    # Compute global PCA using the selected features.
-    pca, loadings_df = compute_global_pca_for_phase(mouse_ids, stride_number, phase1, phase2, condition, exp, day,
-                                                    stride_data, selected_features)
-    return selected_features, fs_df, pca, loadings_df
-
+# def select_global_features_and_run_global_PCA(mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
+#                                               c, nFolds, n_iterations, overwrite, method, global_fs_dir):
+#     from Analysis.ReduceFeatures.PCA import compute_global_pca_for_phase
+#     print(f"Performing global feature selection for {phase1} vs {phase2}, stride {stride_number}.")
+#     # Perform global feature selection.
+#     selected_features, fs_df = global_feature_selection(mouse_ids, stride_number, phase1, phase2, condition, exp, day,
+#         stride_data, save_dir=global_fs_dir, c=c, nFolds=nFolds, n_iterations=n_iterations, overwrite=overwrite, method=method)
+#
+#     # Compute global PCA using the selected features.
+#     pca, loadings_df = compute_global_pca_for_phase(mouse_ids, stride_number, phase1, phase2, condition, exp, day,
+#                                                     stride_data, selected_features)
+#     return selected_features, fs_df, pca, loadings_df
+#

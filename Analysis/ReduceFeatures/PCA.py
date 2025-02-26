@@ -7,8 +7,6 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
 from Analysis.ReduceFeatures import utils_feature_reduction as utils
 
-
-
 def perform_pca(scaled_data_df, n_components):
     """
     Perform PCA on the standardized data.
@@ -22,7 +20,7 @@ def perform_pca(scaled_data_df, n_components):
     return pca, pcs, loadings_df
 
 
-def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path):
+def plot_pca(pca, pcs, labels, p1, p2, stride, stepping_limbs, run_numbers, mouse_id, save_path):
     """
     Create and save 2D and 3D PCA scatter plots.
     """
@@ -70,7 +68,7 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
     plt.xlim(df_plot['PC1'].min() - padding_pc1, df_plot['PC1'].max() + padding_pc1)
     plt.ylim(df_plot['PC2'].min() - padding_pc2, df_plot['PC2'].max() + padding_pc2)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f"PCA_Mouse_{mouse_id}_PC1_vs_PC2.png"), dpi=300)
+    plt.savefig(os.path.join(save_path, f"PCA_Mouse_{mouse_id}_{p1}vs{p2}_{stride}_PC1_vs_PC2.png"), dpi=300)
     plt.close()
 
     # 3D Scatter (if available)
@@ -98,11 +96,11 @@ def plot_pca(pca, pcs, labels, stepping_limbs, run_numbers, mouse_id, save_path)
         ax.set_ylim(df_plot['PC2'].min() - padding_pc2, df_plot['PC2'].max() + padding_pc2)
         ax.set_zlim(df_plot['PC3'].min() - padding_pc3, df_plot['PC3'].max() + padding_pc3)
         plt.tight_layout()
-        plt.savefig(os.path.join(save_path, f"PCA_Mouse_{mouse_id}_PC1_vs_PC2_vs_PC3_3D.png"), dpi=300)
+        plt.savefig(os.path.join(save_path, f"PCA_Mouse_{mouse_id}_{p1}_{p2}_{stride}_PC1_vs_PC2_vs_PC3_3D.png"), dpi=300)
         plt.close()
 
 
-def plot_scree(pca, save_path):
+def plot_scree(pca, p1, p2, stride, save_path):
     """
     Plot and save the scree plot.
     """
@@ -120,7 +118,7 @@ def plot_scree(pca, save_path):
     plt.legend(loc='best')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, "Scree_Plot.png"), dpi=300)
+    plt.savefig(os.path.join(save_path, f"Scree_Plot_{p1}_{p2}_{stride}_.png"), dpi=300)
     plt.close()
 
 
@@ -187,7 +185,7 @@ def cross_validate_pca(scaled_data_df, save_path, n_folds=10):
 
     return fold_explained_variances
 
-def plot_average_variance_explained_across_folds(fold_variances, scaled_data_df):
+def plot_average_variance_explained_across_folds(fold_variances, p1, p2, s):
     # Determine the minimum number of components across folds.
     min_components = min(len(arr) for arr in fold_variances)
 
@@ -205,7 +203,7 @@ def plot_average_variance_explained_across_folds(fold_variances, scaled_data_df)
     plt.xticks(range(1, min_components + 1))
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("Average_PCA_CV_Scree_Plot.png", dpi=300)
+    plt.savefig(f"Average_PCA_CV_Scree_Plot_{p1}vs{p2}_{s}.png", dpi=300)
     plt.close()
 
 def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2,

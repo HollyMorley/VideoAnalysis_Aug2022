@@ -96,7 +96,7 @@ def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_pha
     return w, normalize_mean, normalize_std, y_reg, full_accuracy
 
 
-def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, condition_name):
+def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition_name):
     # Apply the full model to all runs (scaled and unscaled)
     all_trials_dr = np.dot(loadings_df.T, reduced_feature_data_df.T)
     all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T
@@ -108,13 +108,13 @@ def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize
     smoothed_scaled_pred = medfilt(run_pred_scaled[0], kernel_size=5)
 
     # Plot run prediction
-    utils.plot_run_prediction(reduced_feature_data_df, run_pred, smoothed_pred, save_path, mouse_id, phase1, phase2,
+    utils.plot_run_prediction(reduced_feature_data_df, run_pred, smoothed_pred, save_path, mouse_id, phase1, phase2, stride_number,
                               scale_suffix="", dataset_suffix=condition_name)
-    utils.plot_run_prediction(reduced_feature_data_df, run_pred_scaled, smoothed_scaled_pred, save_path, mouse_id, phase1, phase2,
+    utils.plot_run_prediction(reduced_feature_data_df, run_pred_scaled, smoothed_scaled_pred, save_path, mouse_id, phase1, phase2, stride_number,
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred
 
-def regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, save_path, normalize_mean, normalize_std, y_reg, full_accuracy):
+def regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy):
     # Shuffle features and run logistic regression to find unique contributions and single feature contributions
     single_all_dict, unique_all_dict = find_unique_and_single_contributions(reduced_feature_selected_data_df,
                                                                             loadings_df, normalize_mean,
@@ -126,22 +126,22 @@ def regression_feature_contributions(loadings_df, reduced_feature_selected_data_
     print(f"Full model shuffled accuracy: {full_shuffled_accuracy:.3f}")
 
     # Plot unique and single feature contributions
-    utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
-    utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}")
+    utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}")
+    utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}")
 
-def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, save_path, condition):
+def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition):
     w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
 
     # Compute feature contributions
-    regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
+    regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
 
     # Compute feature-space weights for this mouse
     feature_weights = loadings_df.dot(w.T).squeeze()
     # Plot the weights in the original feature space
-    utils.plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2)
+    utils.plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number)
 
     # Predict runs using the full model
-    smoothed_scaled_pred = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, condition)
+    smoothed_scaled_pred = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition)
 
     return smoothed_scaled_pred, feature_weights, w
 
@@ -162,7 +162,7 @@ def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, d
     # prefix path wth \\?\ to avoid Windows path length limit
     save_path_compare = "\\\\?\\" + save_path_compare
     os.makedirs(save_path_compare, exist_ok=True)
-    smoothed_scaled_pred = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, compare_condition)
+    smoothed_scaled_pred = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, stride_number, compare_condition)
 
     return smoothed_scaled_pred, runs
 

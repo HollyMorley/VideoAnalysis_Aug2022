@@ -23,17 +23,72 @@ from collections import Counter
 from tqdm import tqdm
 import datetime
 import inspect
+from typing import Optional, List, Dict, Tuple
+from dataclasses import dataclass, field
 
 from Helpers.Config_23 import *
 from Analysis.ReduceFeatures.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
 from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
+
+
+@dataclass
+class PredictionData:
+    mouse_id: str
+    x_vals: List[float]
+    smoothed_scaled_pred: np.ndarray
+    group_id: Optional[int] = None  # None if individual; set for grouped predictions
+
+    def as_tuple(self) -> Tuple:
+        """Return a tuple representation for backward compatibility."""
+        return (self.mouse_id, self.x_vals, self.smoothed_scaled_pred, self.group_id)
+
+    # Add __getitem__ so that indexing works like with a tuple.
+    def __getitem__(self, index):
+        if index == 0:
+            return self.mouse_id
+        elif index == 1:
+            return self.x_vals
+        elif index == 2:
+            return self.smoothed_scaled_pred
+        elif index == 3:
+            return self.group_id
+        else:
+            raise IndexError("Index out of range for PredictionData")
+
+@dataclass
+class FeatureWeights:
+    mouse_id: str
+    feature_weights: pd.Series
+    group_id: Optional[int] = None  # None if individual; set for grouped predictions
+
+    def as_tuple(self) -> Tuple:
+        """Return a tuple representation for backward compatibility."""
+        return (self.mouse_id, self.feature_weights, self.group_id)
+
+    def __getitem__(self, index):
+        if index == 0:
+            return self.mouse_id
+        elif index == 1:
+            return self.feature_weights
+        elif index == 2:
+            return self.group_id
+        else:
+            raise IndexError("Index out of range for FeatureWeights")
 
 def log_settings(settings, log_dir):
     """
     Save the provided settings (a dict) to a timestamped log file.
     Also include the name of the running script and the current date.
     """
+    # check if a log file already exists, if so delete it
+    # to do above
     os.makedirs(log_dir, exist_ok=True)
+
+    # Delete pre-existing log files starting with 'settings_log_'
+    for filename in os.listdir(log_dir):
+        if filename.startswith("settings_log_") and filename.endswith(".txt"):
+            os.remove(os.path.join(log_dir, filename))
+
     # Get the name of the current script file
     script_name = os.path.basename(inspect.getfile(inspect.currentframe()))
     # Get the current datetime as string
@@ -49,15 +104,6 @@ def log_settings(settings, log_dir):
     with open(log_file, "w") as f:
         f.write(log_content)
     print(f"Settings logged to {log_file}")
-
-def initialize_experiment(condition, exp, day, compare_condition, settings_to_log, base_save_dir_no_c, condition_specific_settings):
-    # Get the stride data for the base condition and the comparison condition.
-    stride_data, stride_data_compare = collect_stride_data(condition, exp, day, compare_condition)
-    # Set the base save directory for this condition and experiment.
-    base_save_dir, base_save_dir_condition = set_up_save_dir(condition, exp, condition_specific_settings[condition]['c'], base_save_dir_no_c)
-    # Log the settings.
-    log_settings(settings_to_log, base_save_dir) #todo this includes all instance settings, other than current instance
-    return stride_data, stride_data_compare, base_save_dir, base_save_dir_condition
 
 def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
     """
@@ -245,6 +291,7 @@ def unified_feature_selection(feature_data_df, y, c, method='regression', cv=5, 
             results.to_csv(save_file)
         else:
             # Save the list of selected features in a simple CSV.
+            os.makedirs(os.path.dirname(save_file), exist_ok=True)
             pd.DataFrame({'selected_features': selected_features}).to_csv(save_file, index=False)
 
     if method == 'regression':
@@ -417,7 +464,7 @@ def plot_unique_delta_accuracy(unique_delta_accuracy, mouseID, save_path, title_
     plt.savefig(os.path.join(save_path, f"Unique_delta_accuracy_{title_suffix}.png"), dpi=300)
     plt.close()
 
-def plot_run_prediction(scaled_data_df, run_pred, run_pred_smoothed, save_path, mouse_id, phase1, phase2, scale_suffix, dataset_suffix):
+def plot_run_prediction(scaled_data_df, run_pred, run_pred_smoothed, save_path, mouse_id, phase1, phase2, stride_number, scale_suffix, dataset_suffix):
     # median filter smoothing on run_pred
     #run_pred_smoothed = medfilt(run_pred[0], kernel_size=5)
 
@@ -452,35 +499,31 @@ def plot_run_prediction(scaled_data_df, run_pred, run_pred_smoothed, save_path, 
     # horizontal grid lines only
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, f"Run_Prediction_{phase1}_vs_{phase2}_{scale_suffix}_{dataset_suffix}.png"), dpi=300)
+    plt.savefig(os.path.join(save_path, f"Run_Prediction_{phase1}_vs_{phase2}_stride{stride_number}_{scale_suffix}_{dataset_suffix}.png"), dpi=300)
     plt.close()
 
-
-def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, stride_number, condition_label, normalization_method='maxabs'):
-    """
-    aggregated_data: list of tuples (mouse_id, x_values, smoothed_scaled_pred)
-    normalization_method: 'maxabs' or 'zscore'
-      - 'maxabs': each curve is divided by its maximum absolute value (range becomes [-1, 1])
-      - 'zscore': each curve is standardized (mean=0, unit variance)
-    This function interpolates each curve onto a common x-axis, plots individual curves (with lower alpha),
-    and plots the mean curve.
-    """
+def plot_aggregated_run_predictions(aggregated_data: List[PredictionData],
+                                    save_dir: str, phase1: str, phase2: str,
+                                    stride_number: int, condition_label: str,
+                                    normalization_method: str = 'maxabs'):
     plt.figure(figsize=(10, 8))
 
-    # Determine a common x-axis.
+    # Collect common x-axis values.
     all_x_vals = []
-    for _, x_vals, _ in aggregated_data:
-        all_x_vals.extend(x_vals)
+    for data in aggregated_data:
+        all_x_vals.extend(data.x_vals)
     global_min_x = min(all_x_vals)
     global_max_x = max(all_x_vals)
-    # Use the maximum number of points among curves as the common number.
-    common_npoints = max(len(x_vals) for _, x_vals, _ in aggregated_data)
+    common_npoints = max(len(data.x_vals) for data in aggregated_data)
     common_x = np.linspace(global_min_x, global_max_x, common_npoints)
 
-    interpolated_curves = []  # List to store each curve interpolated to common_x
+    interpolated_curves = []
+    for data in aggregated_data:
+        mouse_id = data.mouse_id
+        x_vals = data.x_vals
+        smoothed_pred = data.smoothed_scaled_pred
 
-    for mouse_id, x_vals, smoothed_pred in aggregated_data:
-        # Normalize the curve based on the chosen method.
+        # Normalize the curve.
         if normalization_method == 'zscore':
             mean_val = np.mean(smoothed_pred)
             std_val = np.std(smoothed_pred)
@@ -491,23 +534,16 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, s
         else:
             normalized_curve = smoothed_pred
 
-        # Interpolate the normalized curve onto the common x-axis.
         interp_curve = np.interp(common_x, x_vals, normalized_curve)
         interpolated_curves.append(interp_curve)
 
-        # Plot individual curve with reduced alpha.
         plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id}', alpha=0.3)
 
-    # Compute the mean curve across all mice.
-    all_curves_array = np.vstack(interpolated_curves)  # shape: (n_mice, n_points)
+    all_curves_array = np.vstack(interpolated_curves)
     mean_curve = np.mean(all_curves_array, axis=0)
-
-    # Plot the mean curve as a bold black line.
     plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
 
-    # Optionally add vertical lines (e.g., at x=9.5 and 109.5).
     plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
-
     plt.title(f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}')
     plt.xlabel('Run Number')
     plt.ylabel('Normalized Prediction (Smoothed)')
@@ -518,25 +554,28 @@ def plot_aggregated_run_predictions(aggregated_data, save_dir, phase1, phase2, s
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
 
-    save_path = os.path.join(save_dir,
-                             f"Aggregated_{normalization_method.upper()}_Run_Predictions_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
-    plt.savefig(save_path, dpi=300)
+    save_path_full = os.path.join(save_dir,
+                                  f"Aggregated_{normalization_method.upper()}_Run_Predictions_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
+    plt.savefig(save_path_full, dpi=300)
     plt.close()
 
 
-def plot_aggregated_run_predictions_by_group(aggregated_data, save_dir, phase1, phase2, stride_number, condition_label,
-                                             normalization_method='maxabs'):
+def plot_aggregated_run_predictions_by_group(aggregated_data: List[PredictionData],
+                                             save_dir: str, phase1: str, phase2: str,
+                                             stride_number: int, condition_label: str,
+                                             normalization_method: str = 'maxabs'):
     plt.figure(figsize=(10, 8))
+
+    # Collect common x-axis values and group IDs.
     all_x_vals = []
     group_ids = []
     for data in aggregated_data:
-        # Expect each data to be (mouse_id, x_vals, smoothed_pred, group_id)
-        _, x_vals, _, group_id = data
-        all_x_vals.extend(x_vals)
-        group_ids.append(group_id)
+        all_x_vals.extend(data.x_vals)
+        group_ids.append(data.group_id)
+
     global_min_x = min(all_x_vals)
     global_max_x = max(all_x_vals)
-    common_npoints = max(len(data[1]) for data in aggregated_data)
+    common_npoints = max(len(data.x_vals) for data in aggregated_data)
     common_x = np.linspace(global_min_x, global_max_x, common_npoints)
 
     # Define a color mapping for groups.
@@ -545,8 +584,14 @@ def plot_aggregated_run_predictions_by_group(aggregated_data, save_dir, phase1, 
     group_color_dict = {group: cmap(i) for i, group in enumerate(unique_groups)}
 
     interpolated_curves = []
-    for mouse_id, x_vals, smoothed_pred, group_id in aggregated_data:
-        # Normalize curve (same as before)
+    for data in aggregated_data:
+        # Access PredictionData fields directly.
+        mouse_id = data.mouse_id
+        x_vals = data.x_vals
+        smoothed_pred = data.smoothed_scaled_pred
+        group_id = data.group_id
+
+        # Normalize curve based on the chosen method.
         if normalization_method == 'zscore':
             mean_val = np.mean(smoothed_pred)
             std_val = np.std(smoothed_pred)
@@ -560,24 +605,27 @@ def plot_aggregated_run_predictions_by_group(aggregated_data, save_dir, phase1, 
         interp_curve = np.interp(common_x, x_vals, normalized_curve)
         interpolated_curves.append(interp_curve)
 
-        # Plot with the group color.
-        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id} (Group {group_id})', alpha=0.3,
-                 color=group_color_dict[group_id])
+        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id} (Group {group_id})',
+                 alpha=0.3, color=group_color_dict[group_id])
 
     all_curves_array = np.vstack(interpolated_curves)
     mean_curve = np.mean(all_curves_array, axis=0)
     plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
+
     plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
     plt.title(
         f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}')
     plt.xlabel('Run Number')
     plt.ylabel('Normalized Prediction (Smoothed)')
+
     if normalization_method == 'maxabs':
         plt.ylim(-1, 1)
+
     plt.legend(loc='upper right')
     plt.grid(False)
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
+
     save_path = os.path.join(save_dir,
                              f"Aggregated_{normalization_method.upper()}_Run_Predictions_ByGroup_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png")
     plt.savefig(save_path, dpi=300)
@@ -663,7 +711,7 @@ def cluster_weights(w, loadings_df, save_path, mouse_id, phase1, phase2, n_clust
     return cluster_df, kmeans
 
 
-def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2):
+def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number):
     """
     Plot the feature-space weights as a bar plot with feature names on the x-axis.
     """
@@ -680,7 +728,7 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     plt.title(f'Feature Weights in Original Space for Mouse {mouse_id} ({phase1} vs {phase2})')
     plt.tight_layout()
 
-    plot_file = os.path.join(save_path, f'feature_space_weights_{mouse_id}_{phase1}_vs_{phase2}.png')
+    plot_file = os.path.join(save_path, f'feature_space_weights_{mouse_id}_{phase1}_vs_{phase2}_stride{stride_number}.png')
     plt.savefig(plot_file)
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
@@ -699,7 +747,7 @@ def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2, str
     """
     # Filter weights for the current phase pair.
     filtered_weights = {
-        mouse_id: weights
+        mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
         for (mouse_id, p1, p2, s), weights in weights_dict.items()
         if p1 == phase1 and p2 == phase2 and s == stride_number
     }
@@ -816,6 +864,62 @@ def plot_aggregated_feature_weights_comparison(weights_dict1, weights_dict2, sav
     plt.savefig(output_file)
     plt.close()
     print(f"Comparison plot saved to: {output_file}")
+
+
+def plot_aggregated_feature_weights_by_group(weights_dict, mouse_to_group, save_path, phase1, phase2, stride_number,
+                                             condition_label):
+    """
+    Create separate aggregated feature weight plots for each group.
+
+    Parameters:
+      - weights_dict: dict with keys (mouse_id, phase1, phase2, stride_number)
+                      and values being pandas Series of feature weights.
+      - mouse_to_group: dict mapping mouse_id (str) to its group ID (int)
+      - save_path: directory to save the plots
+      - phase1, phase2, stride_number, condition_label: used for filtering and in titles.
+    """
+    grouped_weights = {}
+    for (mouse_id, p1, p2, s), weights in weights_dict.items():
+        if p1 == phase1 and p2 == phase2 and s == stride_number:
+            group = mouse_to_group.get(mouse_id)
+            if group is not None:
+                # Use the underlying Series stored in the FeatureWeights object.
+                grouped_weights.setdefault(group, {})[mouse_id] = weights.feature_weights if hasattr(weights, "feature_weights") else weights
+
+    # Now make a plot for each group.
+    for group, weights_by_mouse in grouped_weights.items():
+        # Create a DataFrame (features as rows, columns = mouse_ids in the group)
+        weights_df = pd.DataFrame(weights_by_mouse).sort_index()
+        # Optionally scale the weights so they are comparable:
+        weights_df = weights_df / weights_df.abs().max()
+
+        fig, ax = plt.subplots(figsize=(15, 15))
+        # Plot each mouse’s weights as a faint line:
+        for mouse in weights_df.columns:
+            ax.plot(weights_df[mouse].values, weights_df.index, alpha=0.3,
+                    marker='o', markersize=3, linestyle='-', label=mouse)
+        # Compute mean and standard error (SEM) per feature:
+        mean_weights = weights_df.mean(axis=1)
+        std_weights = weights_df.std(axis=1)
+        sem = std_weights / np.sqrt(len(weights_df.columns))
+
+        # Plot the mean with error bars:
+        ax.errorbar(mean_weights, weights_df.index, xerr=sem, fmt='o-', color='black',
+                    label='Mean ± SEM', linewidth=2, capsize=4)
+
+        ax.axvline(x=0, color='red', linestyle='--')
+        ax.set_xlabel('Weight Value')
+        ax.set_ylabel('Feature')
+        ax.set_title(
+            f'Aggregated Feature Weights for Group {group}\n({phase1} vs {phase2}), stride {stride_number}\n{condition_label}')
+        plt.tight_layout()
+        plt.legend(title='Mouse ID / Summary', loc='upper right')
+
+        output_file = os.path.join(save_path,
+                                   f'aggregated_feature_weights_Group{group}_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png')
+        plt.savefig(output_file, dpi=300)
+        plt.close()
+        print(f"Aggregated feature weights plot for group {group} saved to: {output_file}")
 
 
 def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2, stride_number):
@@ -1216,8 +1320,10 @@ def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compar
 
                         #x_vals = np.arange(len(smoothed_scaled_pred))
                         aggregated_compare_predictions.setdefault((phase1, phase2, stride_number), []).append(
-                            (mouse_id, runs, smoothed_scaled_pred)
+                            PredictionData(mouse_id=mouse_id, x_vals=runs,
+                                                 smoothed_scaled_pred=smoothed_scaled_pred)
                         )
+
 
                     except Exception as e:
                         print(
@@ -1226,6 +1332,234 @@ def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compar
         # Plot aggregated compare predictions.
         for (phase1, phase2, stride_number), agg_data in aggregated_compare_predictions.items():
             plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=f"vs_{compare_condition}")
+
+def plot_significant_features(selected_features_accuracies, save_path, selected_features):
+    for fidx, feature in enumerate(selected_features):
+        plt.figure()
+        sns.histplot(selected_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+        plt.axvline(0, color='red', label='True Accuracy')
+        plt.title(feature)
+        plt.xlabel('Shuffled Accuracy - True Accuracy')
+        plt.ylabel('Frequency')
+        plt.legend()
+        plt.savefig(os.path.join(save_path, f'feature_significances\\feature{fidx}_feature_selection.png'))
+        plt.close()
+
+def plot_nonsignificant_features(nonselected_features_accuracies, save_path, nonselected_features):
+    for fidx, feature in enumerate(nonselected_features):
+        plt.figure()
+        sns.histplot(nonselected_features_accuracies.loc[feature, 'iteration_diffs'].values(), bins=20, kde=True)
+        plt.axvline(0, color='red', label='True Accuracy')
+        plt.title(feature)
+        plt.xlabel('Shuffled Accuracy - True Accuracy')
+        plt.ylabel('Frequency')
+        plt.legend()
+        plt.savefig(os.path.join(save_path, f'feature_nonsignificances\\feature{fidx}_feature_selection.png'))
+        plt.close()
+
+
+def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
+                                  phase1: str,
+                                  phase2: str,
+                                  save_dir: str,
+                                  condition_label: str,
+                                  normalization_method: str = 'maxabs',
+                                  smooth: bool = False,
+                                  smooth_window: int = 5):
+    """
+    For each stride in stride_dict (for the given phase pair), compute the mean normalized
+    prediction curve across all PredictionData objects (after optional smoothing of individual curves),
+    taking into account that the x-axis values may differ. Only the mean lines are plotted,
+    with vertical phase indicators. Line colors are fixed from the "Blues" colormap.
+    """
+    plt.figure(figsize=(10, 8))
+    mean_curves = {}  # Stores: stride_number -> (common_x, mean_curve)
+
+    # Fixed color mapping for possible strides (avoid the lightest value).
+    stride_color_mapping = {
+        -3: plt.cm.Blues(0.2),
+        -2: plt.cm.Blues(0.45),
+        -1: plt.cm.Blues(0.7),
+         0: plt.cm.Blues(0.99)
+    }
+
+    # Helper smoothing function: simple moving average.
+    def smooth_curve(curve, window):
+        return np.convolve(curve, np.ones(window)/window, mode='same')
+
+    # Process each stride
+    for stride_number, pred_list in stride_dict.items():
+        # Gather all x-axis values from all predictions for this stride.
+        all_x_vals = []
+        for pred in pred_list:
+            all_x_vals.extend(pred.x_vals)
+        if not all_x_vals:
+            continue  # skip if empty
+
+        global_min_x = min(all_x_vals)
+        global_max_x = max(all_x_vals)
+        # Use the maximum length among predictions as the number of common points.
+        common_npoints = max(len(pred.x_vals) for pred in pred_list)
+        common_x = np.linspace(global_min_x, global_max_x, common_npoints)
+
+        interpolated_curves = []
+        for pred in pred_list:
+            smoothed_pred = pred.smoothed_scaled_pred
+            # Normalize the prediction curve according to the chosen method.
+            if normalization_method == 'zscore':
+                mean_val = np.mean(smoothed_pred)
+                std_val = np.std(smoothed_pred)
+                normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
+            elif normalization_method == 'maxabs':
+                max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+                normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
+            else:
+                normalized_curve = smoothed_pred
+
+            # Optionally smooth the normalized curve.
+            if smooth:
+                normalized_curve = smooth_curve(normalized_curve, smooth_window)
+
+            # Interpolate to the common x-axis.
+            interp_curve = np.interp(common_x, pred.x_vals, normalized_curve)
+            interpolated_curves.append(interp_curve)
+
+        if interpolated_curves:
+            mean_curve = np.mean(np.vstack(interpolated_curves), axis=0)
+            mean_curves[stride_number] = (common_x, mean_curve)
+
+    # Plot each stride's mean curve using the fixed color mapping.
+    for stride_number, (common_x, mean_curve) in sorted(mean_curves.items()):
+        color = stride_color_mapping.get(stride_number, plt.cm.Blues(0.6))
+        plt.plot(common_x, mean_curve, linewidth=2, label=f"Stride {stride_number}", color=color)
+
+    # Add vertical phase indicators.
+    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    plt.vlines(x=[39.5, 79.5, 119.5], ymin=-1, ymax=1, color='gray', alpha=0.6, linestyle='--')
+    plt.title(f"Aggregated {normalization_method.upper()} Scaled Multi-Stride Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
+    plt.xlabel("Run Number")
+    plt.ylabel("Normalized Prediction (Smoothed)")
+    if normalization_method == 'maxabs':
+        plt.ylim(-1, 1)
+    plt.legend(loc='upper right')
+    plt.grid(False)
+    plt.gca().yaxis.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir,
+                             f"Aggregated_{normalization_method.upper()}_MultiStride_Predictions_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+
+
+
+def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[PredictionData]],
+                                             phase1: str,
+                                             phase2: str,
+                                             save_dir: str,
+                                             condition_label: str,
+                                             normalization_method: str = 'maxabs',
+                                             smooth: bool = False,
+                                             smooth_window: int = 5):
+    """
+    For each phase pair (phase1 vs phase2), for each stride in stride_dict:
+      - Interpolate each PredictionData to a fixed common x-axis of 160 points.
+      - Optionally smooth each normalized prediction using a moving average.
+      - Compute the mean normalized prediction curve.
+    Then compute the difference between consecutive stride mean curves (current minus previous)
+    and plot these difference curves with vertical phase indicators (at 9.5 and 109.5).
+    """
+    plt.figure(figsize=(10, 8))
+    mean_curves = {}  # Stores: stride_number -> (common_x, mean_curve)
+    fixed_npoints = 160  # Fixed number of x-axis points
+
+    # Helper smoothing function.
+    def smooth_curve(curve, window):
+        return np.convolve(curve, np.ones(window)/window, mode='same') # todo change this to medfilt!!
+
+    # Compute mean curves for each stride using interpolation.
+    for stride_number, pred_list in stride_dict.items():
+        # Gather all x-values from predictions.
+        all_x_vals = []
+        for pred in pred_list:
+            all_x_vals.extend(pred.x_vals)
+        if not all_x_vals:
+            continue
+
+        global_min_x = min(all_x_vals)
+        global_max_x = max(all_x_vals)
+        common_x = np.linspace(global_min_x, global_max_x, fixed_npoints)
+
+        interpolated_curves = []
+        for pred in pred_list:
+            smoothed_pred = pred.smoothed_scaled_pred
+            # Normalize the prediction curve.
+            if normalization_method == 'zscore':
+                mean_val = np.mean(smoothed_pred)
+                std_val = np.std(smoothed_pred)
+                normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
+            elif normalization_method == 'maxabs':
+                max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+                normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
+            else:
+                normalized_curve = smoothed_pred
+
+            # Optionally smooth the normalized curve.
+            if smooth:
+                normalized_curve = smooth_curve(normalized_curve, smooth_window)
+
+            # Interpolate to the common x-axis.
+            interp_curve = np.interp(common_x, pred.x_vals, normalized_curve)
+            interpolated_curves.append(interp_curve)
+        if interpolated_curves:
+            mean_curve = np.mean(np.vstack(interpolated_curves), axis=0)
+            mean_curves[stride_number] = (common_x, mean_curve)
+
+    # Compute differences between consecutive stride mean curves.
+    sorted_strides = sorted(mean_curves.keys())
+    difference_curves = {}  # Key: (prev_stride, curr_stride) -> (common_x, diff_curve)
+    for i in range(1, len(sorted_strides)):
+        prev_stride = sorted_strides[i - 1]
+        curr_stride = sorted_strides[i]
+        common_x_prev, mean_curve_prev = mean_curves[prev_stride]
+        common_x_curr, mean_curve_curr = mean_curves[curr_stride]
+        # Since we forced a fixed common_x, we can use that.
+        diff_curve = mean_curve_curr - mean_curve_prev
+        difference_curves[(prev_stride, curr_stride)] = (common_x_curr, diff_curve)
+
+    # Set up a fixed color mapping for the difference curves using 'PuOr'.
+    cmap = plt.get_cmap("RdPu")
+    diff_keys = sorted(difference_curves.keys())
+    colors = {key: cmap(0.3 + 0.4 * i / max(len(diff_keys) - 1, 1)) for i, key in enumerate(diff_keys)}
+
+    # Plot each difference curve.
+    for key, (common_x, diff_curve) in sorted(difference_curves.items()):
+        prev_stride, curr_stride = key
+        plt.plot(common_x, diff_curve, linewidth=2,
+                 label=f"Diff (Stride {curr_stride} - {prev_stride})",
+                 color=colors[key])
+
+    # Add vertical phase indicators.
+    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    plt.vlines(x=[39.5, 79.5, 119.5], ymin=-1, ymax=1, color='gray', alpha=0.6, linestyle='--')
+    plt.title(f"Difference Between Consecutive Stride Mean Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
+    plt.xlabel("Run Number")
+    plt.ylabel("Difference in Normalized Prediction")
+    plt.legend(loc='upper right')
+    plt.grid(False)
+    plt.gca().yaxis.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir,
+                             f"Aggregated_{normalization_method.upper()}_MultiStride_Differences_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+
+
+
+
+
+
 
 
 

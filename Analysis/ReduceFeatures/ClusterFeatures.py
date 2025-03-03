@@ -207,18 +207,31 @@ def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp
     Returns the transposed feature matrix (rows = features, columns = runs).
     """
     all_runs_data = []
-    for mouse in global_fs_mouse_ids:
-        data = utils.load_and_preprocess_data(mouse, stride_number, condition, exp, day)
-        # todo smooth features across runs
-        # Get runs for the two phases; here we use phase1 and phase2 for example.
-        run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, stride_number, phase1,
-                                                                  phase2)
-        selected_mask = mask_phase1 | mask_phase2
-        run_data = data.loc[selected_mask]
-        if smooth:
-            run_data_smooth = medfilt(run_data, kernel_size=3)
-            run_data = pd.DataFrame(run_data_smooth, index=run_data.index, columns=run_data.columns)
-        all_runs_data.append(run_data)
+    if stride_number == 'all':
+        # Assume stride_data is a dict with stride numbers as keys.
+        for sn in sorted(stride_data.keys()):
+            for mouse in global_fs_mouse_ids:
+                data = utils.load_and_preprocess_data(mouse, sn, condition, exp, day)
+                run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, sn, phase1, phase2)
+                selected_mask = mask_phase1 | mask_phase2
+                run_data = data.loc[selected_mask]
+                if smooth:
+                    run_data_smooth = medfilt(run_data, kernel_size=3)
+                    run_data = pd.DataFrame(run_data_smooth, index=run_data.index, columns=run_data.columns)
+                all_runs_data.append(run_data)
+    else:
+        for mouse in global_fs_mouse_ids:
+            data = utils.load_and_preprocess_data(mouse, stride_number, condition, exp, day)
+            # todo smooth features across runs
+            # Get runs for the two phases; here we use phase1 and phase2 for example.
+            run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, stride_number, phase1,
+                                                                      phase2)
+            selected_mask = mask_phase1 | mask_phase2
+            run_data = data.loc[selected_mask]
+            if smooth:
+                run_data_smooth = medfilt(run_data, kernel_size=3)
+                run_data = pd.DataFrame(run_data_smooth, index=run_data.index, columns=run_data.columns)
+            all_runs_data.append(run_data)
 
     if not all_runs_data:
         raise ValueError("No run data found for global clustering.")
@@ -429,8 +442,15 @@ def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, ex
         # Mapping: feature -> cluster label
         cluster_mapping = dict(zip(feature_matrix.index, kmeans.labels_))
 
-    joblib.dump(cluster_mapping, save_file)
-    print(f"Feature clustering done and saved to {save_file} using k={n_clusters}.")
+    # joblib.dump(cluster_mapping, save_file)
+    # print(f"Feature clustering done and saved to {save_file} using k={n_clusters}.")
+    # Adjust save filename to reflect the "all" mode.
+    save_file_adjusted = os.path.join(os.path.dirname(save_file),
+                                      f'feature_clusters_{phase1}_vs_{phase2}_stride{"all" if stride_number == "all" 
+                                      else stride_number}.pkl')
+    joblib.dump(cluster_mapping, save_file_adjusted)
+    print(f"Feature clustering done and saved to {save_file_adjusted} using k={n_clusters}.")
+
     return cluster_mapping, feature_matrix
 
 

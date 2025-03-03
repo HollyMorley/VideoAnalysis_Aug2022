@@ -21,7 +21,7 @@ Description of global_settings:
 ############################################################################################################
 
 # ----------------------------- Save path: -----------------------------------
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round16-20250226-SingleCon-allmice-ClstrSpStrds-stridecomp')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round17-20250228-SingleCon-allmice-ClstrAllStrds-stridecomp')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
 
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
@@ -47,7 +47,7 @@ global_settings = {
     "allmice": True,
     "method": 'rfecv',
     "cluster_method": "kmeans",
-    "cluster_all_strides": False,
+    "cluster_all_strides": True,
     "select_features": True,
     "pool_mice": False,
     "multi_strides": True,

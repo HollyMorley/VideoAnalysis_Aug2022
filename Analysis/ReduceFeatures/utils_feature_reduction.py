@@ -1015,39 +1015,96 @@ def plot_aggregated_raw_features(raw_features_dict, save_path, phase1, phase2, s
         plt.savefig(output_file)
         plt.close()
 
-def cluster_regression_weights_across_mice(aggregated_feature_weights, phase_pair, save_dir, n_clusters=2):
+
+def cluster_regression_weights_across_mice(aggregated_feature_weights, phase_pair, save_dir, n_clusters=2,
+                                           aggregate_strides=False):
     """
     Clusters regression weight vectors across mice for a given phase pair
     and labels the points with their mouse IDs.
 
     Parameters:
-      - aggregated_feature_weights: dict with keys (mouse_id, phase1, phase2) and value = regression weight vector.
-      - phase_pair: tuple (phase1, phase2) specifying the phase comparison.
+      - aggregated_feature_weights: dict with keys (mouse_id, phase1, phase2, stride) and
+          value = regression weight vector, either as a dict or a FeatureWeights object.
+      - phase_pair: tuple (phase1, phase2, stride_number) specifying the phase comparison.
+          If aggregate_strides is True, the third element (stride_number) is ignored.
       - save_dir: directory to save the clustering plot.
       - n_clusters: number of clusters to form.
+      - aggregate_strides: bool. If True, regression weights from all strides matching phase1 and phase2
+          are aggregated (averaged) per mouse.
 
     Returns:
       - cluster_df: DataFrame mapping mouse_id to its assigned cluster.
       - kmeans: The fitted KMeans model.
     """
+    import numpy as np
+    import pandas as pd
+    import os
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
     phase1, phase2, stride_number = phase_pair
-    weights_list = []
-    mouse_ids = []
+    weights_dict = {}  # mouse_id -> list of weight objects (dicts or FeatureWeights)
 
     # Collect weights for the given phase pair.
-    for (mouse_id, p1, p2, s), weights in aggregated_feature_weights.items():
-        if p1 == phase1 and p2 == phase2 and s == stride_number:
-            weights_list.append(weights)
-            mouse_ids.append(mouse_id)
+    for (mouse_id, p1, p2, s), weights_obj in aggregated_feature_weights.items():
+        if p1 == phase1 and p2 == phase2:
+            if not aggregate_strides:
+                if s != stride_number:
+                    continue
+            weights_dict.setdefault(mouse_id, []).append(weights_obj)
 
-    if not weights_list:
-        print(f"No regression weights found for phase pair {phase_pair}.")
+    if not weights_dict:
+        print(f"No regression weights found for phase pair {phase1} vs {phase2} with stride {stride_number}.")
         return None, None
 
-    # Stack into a matrix: each row corresponds to one mouse.
-    weights_matrix = np.vstack(weights_list)
+    # Convert all weight objects to dictionaries.
+    all_weight_dicts = []
+    for w_list in weights_dict.values():
+        for w in w_list:
+            if hasattr(w, 'feature_weights'):
+                all_weight_dicts.append(w.feature_weights)
+            else:
+                all_weight_dicts.append(w)
 
-    # Optionally standardize the weights.
+    # Compute common keys as the intersection over all weight dictionaries.
+    common_keys = set(all_weight_dicts[0].keys())
+    for w_dict in all_weight_dicts[1:]:
+        common_keys = common_keys.intersection(set(w_dict.keys()))
+    common_keys = sorted(common_keys)
+
+    if not common_keys:
+        raise ValueError("No common feature keys found across weight dictionaries.")
+
+    # For each mouse, convert each weight dictionary into a numeric vector (using the common keys),
+    # and then average the vectors if aggregating across strides.
+    mouse_ids = []
+    numeric_vectors = []
+    for mouse_id, w_list in weights_dict.items():
+        mouse_ids.append(mouse_id)
+        vectors = []
+        for w in w_list:
+            if hasattr(w, 'feature_weights'):
+                w_dict = w.feature_weights
+            else:
+                w_dict = w
+            try:
+                vector = np.array([float(w_dict[k]) for k in common_keys])
+            except Exception as e:
+                raise ValueError(f"Error converting weights for mouse {mouse_id}: {e}")
+            vectors.append(vector)
+        if aggregate_strides:
+            aggregated_vector = np.mean(np.stack(vectors, axis=0), axis=0)
+        else:
+            aggregated_vector = vectors[0]
+        numeric_vectors.append(aggregated_vector)
+
+    # Stack into a matrix: each row corresponds to one mouse.
+    weights_matrix = np.vstack(numeric_vectors)
+
+    # Standardize the weights.
     scaler = StandardScaler()
     weights_matrix_scaled = scaler.fit_transform(weights_matrix)
 
@@ -1070,17 +1127,22 @@ def cluster_regression_weights_across_mice(aggregated_feature_weights, phase_pai
     ax = plt.gca()
     sns.scatterplot(x=pcs[:, 0], y=pcs[:, 1], hue=clusters, palette='viridis', s=50, ax=ax)
 
-    # Annotate each point with the corresponding mouse id.
     for i, mouse in enumerate(mouse_ids):
         ax.text(pcs[i, 0] + 0.02, pcs[i, 1] + 0.02, str(mouse),
                 fontsize=9, color='black', weight='bold')
 
-    ax.set_title(f"Clustering of Regression Weights across Mice: {phase1} vs {phase2}, stride {stride_number}")
+    if aggregate_strides:
+        title_str = f"Clustering of Aggregated Regression Weights: {phase1} vs {phase2} (All Strides)"
+        file_suffix = "allStrides"
+    else:
+        title_str = f"Clustering of Regression Weights: {phase1} vs {phase2}, stride {stride_number}"
+        file_suffix = f"stride{stride_number}"
+    ax.set_title(title_str)
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     plt.legend(title="Cluster")
 
-    plot_path = os.path.join(save_dir, f"regression_weights_clustering_{phase1}_vs_{phase2}_stride{stride_number}.png")
+    plot_path = os.path.join(save_dir, f"regression_weights_clustering_{phase1}_vs_{phase2}_{file_suffix}.png")
     plt.savefig(plot_path)
     plt.close()
 
@@ -1363,9 +1425,9 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
                                   phase2: str,
                                   save_dir: str,
                                   condition_label: str,
-                                  normalization_method: str = 'maxabs',
                                   smooth: bool = False,
-                                  smooth_window: int = 5):
+                                  smooth_window: int = 5,
+                                  normalize: bool = False):
     """
     For each stride in stride_dict (for the given phase pair), compute the mean normalized
     prediction curve across all PredictionData objects (after optional smoothing of individual curves),
@@ -1382,10 +1444,6 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
         -1: plt.cm.Blues(0.7),
          0: plt.cm.Blues(0.99)
     }
-
-    # Helper smoothing function: simple moving average.
-    def smooth_curve(curve, window):
-        return np.convolve(curve, np.ones(window)/window, mode='same')
 
     # Process each stride
     for stride_number, pred_list in stride_dict.items():
@@ -1405,20 +1463,15 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
         interpolated_curves = []
         for pred in pred_list:
             smoothed_pred = pred.smoothed_scaled_pred
+
             # Normalize the prediction curve according to the chosen method.
-            if normalization_method == 'zscore':
-                mean_val = np.mean(smoothed_pred)
-                std_val = np.std(smoothed_pred)
-                normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
-            elif normalization_method == 'maxabs':
-                max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
-                normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
-            else:
-                normalized_curve = smoothed_pred
+            max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+            normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
 
             # Optionally smooth the normalized curve.
             if smooth:
-                normalized_curve = smooth_curve(normalized_curve, smooth_window)
+               # normalized_curve = smooth_curve(normalized_curve, smooth_window)
+                normalized_curve = medfilt(normalized_curve, kernel_size=smooth_window)
 
             # Interpolate to the common x-axis.
             interp_curve = np.interp(common_x, pred.x_vals, normalized_curve)
@@ -1426,6 +1479,8 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
 
         if interpolated_curves:
             mean_curve = np.mean(np.vstack(interpolated_curves), axis=0)
+            if normalize:
+                mean_curve = mean_curve / np.max(np.abs(mean_curve))
             mean_curves[stride_number] = (common_x, mean_curve)
 
     # Plot each stride's mean curve using the fixed color mapping.
@@ -1436,18 +1491,17 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
     # Add vertical phase indicators.
     plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
     plt.vlines(x=[39.5, 79.5, 119.5], ymin=-1, ymax=1, color='gray', alpha=0.6, linestyle='--')
-    plt.title(f"Aggregated {normalization_method.upper()} Scaled Multi-Stride Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
+    plt.title(f"Aggregated Scaled Multi-Stride Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
     plt.xlabel("Run Number")
     plt.ylabel("Normalized Prediction (Smoothed)")
-    if normalization_method == 'maxabs':
-        plt.ylim(-1, 1)
+    plt.ylim(-1, 1)
     plt.legend(loc='upper right')
     plt.grid(False)
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
 
     save_path = os.path.join(save_dir,
-                             f"Aggregated_{normalization_method.upper()}_MultiStride_Predictions_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
+                             f"Aggregated_MultiStride_Predictions_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
 
@@ -1458,9 +1512,9 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
                                              phase2: str,
                                              save_dir: str,
                                              condition_label: str,
-                                             normalization_method: str = 'maxabs',
                                              smooth: bool = False,
-                                             smooth_window: int = 5):
+                                             smooth_window: int = 5,
+                                             normalize: bool = False,):
     """
     For each phase pair (phase1 vs phase2), for each stride in stride_dict:
       - Interpolate each PredictionData to a fixed common x-axis of 160 points.
@@ -1472,10 +1526,6 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
     plt.figure(figsize=(10, 8))
     mean_curves = {}  # Stores: stride_number -> (common_x, mean_curve)
     fixed_npoints = 160  # Fixed number of x-axis points
-
-    # Helper smoothing function.
-    def smooth_curve(curve, window):
-        return np.convolve(curve, np.ones(window)/window, mode='same') # todo change this to medfilt!!
 
     # Compute mean curves for each stride using interpolation.
     for stride_number, pred_list in stride_dict.items():
@@ -1494,25 +1544,20 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
         for pred in pred_list:
             smoothed_pred = pred.smoothed_scaled_pred
             # Normalize the prediction curve.
-            if normalization_method == 'zscore':
-                mean_val = np.mean(smoothed_pred)
-                std_val = np.std(smoothed_pred)
-                normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
-            elif normalization_method == 'maxabs':
-                max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
-                normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
-            else:
-                normalized_curve = smoothed_pred
+            max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+            normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
 
             # Optionally smooth the normalized curve.
             if smooth:
-                normalized_curve = smooth_curve(normalized_curve, smooth_window)
+                normalized_curve = medfilt(normalized_curve, kernel_size=smooth_window)
 
             # Interpolate to the common x-axis.
             interp_curve = np.interp(common_x, pred.x_vals, normalized_curve)
             interpolated_curves.append(interp_curve)
         if interpolated_curves:
             mean_curve = np.mean(np.vstack(interpolated_curves), axis=0)
+            if normalize:
+                mean_curve = mean_curve / np.max(np.abs(mean_curve))
             mean_curves[stride_number] = (common_x, mean_curve)
 
     # Compute differences between consecutive stride mean curves.
@@ -1545,14 +1590,50 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
     plt.title(f"Difference Between Consecutive Stride Mean Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
     plt.xlabel("Run Number")
     plt.ylabel("Difference in Normalized Prediction")
+    plt.ylim(-1, 1)
     plt.legend(loc='upper right')
     plt.grid(False)
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
 
     save_path = os.path.join(save_dir,
-                             f"Aggregated_{normalization_method.upper()}_MultiStride_Differences_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
+                             f"Aggregated_MultiStride_Differences_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
     plt.savefig(save_path, dpi=300)
+    plt.close()
+
+def plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label):
+    pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
+
+    plt.figure()
+    # Loop through each mouse's feature weights for the current phase and stride.
+    for (mouse_id, p1, p2, s), ftr_wght in aggregated_feature_weights.items():
+        if p1 == phase1 and p2 == phase2 and s == stride_number:
+            # ftr_wght.feature_weights is a Series with feature names as the index.
+            common_features = loadings_df.index.intersection(ftr_wght.feature_weights.index)
+            if len(common_features) == 0:
+                continue
+            loadings_sub = loadings_df.loc[common_features]
+            weights_sub = ftr_wght.feature_weights.loc[common_features]
+            # Project feature-space weights into PC space.
+            pc_weights = loadings_sub.T.dot(weights_sub)
+            # Normalize by maximum absolute value.
+            max_abs = np.abs(pc_weights).max()
+            if max_abs != 0:
+                pc_weights_norm = pc_weights / max_abs
+            else:
+                pc_weights_norm = pc_weights
+
+            # Sort the PC indices (if numeric or digit strings)
+            sorted_keys = sorted(pc_weights_norm.index, key=lambda x: int(x) if str(x).isdigit() else x)
+            sorted_norm_weights = [pc_weights_norm[k] for k in sorted_keys]
+            plt.plot(sorted_keys, sorted_norm_weights, marker='o', label=f"Mouse {mouse_id}")
+    plt.xlabel("Principal Component")
+    plt.ylabel("Normalized Regression Weight (PC space)")
+    plt.title(f"Normalized PC Regression Loadings for {phase1} vs {phase2}, Stride {stride_number}\n{condition_label}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(aggregated_save_dir,
+                             f"Normalized_PC_regression_loadings_{phase1}_{phase2}_stride{stride_number}_{condition_label}.png"))
     plt.close()
 
 

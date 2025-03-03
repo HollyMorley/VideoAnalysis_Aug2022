@@ -281,13 +281,13 @@ def run_grouped_mice(aggregated_predictions: Dict, aggregated_cluster_loadings: 
     # Loop over each phase pair in grouped_multi_strides and plot multi-stride predictions
     for (phase1, phase2), stride_dict in grouped_multi_strides.items():
         utils.plot_multi_stride_predictions(stride_dict, phase1, phase2, aggregated_save_dir,
-                                            condition_label=condition, smooth=False)
+                                            condition_label=condition, smooth=False, normalize=True)
         utils.plot_multi_stride_predictions(stride_dict, phase1, phase2, aggregated_save_dir,
-                                            condition_label=condition, smooth=True)
+                                            condition_label=condition, smooth=True, normalize=True)
         utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir,
-                                                       condition_label=condition, smooth=False)
+                                                       condition_label=condition, smooth=False, normalize=True)
         utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir,
-                                                         condition_label=condition, smooth=True)
+                                                         condition_label=condition, smooth=True, normalize=True)
 
 
 # -----------------------------------------------------
@@ -315,18 +315,6 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                     "all", condition, exp, day, stride_data, phase1, phase2,
                     base_save_dir_condition, method='kmeans'
                 )
-            elif global_settings['cluster_method'] == 'PCA':
-                cluster_mapping, feature_matrix, pca_model, optimal_n, cv_results = cluster_features_with_pca_cv(
-                    condition_specific_settings[condition]['global_fs_mouse_ids'],
-                    "all", condition, exp, day, stride_data, phase1, phase2,
-                    save_file=os.path.join(base_save_dir_condition, f'feature_clusters_{phase1}_vs_{phase2}_all.pkl')
-                )
-            elif global_settings['cluster_method'] == 'ICA':
-                cluster_mapping, feature_matrix, ica_model, optimal_n, cv_errors = cluster_features_with_ica_cv(
-                    condition_specific_settings[condition]['global_fs_mouse_ids'],
-                    "all", condition, exp, day, stride_data, phase1, phase2,
-                    save_file=os.path.join(base_save_dir_condition, f'feature_clusters_{phase1}_vs_{phase2}_all.pkl')
-                )
             # Store same mapping for all strides.
             for stride_number in stride_numbers:
                 cluster_mappings[(phase1, phase2, stride_number)] = cluster_mapping
@@ -347,20 +335,6 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                     cluster_mapping, feature_matrix = find_feature_clusters(condition_specific_settings[condition]['global_fs_mouse_ids'],
                                                                         stride_number, condition, exp, day, stride_data, phase1, phase2,
                                                                         base_save_dir_condition, method='kmeans')
-                elif global_settings['cluster_method'] == 'PCA':
-                    cluster_mapping, feature_matrix, pca_model, optimal_n, cv_results = cluster_features_with_pca_cv(
-                        condition_specific_settings[condition]['global_fs_mouse_ids'],
-                        stride_number, condition, exp, day, stride_data, phase1, phase2,
-                        save_file=os.path.join(base_save_dir_condition, f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
-                )
-                elif global_settings['cluster_method'] == 'ICA':
-                    cluster_mapping, feature_matrix, ica_model, optimal_n, cv_errors = cluster_features_with_ica_cv(
-                        condition_specific_settings[condition]['global_fs_mouse_ids'],
-                        stride_number, condition, exp, day, stride_data, phase1, phase2,
-                        save_file=os.path.join(base_save_dir_condition,
-                                               f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
-                    )
-
                 cluster_mappings[(phase1, phase2, stride_number)] = cluster_mapping
 
                 plot_feature_clustering(feature_matrix, cluster_mapping, phase1, phase2, stride_number, base_save_dir_condition)
@@ -488,25 +462,26 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         for (phase1, phase2, stride_number), agg_data in aggregated_predictions.items():
             utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
             utils.plot_aggregated_feature_weights(aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-            # if global_settings["allmice"]:
-            #     utils.plot_aggregated_raw_features(aggregated_raw_features, aggregated_save_dir, phase1, phase2, stride_number)
+            utils.plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
+
         for (phase1, phase2), stride_dict in multi_stride_data.items():
             utils.plot_multi_stride_predictions(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=False)
-            utils.plot_multi_stride_predictions(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=True)
+            utils.plot_multi_stride_predictions(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=True, smooth_window=21)
 
             utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=False)
-            utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=True)
+            utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=True, smooth_window=21)
 
 
-        # -------------------------- Cluster Regression Weights Across Mice -------------------------- # todo maybe just get rid of this
-        unique_phase_pairs = set((p1, p2, s) for (_, p1, p2, s) in aggregated_feature_weights.keys())
-        for phase_pair in unique_phase_pairs:
-            cluster_df, kmeans_model = utils.cluster_regression_weights_across_mice(
-                aggregated_feature_weights, phase_pair, aggregated_save_dir, n_clusters=3
-            )
-            if cluster_df is not None:
-                print(f"Global clustering for phase pair {phase_pair}:")
-                print(cluster_df)
+
+        # # -------------------------- Cluster Regression Weights Across Mice -------------------------- # todo maybe just get rid of this
+        # unique_phase_pairs = set((p1, p2, s) for (_, p1, p2, s) in aggregated_feature_weights.keys())
+        # for phase_pair in unique_phase_pairs:
+        #     cluster_df, kmeans_model = utils.cluster_regression_weights_across_mice(
+        #         aggregated_feature_weights, phase_pair, aggregated_save_dir, n_clusters=3, aggregate_strides=True
+        #     )
+        #     if cluster_df is not None:
+        #         print(f"Global clustering for phase pair {phase_pair}:")
+        #         print(cluster_df)
 
         # -------------------------- Process compare condition predictions --------------------------
         utils.process_compare_condition(mouseIDs_base=condition_specific_settings[condition]['global_fs_mouse_ids'],
@@ -521,11 +496,6 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         run_grouped_mice(aggregated_predictions, aggregated_cluster_loadings, stride_data, condition, exp, day, base_save_dir_condition, aggregated_save_dir)
 
     print("Analysis complete.")
-
-
-            # Instructions for chatgpt:
-            # todo now have mouse groups, go back and select features from mice within each group (ie if have 4 groups, should have 4 sets of features)
-            # todo then run PCA and regression for each mouse like we do for allmice=True. Plot individual mice and aggregated plots as usual but there should be x ngroups aggregated features plots. In the aggregated run predictions, maybe now colour indivdual mice lines by group
 
 # ----------------------------
 # Execute Main Function

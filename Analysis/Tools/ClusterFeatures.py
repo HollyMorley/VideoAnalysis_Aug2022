@@ -15,7 +15,8 @@ from sklearn.decomposition import FastICA
 from sklearn.model_selection import KFold
 from scipy.signal import medfilt
 
-from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.Tools import utils_feature_reduction as utils
+from Analysis.Tools.config import global_settings
 
 
 
@@ -209,7 +210,7 @@ def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp
     all_runs_data = []
     if stride_number == 'all':
         # Assume stride_data is a dict with stride numbers as keys.
-        for sn in sorted(stride_data.keys()):
+        for sn in global_settings['stride_numbers']:
             for mouse in global_fs_mouse_ids:
                 data = utils.load_and_preprocess_data(mouse, sn, condition, exp, day)
                 run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, sn, phase1, phase2)
@@ -446,8 +447,7 @@ def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, ex
     # print(f"Feature clustering done and saved to {save_file} using k={n_clusters}.")
     # Adjust save filename to reflect the "all" mode.
     save_file_adjusted = os.path.join(os.path.dirname(save_file),
-                                      f'feature_clusters_{phase1}_vs_{phase2}_stride{"all" if stride_number == "all" 
-                                      else stride_number}.pkl')
+                                      f'feature_clusters_{phase1}_vs_{phase2}_stride{"all" if stride_number == "all" else stride_number}.pkl')
     joblib.dump(cluster_mapping, save_file_adjusted)
     print(f"Feature clustering done and saved to {save_file_adjusted} using k={n_clusters}.")
 

@@ -21,7 +21,9 @@ Description of global_settings:
 ############################################################################################################
 
 # ----------------------------- Save path: -----------------------------------
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round17-20250228-SingleCon-allmice-ClstrAllStrds-stridecomp')  #Round12-20250218-global-rfecv-SingleCon-allcomparisons') #-c=1')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round19-20250305-SingleCon-allmice-SepRegression-incl297298')
+#base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\test')
+
 
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
@@ -52,6 +54,7 @@ global_settings = {
     "pool_mice": False,
     "multi_strides": True,
     "overwrite_FeatureSelection": False,
+    "plot_raw_features": False,
     # less frequently changed settings:
     "n_iterations_selection": 100,
     "nFolds_selection": 5,
@@ -65,7 +68,7 @@ global_settings = {
 condition_specific_settings = {
     'APAChar_LowHigh': {
         'c': 1,
-        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246', '1035250','1035299','1035301'],
+        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246', '1035250', '1035297', '1035298', '1035299', '1035301'], # and 298 again same day # removed 297 again 5/3/25 # just added back in 297 and 298 03/03/2025 # excluding 249 + 302 as missing data in APA2 and Wash2
     },
     'APAChar_HighLow': {
         'c': 0.5,

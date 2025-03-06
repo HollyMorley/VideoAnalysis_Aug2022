@@ -1,6 +1,6 @@
 from Archive import Plot
 import Helpers.utils as utils
-# from ReduceFeatures.Config import *
+# from Tools.Config import *
 from Helpers.Config_23 import *
 import Helpers.BodyCentre as BodyCentre
 import Helpers.GetRuns as GetRuns

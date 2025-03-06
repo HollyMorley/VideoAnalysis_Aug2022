@@ -8,7 +8,6 @@ import pandas as pd
 import itertools
 from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
-import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
@@ -23,12 +22,14 @@ from collections import Counter
 from tqdm import tqdm
 import datetime
 import inspect
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 from dataclasses import dataclass, field
+from scipy.optimize import curve_fit
+import json
 
 from Helpers.Config_23 import *
-from Analysis.ReduceFeatures.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
-from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
+from Analysis.Tools.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
+from Analysis.Tools.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
 
 
 @dataclass
@@ -75,7 +76,7 @@ class FeatureWeights:
         else:
             raise IndexError("Index out of range for FeatureWeights")
 
-def log_settings(settings, log_dir):
+def log_settings(settings, log_dir, script_name):
     """
     Save the provided settings (a dict) to a timestamped log file.
     Also include the name of the running script and the current date.
@@ -89,8 +90,6 @@ def log_settings(settings, log_dir):
         if filename.startswith("settings_log_") and filename.endswith(".txt"):
             os.remove(os.path.join(log_dir, filename))
 
-    # Get the name of the current script file
-    script_name = os.path.basename(inspect.getfile(inspect.currentframe()))
     # Get the current datetime as string
     now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -496,7 +495,6 @@ def plot_run_prediction(scaled_data_df, run_pred, run_pred_smoothed, save_path, 
                           Line2D([0], [0], color='blue', label='Smoothed Prediction', linestyle='-')]
     plt.legend(handles=legend_elements, loc='upper right')
     plt.grid(False)
-    # horizontal grid lines only
     plt.gca().yaxis.grid(True)
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f"Run_Prediction_{phase1}_vs_{phase2}_stride{stride_number}_{scale_suffix}_{dataset_suffix}.png"), dpi=300)
@@ -757,7 +755,12 @@ def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2, str
         return
 
     # Combine into a DataFrame (rows = features, columns = mouse_ids)
-    weights_df = pd.DataFrame(filtered_weights).sort_index()
+    # sort weights_df by sum of absolute values
+    weights_df = pd.DataFrame(filtered_weights)
+    weights_df['sum_abs'] = weights_df.abs().sum(axis=1)
+    weights_df = weights_df.sort_values(by='sum_abs', ascending=False)
+    weights_df = weights_df.drop('sum_abs', axis=1)
+
     # Scale the weights so they are comparable (optional)
     weights_df = weights_df / weights_df.abs().max()
 
@@ -1426,7 +1429,7 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
                                   save_dir: str,
                                   condition_label: str,
                                   smooth: bool = False,
-                                  smooth_window: int = 5,
+                                  smooth_window: int = 21,
                                   normalize: bool = False):
     """
     For each stride in stride_dict (for the given phase pair), compute the mean normalized
@@ -1491,7 +1494,7 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
     # Add vertical phase indicators.
     plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
     plt.vlines(x=[39.5, 79.5, 119.5], ymin=-1, ymax=1, color='gray', alpha=0.6, linestyle='--')
-    plt.title(f"Aggregated Scaled Multi-Stride Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}")
+    plt.title(f"Aggregated Scaled Multi-Stride Predictions for {phase1} vs {phase2}\n{condition_label}\nSmooth={smooth}, Window={smooth_window}, Normalize={normalize}")
     plt.xlabel("Run Number")
     plt.ylabel("Normalized Prediction (Smoothed)")
     plt.ylim(-1, 1)
@@ -1501,7 +1504,7 @@ def plot_multi_stride_predictions(stride_dict: Dict[int, List[PredictionData]],
     plt.tight_layout()
 
     save_path = os.path.join(save_dir,
-                             f"Aggregated_MultiStride_Predictions_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}.png")
+                             f"Aggregated_MultiStride_Predictions_{phase1}_vs_{phase2}_{condition_label}_smooth={smooth}-sw{smooth_window}-normalize{normalize}.png")
     plt.savefig(save_path, dpi=300)
     plt.close()
 
@@ -1513,7 +1516,7 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
                                              save_dir: str,
                                              condition_label: str,
                                              smooth: bool = False,
-                                             smooth_window: int = 5,
+                                             smooth_window: int = 21,
                                              normalize: bool = False,):
     """
     For each phase pair (phase1 vs phase2), for each stride in stride_dict:
@@ -1604,7 +1607,7 @@ def plot_multi_stride_predictions_difference(stride_dict: Dict[int, List[Predict
 def plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label):
     pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
 
-    plt.figure()
+    plt.figure(figsize=(10,8))
     # Loop through each mouse's feature weights for the current phase and stride.
     for (mouse_id, p1, p2, s), ftr_wght in aggregated_feature_weights.items():
         if p1 == phase1 and p2 == phase2 and s == stride_number:
@@ -1624,9 +1627,11 @@ def plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated
                 pc_weights_norm = pc_weights
 
             # Sort the PC indices (if numeric or digit strings)
-            sorted_keys = sorted(pc_weights_norm.index, key=lambda x: int(x) if str(x).isdigit() else x)
-            sorted_norm_weights = [pc_weights_norm[k] for k in sorted_keys]
-            plt.plot(sorted_keys, sorted_norm_weights, marker='o', label=f"Mouse {mouse_id}")
+            keys = pc_weights_norm.index
+            norm_weights = pc_weights_norm
+            #sorted_keys = sorted(pc_weights_norm.index, key=lambda x: int(x) if str(x).isdigit() else x)
+            #sorted_norm_weights = [pc_weights_norm[k] for k in sorted_keys]
+            plt.plot(keys, norm_weights, marker='o', label=f"Mouse {mouse_id}")
     plt.xlabel("Principal Component")
     plt.ylabel("Normalized Regression Weight (PC space)")
     plt.title(f"Normalized PC Regression Loadings for {phase1} vs {phase2}, Stride {stride_number}\n{condition_label}")
@@ -1635,6 +1640,686 @@ def plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated
     plt.savefig(os.path.join(aggregated_save_dir,
                              f"Normalized_PC_regression_loadings_{phase1}_{phase2}_stride{stride_number}_{condition_label}.png"))
     plt.close()
+
+def plot_even_odd_PCs_across_mice(even_ws, odd_ws, aggregated_save_dir, phase1, phase2, stride_number, condition_label):
+    # Plot even vs odd for each mouse for this phase pair and stride.
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # First, gather unique mouse IDs for the current phase/stride.
+    unique_mouse_ids = sorted({mouse_id for (mouse_id, p1, p2, s) in even_ws.keys()
+                               if p1 == phase1 and p2 == phase2 and s == stride_number})
+
+    # Create a color mapping using a colormap with enough distinct colours.
+    cmap = plt.get_cmap("tab20")
+    color_mapping = {mouse_id: cmap(i / len(unique_mouse_ids)) for i, mouse_id in enumerate(unique_mouse_ids)}
+
+    # Track which mouse IDs have been added to the legend.
+    plotted_mice = set()
+
+    # Loop through even_ws keys and filter by phase and stride.
+    for key, evenW in even_ws.items():
+        mouse_id, p1, p2, s = key
+        if p1 == phase1 and p2 == phase2 and s == stride_number:
+            oddW = odd_ws[key]
+
+            # Ensure arrays are 2D.
+            evenW = np.atleast_2d(np.array(evenW))
+            oddW = np.atleast_2d(np.array(oddW))
+
+            # Extract the first 3 PCs.
+            even_PC1, even_PC2, even_PC3 = evenW[:, 0], evenW[:, 1], evenW[:, 2]
+            odd_PC1, odd_PC2, odd_PC3 = oddW[:, 0], oddW[:, 1], oddW[:, 2]
+
+            # Assign the precomputed color.
+            color = color_mapping[mouse_id]
+
+            # Only add labels once per mouse.
+            label_even = f"{mouse_id} Even" if mouse_id not in plotted_mice else None
+            label_odd = f"{mouse_id} Odd" if mouse_id not in plotted_mice else None
+            plotted_mice.add(mouse_id)
+
+            ax.scatter(even_PC1, even_PC2, even_PC3, marker='o', label=label_even, color=color)
+            ax.scatter(odd_PC1, odd_PC2, odd_PC3, marker='^', label=label_odd, color=color)
+    ax.set_xlabel('PC1')
+    ax.set_ylabel('PC2')
+    ax.set_zlabel('PC3')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.title(f"Aggregated Even vs Odd Weights for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(aggregated_save_dir,
+                             f"Aggregated_even_vs_odd_w_{phase1}_{phase2}_stride{stride_number}_{condition_label}.png"))
+    plt.close()
+
+def rank_within_vs_between_differences(even_ws, odd_ws,aggregated_save_dir, phase1, phase2, stride_number, condition_label):
+    # Collect even and odd weights for all mice in this (phase1, phase2, stride_number) group.
+    even_dict = {}
+    odd_dict = {}
+    for key, evenW in even_ws.items():
+        mouse_id, p1, p2, s = key
+        if p1 == phase1 and p2 == phase2 and s == stride_number:
+            # Ensure the weight vector is 1D (if it was saved as 1D or single point).
+            even_dict[mouse_id] = np.atleast_1d(np.array(evenW))
+            odd_dict[mouse_id] = np.atleast_1d(np.array(odd_ws[key]))
+
+    # Total number of mice in this group.
+    num_mice = len(even_dict)
+    print(f"Total mice for {phase1} vs {phase2}, stride {stride_number}: {num_mice}")
+
+    # For each mouse, compute the within difference (dwi) and between differences (di).
+    ranks = {}  # will store the rank for each mouse
+    for mouse_i, even_i in even_dict.items():
+        odd_i = odd_dict[mouse_i]
+        # Compute the within-mouse difference (dwi) as the Euclidean norm
+        dwi = np.linalg.norm(even_i - odd_i)
+
+        # Compute the between-mouse differences: difference between this mouse's even weight and each other mouse's even weight.
+        between_diffs = []
+        for mouse_j, even_j in even_dict.items():
+            if mouse_j == mouse_i:
+                continue
+            dij = np.linalg.norm(even_i - even_j)
+            between_diffs.append(dij)
+
+        # Combine all differences: (total mice - 1) between differences + 1 within difference.
+        all_diffs = between_diffs + [dwi]
+
+        # Rank the within difference relative to all differences.
+        # Sorting in ascending order; the smallest difference gets rank 1.
+        sorted_diffs = sorted(all_diffs)
+        # Find the rank (1-indexed)
+        rank = sorted_diffs.index(dwi) + 1
+        ranks[mouse_i] = rank
+
+    # Print or further process the resulting ranks.
+    for mouse, rank in ranks.items():
+        print(f"Mouse {mouse} rank: {rank} (out of {num_mice})")
+
+    save_path = os.path.join(aggregated_save_dir,
+                             f"Within_vs_between_mouse_rank_table_EvenOdd_{phase1}_{phase2}_stride{stride_number}_{condition_label}.png")
+    save_rank_table(ranks, save_path)
+
+
+def save_rank_table(ranks: dict, save_path: str):
+    """
+    Saves a table figure showing the rank for each mouse.
+
+    Parameters:
+        ranks (dict): A dictionary mapping mouse_id to rank.
+        save_path (str): Path (including filename) to save the figure.
+    """
+    # Sort the dictionary by mouse_id (or by rank if preferred)
+    sorted_ranks = sorted(ranks.items(), key=lambda x: x[0])
+    header = ["Mouse", "Rank"]
+    cell_text = [[str(mouse), str(rank)] for mouse, rank in sorted_ranks]
+
+    # Determine figure size (adjust height based on the number of mice)
+    fig, ax = plt.subplots(figsize=(3, 0.5 + 0.3 * len(cell_text)))
+    ax.axis('tight')
+    ax.axis('off')
+
+    # Create a table with the cell data and headers
+    table = ax.table(cellText=cell_text, colLabels=header, loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    fig.tight_layout()
+
+    # Save the figure to the specified path
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close(fig)
+
+
+def compare_within_between_variability(runs_dict: dict, mouse_runs: dict, aggregated_save_dir: str, phase: str, stride_data: pd.DataFrame, phase1: str, phase2: str,
+                                       stride_number: int, exp: str, condition_label: str):
+    """
+    For a given phase and stride, compute the within-mouse variability and between-mouse variability,
+    rank the within variability relative to the between variabilities, and plot all run-level PC data in 3D.
+    Additionally, compute a global median vector (across all mice), and flag outlier runs based on
+    each run's distance to this global median vector. The global median vector is also plotted.
+
+    Parameters:
+        runs_dict (dict): Keys are tuples (mouse, p1, p2, s) with run-level PC data (n_runs, n_PCs).
+        mouse_runs (dict): Keys are mice, values are the available within phase runs for that mouse
+        aggregated_save_dir (str): Directory for saving output figures.
+        phase (str): Phase for analysis (assumed at index 1 of key).
+        phase1 (str): First phase (for titling).
+        phase2 (str): Second phase (for titling).
+        stride_number (int): Stride number (assumed at index 3 of key).
+        condition_label (str): Label for condition (for titling/filenames).
+
+    Returns:
+        within_vars (dict): Average within-mouse variability per mouse.
+        between_vars (dict): List of between-mouse distances for each mouse.
+        rank (dict): Ranking of within variability per mouse.
+    """
+    # Filter keys for the given phase and stride.
+    mouse_params = [key for key in runs_dict.keys() if key[1] == phase or key[2] == phase and key[3] == stride_number]
+
+    mouse_means = {}
+    within_vars = {}
+
+    # Compute the mean PC vector for each mouse and its within variability (using each mouse's own mean).
+    for (mouse, p1, p2, s) in mouse_params:
+        runs = runs_dict[(mouse, p1, p2, s)]
+        mean_vec = np.mean(runs, axis=0)
+        mouse_means[mouse] = mean_vec
+        distances = np.linalg.norm(runs - mean_vec, axis=1)
+        within_vars[mouse] = np.mean(distances)
+
+    print("Total mice for", phase, "stride", stride_number, ":", len(mouse_params))
+
+    # Compute between variability: for each mouse, distances from its mean to every other mouse's mean.
+    between_vars = {}
+    for mouse_i in mouse_means.keys():
+        mean_i = mouse_means[mouse_i]
+        other_dists = []
+        for mouse_j in mouse_means.keys():
+            if mouse_j == mouse_i:
+                continue
+            mean_j = mouse_means[mouse_j]
+            other_dists.append(np.linalg.norm(mean_i - mean_j))
+        between_vars[mouse_i] = other_dists
+
+    # Rank the within variability relative to between distances.
+    rank = {}
+    for mouse, within_var in within_vars.items():
+        all_vars = between_vars[mouse] + [within_var]
+        sorted_vars = sorted(all_vars)
+        rank[mouse] = sorted_vars.index(within_var) + 1
+    for mouse, r in rank.items():
+        print(f"Mouse {mouse} rank: {r} (out of {len(mouse_means)})")
+
+    # Save rank table as a figure.
+    save_path_ranktable = os.path.join(aggregated_save_dir,
+                                       f"Within_vs_between_mouse_rank_table_IndividRuns_{phase}({phase1}_{phase2})_stride{stride_number}_{condition_label}.png")
+    if rank:
+        save_rank_table(rank, save_path_ranktable)  # assumes you have save_rank_table defined
+
+    # Use global outlier detection.
+    outlier_runs, threshold, global_stats = find_outlier_runs_global_std(runs_dict, phase, stride_number)
+
+    # Plot all runs for each mouse in 3D, with outliers highlighted.
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    unique_mice = sorted({key[0] for key in mouse_params})
+    cmap = plt.get_cmap("tab20")
+    color_mapping = {mouse: cmap(i / len(unique_mice)) for i, mouse in enumerate(unique_mice)}
+    plotted = set()
+
+    for key in mouse_params:
+        mouse, p1, p2, s = key
+        runs = np.array(runs_dict[key])
+        if runs.ndim == 1:
+            runs = np.atleast_2d(runs)
+        label = mouse if mouse not in plotted else None
+        # Plot all runs.
+        ax.scatter(runs[:, 0], runs[:, 1], runs[:, 2],
+                   color=color_mapping[mouse],
+                   label=label,
+                   s=50,
+                   alpha=0.8)
+        # Highlight outliers for this mouse.
+        if mouse in outlier_runs:
+            outlier_indices = list(outlier_runs[mouse])
+            if len(outlier_indices) > 0:
+                outlier_points = runs[outlier_indices, :]
+                ax.scatter(outlier_points[:, 0], outlier_points[:, 1], outlier_points[:, 2],
+                           color=color_mapping[mouse],
+                           marker='x',
+                           s=100,
+                           linewidths=2)
+        plotted.add(mouse)
+
+    # Plot each mouse's mean (from within mouse data) as a diamond.
+    for mouse in unique_mice:
+        mean_vec = mouse_means[mouse]
+        ax.scatter(mean_vec[0], mean_vec[1], mean_vec[2],
+                   color=color_mapping[mouse],
+                   marker='D',
+                   s=150,
+                   edgecolor='k',
+                   linewidths=1.5,
+                   label=f"{mouse} mean")
+
+    # Plot the global median vector as a black star.
+    global_median_vector = global_stats["global_median_vector"]
+    ax.scatter(global_median_vector[0], global_median_vector[1], global_median_vector[2],
+               color='k',
+               marker='*',
+               s=200,
+               label="Global median")
+
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_zlabel("PC3")
+    ax.set_title(f"{condition_label}: {phase} (stride {stride_number}) - Run-level PC Projections")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+
+    save_path_plot = os.path.join(aggregated_save_dir,
+                                  f"Run_PC_projections_{phase}({phase1}_{phase2})_stride{stride_number}_{condition_label}.png")
+    plt.savefig(save_path_plot, bbox_inches='tight')
+    plt.close()
+
+    # save the outliers as a csv
+    save_outliers_csv_updated(outlier_runs, mouse_runs, aggregated_save_dir, condition_label, phase1, phase2, stride_number, stride_data)
+
+    return within_vars, between_vars, rank
+
+
+def find_outlier_runs_global_std(runs_dict: dict, phase: str, stride_number: int, factor: float = 2.0):
+    """
+    Compute a global median vector across all runs (all mice) for the specified phase and stride.
+    Then, compute the Euclidean distance of every run to this global median vector.
+    Using the distribution of these distances, compute the global median distance and standard deviation.
+    Any run whose distance exceeds (global_median_distance + factor * global_std_distance) is flagged as an outlier.
+
+    Parameters:
+        runs_dict (dict): Keys are tuples (mouse, p1, p2, s) and values are numpy arrays of shape (n_runs, n_PCs)
+                          representing run-level PC data.
+        phase (str): The phase to filter by (assumed to be at index 1 of the key).
+        stride_number (int): The stride number to filter by (assumed to be at index 3 of the key).
+        factor (float): The multiplier for the standard deviation (default is 2.0).
+
+    Returns:
+        outliers (dict): Dictionary mapping each mouse to a set of outlier run indices.
+        threshold (float): The global threshold (global_median_distance + factor * global_std_distance).
+        global_stats (dict): Dictionary containing the global median vector, global_median_distance, and global_std_distance.
+    """
+    all_runs = []
+    runs_by_key = {}
+
+    # Filter runs for the specified phase and stride.
+    for key, data in runs_dict.items():
+        mouse, p1, p2, s = key
+        if p1 == phase or p2==phase and s == stride_number:
+            runs = np.array(data)
+            if runs.ndim == 1:
+                runs = np.atleast_2d(runs)
+            runs_by_key[key] = runs
+            all_runs.append(runs)
+
+    if not all_runs:
+        print("No runs found for phase", phase, "and stride", stride_number)
+        return {}, np.nan, {}
+
+    # Stack all runs together.
+    all_runs_stacked = np.vstack(all_runs)
+
+    # Compute the global median vector (component-wise median).
+    global_median_vector = np.median(all_runs_stacked, axis=0)
+
+    # Compute distances from each run to the global median vector.
+    all_distances = np.linalg.norm(all_runs_stacked - global_median_vector, axis=1)
+    global_median_distance = np.median(all_distances)
+    global_std_distance = np.std(all_distances)
+
+    # Define threshold.
+    threshold = global_median_distance + factor * global_std_distance
+
+    # Flag outliers: for each key (each mouse's set of runs), flag runs with distance > threshold.
+    outliers = {}
+    for key, runs in runs_by_key.items():
+        mouse = key[0]
+        distances = np.linalg.norm(runs - global_median_vector, axis=1)
+        outlier_idx = set(np.where(distances > threshold)[0].tolist())
+        if mouse in outliers:
+            outliers[mouse].update(outlier_idx)
+        else:
+            outliers[mouse] = outlier_idx
+
+    print("Global median distance: {:.2f}".format(global_median_distance))
+    print("Global std of distances: {:.2f}".format(global_std_distance))
+    print("Threshold (median + {}*std): {:.2f}".format(factor, threshold))
+
+    global_stats = {
+        "global_median_vector": global_median_vector,
+        "global_median_distance": global_median_distance,
+        "global_std_distance": global_std_distance
+    }
+
+    return outliers, threshold, global_stats
+
+
+def save_outliers_csv_updated(outlier_runs: dict, real_run_mapping: dict, aggregated_save_dir: str, condition_label: str,
+                              phase1: str, phase2: str, stride_number: int, stride_data: pd.DataFrame, csv_filename: str = "outlier_runs.csv"):
+    """
+    Update or create a CSV file that contains outlier run indices for various phases and strides.
+    Only entries for mice with non-empty outlier run indices are added or updated.
+
+    If the CSV file exists, it is loaded and new entries (identified by a unique key of
+    condition_label, mouseID, phase1, phase2, and stride_number) are either updated (if existing)
+    or appended. Other entries are preserved.
+
+    Parameters:
+        outlier_runs (dict): Dictionary mapping mouse IDs to a set of outlier run indices.
+        real_run_mapping (dict): Dictionary mapping each mouse ID to its list of real run IDs (in the same order as processed data).
+        aggregated_save_dir (str): Directory where the CSV file is located.
+        condition_label (str): The condition label.
+        phase1 (str): The first phase.
+        phase2 (str): The second phase.
+        stride_number (int): The stride number.
+        csv_filename (str): The name of the CSV file (default "outlier_runs.csv").
+    """
+    file_path = os.path.join(aggregated_save_dir, csv_filename)
+
+    # Prepare new rows as a DataFrame, skipping mice with no outliers.
+    rows = []
+    for mouse, indices in outlier_runs.items():
+        if not indices:  # Skip if empty
+            continue
+        indices_str = ",".join(str(i) for i in sorted(list(indices)))
+
+        # Map each outlier index to the corresponding real run ID.
+        # It is assumed that real_run_mapping[mouse] is a list (in order) of the real run IDs.
+        real_runs = real_run_mapping.get(mouse, [])
+        # Make sure the list is long enough:
+        outlier_real_runs = [real_runs[i] for i in sorted(list(indices)) if i < len(real_runs)]
+        real_runs_str = ",".join(str(r) for r in outlier_real_runs)
+
+        frame_numbers = []
+        for run in outlier_real_runs:
+            try:
+                # Example: if your stride_data index has levels ['Mouse', 'Run', 'FrameIdx'], you might do:
+                #frame = stride_data.loc[(mouse, run)].index.get_level_values('FrameIdx')[0]
+                frame = int(stride_data.loc[(mouse, run)].index.get_level_values('FrameIdx')[0])
+                frame_numbers.append(frame)
+            except Exception as e:
+                frame_numbers.append("NA")
+        #rames_str = ",".join(str(f) for f in frame_numbers)
+        frames_str = json.dumps(frame_numbers)
+
+        rows.append({
+            "condition_label": condition_label,
+            "mouseID": mouse,
+            "phase1": phase1,
+            "phase2": phase2,
+            "stride_number": stride_number,
+            "outlier_run_indices": indices_str,
+            "real_run_ids": real_runs_str,
+            "frame_numbers": frames_str
+        })
+
+    if not rows:
+        print("No outlier entries to update.")
+        return
+
+    new_df = pd.DataFrame(rows, columns=["condition_label", "mouseID", "phase1", "phase2",
+                                         "stride_number", "outlier_run_indices", "real_run_ids", "frame_numbers"])
+
+    if os.path.exists(file_path):
+        existing_df = pd.read_csv(file_path)
+    else:
+        existing_df = pd.DataFrame(columns=["condition_label", "mouseID", "phase1", "phase2",
+                                            "stride_number", "outlier_run_indices", "real_run_ids", "frame_numbers"])
+
+    for idx, new_row in new_df.iterrows():
+        key_mask = (
+                (existing_df["condition_label"] == new_row["condition_label"]) &
+                (existing_df["mouseID"] == new_row["mouseID"]) &
+                (existing_df["phase1"] == new_row["phase1"]) &
+                (existing_df["phase2"] == new_row["phase2"]) &
+                (existing_df["stride_number"] == new_row["stride_number"])
+        )
+        if key_mask.any():
+            existing_df.loc[key_mask, "outlier_run_indices"] = new_row["outlier_run_indices"]
+            existing_df.loc[key_mask, "real_run_ids"] = new_row["real_run_ids"]
+            existing_df.loc[key_mask, "frame_numbers"] = new_row["frame_numbers"]
+        else:
+            existing_df = pd.concat([existing_df, pd.DataFrame([new_row])], ignore_index=True)
+
+    existing_df.to_csv(file_path, index=False)
+    print(f"Updated outlier runs CSV: {file_path}")
+
+
+def exp_growth(x, y0, L, k):
+    """
+    Exponential growth function:
+      y(x) = y0 + L * (1 - exp(-k * x))
+    """
+    return y0 + L * (1 - np.exp(-k * x))
+
+
+def exp_growth_derivative(x, y0, L, k):
+    """Analytical derivative of the exponential growth model."""
+    return L * k * np.exp(-k * x)
+
+# Type alias for a summary dictionary of curves or derivatives.
+# The keys in the inner dictionary:
+#   'x_vals': np.ndarray
+#   'individual': mapping from mouse id (str) to np.ndarray
+#   'mean': np.ndarray
+#   'sem': np.ndarray
+SummaryDict = Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]
+
+# Key type for phase and stride.
+KeyType = Tuple[str, str, int]
+
+# Type for the plateau and learning rate dictionaries.
+ParameterDict = Dict[KeyType, Dict[str, float]]
+def fit_exponential_to_prediction(stride_dict: Dict[int, List],
+                                  save_dir: str, phase1: str, phase2: str,
+                                  condition: str, exp: str) -> Tuple[
+                                        Dict[KeyType, SummaryDict],
+                                        Dict[KeyType, SummaryDict],
+                                        ParameterDict,
+                                        ParameterDict]:
+    """
+    For each stride (key in stride_dict), fit the exponential model to each mouse's
+    prediction data, compute derivatives, and then plot:
+      - Individual trace plots (raw data with fits) for each stride.
+      - Summary (mean and SEM) plots across mice for each stride (plotted separately).
+      - Aggregated summary plots across all strides (all summary curves on one plot).
+    The per-mouse plateaus and learning rates are stored in dictionaries with keys
+      (phase1, phase2, stride_number) mapping to a dictionary {mouse_id: value}.
+    Similarly, summary curves and derivatives are stored with keys (phase1, phase2, stride_number)
+    with values as dictionaries holding individual curves, mean, and SEM.
+    All plots are saved to save_dir.
+    """
+    # Fixed color mapping for possible strides (avoid the lightest value).
+    stride_color_mapping = {
+        -3: plt.cm.Blues(0.2),
+        -2: plt.cm.Blues(0.45),
+        -1: plt.cm.Blues(0.7),
+        0: plt.cm.Blues(0.99)
+    }
+
+    # Dictionaries for per-mouse parameters.
+    plateau_dict = {}  # key: (phase1, phase2, stride_number) -> {mouse_id: plateau}
+    learning_rate_dict = {}  # key: (phase1, phase2, stride_number) -> {mouse_id: k}
+
+    # Dictionaries for summary curves.
+    summary_curves_dict = {}  # key: (phase1, phase2, stride_number) -> { 'individual': {mouse_id: curve},
+    #                                     'mean': mean_curve, 'sem': sem_curve }
+    summary_derivatives_dict = {}  # key: (phase1, phase2, stride_number) -> { 'individual': {mouse_id: deriv_curve},
+    #                                     'mean': mean_deriv, 'sem': sem_deriv }
+
+    # Define common x-axis for individual stride processing.
+    con = condition.split('_')[0]
+    apa_runs = expstuff['condition_exp_runs'][con][exp]['APA']  # assuming expstuff is in scope
+    common_x = apa_runs  # for individual stride fits
+
+    # Process each stride separately.
+    for stride_number, pred_list in stride_dict.items():
+        # Create temporary dictionaries for this stride.
+        plateau_temp = {}
+        learning_rate_temp = {}
+        individual_curves = {}  # mouse_id -> interpolated curve
+        individual_derivatives = {}  # mouse_id -> interpolated derivative
+
+        # Lists to accumulate curves for aggregation.
+        curves_list = []
+        deriv_list = []
+
+        # Create a color palette for the mice in this stride.
+        colors = plt.cm.viridis(np.linspace(0, 1, len(pred_list)))
+
+        plt.figure(figsize=(10, 6))
+        for i, data in enumerate(pred_list):
+            mouse_id = data.mouse_id
+            x_data = np.array(data.x_vals)
+            y_data = np.array(data.smoothed_scaled_pred)
+
+            # Mask data by APA phase using the common x-axis.
+            apa_mask = np.isin(x_data, common_x)
+            x_data_apa = x_data[apa_mask]
+            y_data_apa = y_data[apa_mask]
+
+            # Normalize the curve.
+            max_abs = max(abs(y_data_apa.min()), abs(y_data_apa.max()))
+            normalized_curve = y_data_apa / max_abs if max_abs != 0 else y_data_apa
+
+            # Initial guesses: [y0, L, k]
+            p0 = [normalized_curve[0], np.max(normalized_curve) - normalized_curve[0], 0.1]
+
+            # Fit the exponential model.
+            params, _ = curve_fit(exp_growth, x_data_apa, normalized_curve, p0=p0)
+            y0, L, k = params
+            print(f"Stride {stride_number} - Mouse {mouse_id} parameters:")
+            print(" y0:", y0, " L:", L, " k:", k)
+
+            # Compute the run where the prediction reaches 95% of its plateau.
+            threshold = y0 + 0.95 * L
+            x_plateau = -np.log(1 - (threshold - y0) / L) / k
+            plateau_temp[mouse_id] = x_plateau
+            learning_rate_temp[mouse_id] = k
+
+            # Generate smooth x-axis for fitted curve.
+            x_fit = np.linspace(x_data_apa.min(), x_data_apa.max(), 100)
+            y_fit = exp_growth(x_fit, *params)
+
+            # Compute derivative of the fitted curve.
+            y_fit_derivative = exp_growth_derivative(x_fit, *params)
+
+            # Interpolate fitted curve and derivative onto common_x.
+            interp_curve = np.interp(common_x, x_fit, y_fit)
+            interp_deriv = np.interp(common_x, x_fit, y_fit_derivative)
+            individual_curves[mouse_id] = interp_curve
+            individual_derivatives[mouse_id] = interp_deriv
+            curves_list.append(interp_curve)
+            deriv_list.append(interp_deriv)
+
+            # Plot raw normalized data (dashed) and fitted curve.
+            plt.plot(x_data_apa, normalized_curve, color=colors[i], ls='--', label=f'Data Mouse {mouse_id}')
+            plt.plot(x_fit, y_fit, color=colors[i], label=f'Fit Mouse {mouse_id}')
+
+        plt.xlabel('Run')
+        plt.ylabel('Normalized Prediction')
+        plt.title(f'Exponential Fit to Mouse Prediction Curves (Stride {stride_number})')
+        plt.legend()
+        trace_save_path = os.path.join(save_dir, f"Exponential_Fit_Stride_{stride_number}_traces.png")
+        plt.savefig(trace_save_path, dpi=300)
+        plt.close()
+
+        # Compute average curve and SEM for this stride.
+        curves_array = np.array(curves_list)
+        mean_curve = np.mean(curves_array, axis=0)
+        std_curve = np.std(curves_array, axis=0)
+        sem_curve = std_curve / np.sqrt(curves_array.shape[0])
+
+        # Compute average derivative and SEM.
+        deriv_array = np.array(deriv_list)
+        mean_deriv = np.mean(deriv_array, axis=0)
+        std_deriv = np.std(deriv_array, axis=0)
+        sem_deriv = std_deriv / np.sqrt(deriv_array.shape[0])
+
+        plt.figure(figsize=(10, 6))
+        for i, mouse_id in enumerate(individual_derivatives.keys()):
+            plt.plot(common_x, individual_derivatives[mouse_id], color=colors[i], ls='-',
+                     label=f'Deriv Mouse {mouse_id}')
+        plt.xlabel('Run')
+        plt.ylabel('Derivative')
+        plt.title(f'Derivatives of Exponential Fits (Stride {stride_number})')
+        plt.legend()
+        deriv_save_path = os.path.join(save_dir, f"Derivatives_Exponential_Fit_Stride_{stride_number}.png")
+        plt.savefig(deriv_save_path, dpi=300)
+        plt.close()
+
+        # Store the per-stride dictionaries in the overall summary dictionaries.
+        key = (phase1, phase2, stride_number)
+        plateau_dict[key] = plateau_temp
+        learning_rate_dict[key] = learning_rate_temp
+        summary_curves_dict[key] = {
+            'x_vals': common_x,
+            'individual': individual_curves,
+            'mean': mean_curve,
+            'sem': sem_curve
+        }
+        summary_derivatives_dict[key] = {
+            'x_vals': common_x,
+            'individual': individual_derivatives,
+            'mean': mean_deriv,
+            'sem': sem_deriv
+        }
+
+    # Aggregated plot: summary curves from all strides.
+    plt.figure(figsize=(10, 8))
+    # Reverse order so the lightest color is plotted last.
+    for key, summary in sorted(summary_curves_dict.items(), reverse=True):
+        # key is (phase1, phase2, stride_number)
+        stride_number = key[2]
+        color = stride_color_mapping.get(stride_number, plt.cm.Blues(0.6))
+        x_vals = summary['x_vals']
+        mean_curve = summary['mean']
+        sem_curve = summary['sem']
+        # If x_vals is non-numeric, use indices.
+        try:
+            x_vals_numeric = np.array(x_vals, dtype=float)
+        except ValueError:
+            x_vals_numeric = np.arange(len(x_vals))
+        plt.plot(x_vals_numeric, mean_curve, linewidth=2, label=f"Stride {stride_number}", color=color)
+        plt.fill_between(x_vals_numeric, mean_curve - sem_curve, mean_curve + sem_curve, color=color, alpha=0.1)
+    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='--')
+    plt.grid(False)
+    plt.gca().yaxis.grid(True)
+    plt.xlabel('Run')
+    plt.ylabel('Normalized Prediction')
+    plt.title(f'Aggregated Average Exponential Fits Across Strides - APA ({phase1} vs {phase2})')
+    plt.legend()
+    agg_summary_save_path = os.path.join(save_dir, f"Aggregated_Average_Exponential_Fit_APA_({phase1}_vs_{phase2}).png")
+    plt.savefig(agg_summary_save_path, dpi=300)
+    plt.close()
+
+    # Aggregated derivatives plot.
+    plt.figure(figsize=(10, 8))
+    MaxY = []
+    MinY = []
+    for key, summary in sorted(summary_derivatives_dict.items(), reverse=True):
+        stride_number = key[2]
+        color = stride_color_mapping.get(stride_number, plt.cm.Blues(0.6))
+        x_vals = summary['x_vals']
+        mean_deriv = summary['mean']
+        sem_deriv = summary['sem']
+        # Get overall max and min across all strides from the summary dictionaries.
+        max_y = np.max([np.max(val['mean']) for val in summary_derivatives_dict.values()])
+        min_y = np.min([np.min(val['mean']) for val in summary_derivatives_dict.values()])
+        MaxY.append(max_y)
+        MinY.append(min_y)
+        plt.plot(x_vals, mean_deriv, linewidth=2, label=f"Stride {stride_number}", color=color)
+    ymin = np.min(MaxY) if MaxY else None
+    ymax = np.max(MinY) if MinY else None
+    plt.vlines(x=[9.5, 109.5], ymin=ymin, ymax=ymax, color='red', linestyle='--')
+    plt.grid(False)
+    plt.gca().yaxis.grid(True)
+    plt.xlabel('Run')
+    plt.ylabel('Derivative')
+    plt.title(f'Aggregated Average Derivative of Exponential Fits Across Strides - APA ({phase1} vs {phase2})')
+    plt.legend()
+    agg_deriv_save_path = os.path.join(save_dir,
+                                       f"Aggregated_Average_Derivative_Exponential_Fit_APA_({phase1}_vs_{phase2}).png")
+    plt.savefig(agg_deriv_save_path, dpi=300)
+    plt.close()
+
+    return summary_curves_dict, summary_derivatives_dict, plateau_dict, learning_rate_dict
+
+
+
+
+
+
+
+
+
 
 
 

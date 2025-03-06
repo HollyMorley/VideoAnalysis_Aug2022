@@ -10,10 +10,10 @@ import ast
 from joblib import Parallel, delayed
 from collections import Counter
 
-from Analysis.ReduceFeatures.PCA import perform_pca, plot_pca, plot_scree, cross_validate_pca, plot_average_variance_explained_across_folds
-from Analysis.ReduceFeatures.LogisticRegression import compute_regression, compute_lasso_regression, run_regression, predict_runs
-from Analysis.ReduceFeatures.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
-from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.Tools.PCA import perform_pca, plot_pca, plot_scree, cross_validate_pca, plot_average_variance_explained_across_folds
+from Analysis.Tools.LogisticRegression import compute_regression, compute_lasso_regression, run_regression, predict_runs
+from Analysis.Tools.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
+from Analysis.Tools import utils_feature_reduction as utils
 from Helpers.Config_23 import *
 
 # ----------------------------

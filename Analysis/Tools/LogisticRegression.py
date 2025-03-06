@@ -4,8 +4,9 @@ import os
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
 from scipy.signal import medfilt
+import matplotlib.pyplot as plt
 
-from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.Tools import utils_feature_reduction as utils
 
 def compute_regression(X, y):
     model = LogisticRegression(penalty='none', fit_intercept=False)
@@ -96,7 +97,7 @@ def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_pha
     return w, normalize_mean, normalize_std, y_reg, full_accuracy
 
 
-def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition_name):
+def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition_name, plot_pred):
     # Apply the full model to all runs (scaled and unscaled)
     all_trials_dr = np.dot(loadings_df.T, reduced_feature_data_df.T)
     all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T
@@ -104,15 +105,21 @@ def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize
     run_pred_scaled = np.dot(w, all_trials_dr)
 
     # Compute smoothed scaled predictions for aggregation.
-    smoothed_pred = medfilt(run_pred[0], kernel_size=5)
-    smoothed_scaled_pred = medfilt(run_pred_scaled[0], kernel_size=5)
+    kernel_size = 5
+    padded_run_pred = np.pad(run_pred[0], pad_width=kernel_size, mode='reflect')
+    padded_run_pred_scaled = np.pad(run_pred_scaled[0], pad_width=kernel_size, mode='reflect')
+    smoothed_pred = medfilt(padded_run_pred, kernel_size=kernel_size)
+    smoothed_scaled_pred = medfilt(padded_run_pred_scaled, kernel_size=kernel_size)
+    smoothed_pred = smoothed_pred[kernel_size:-kernel_size]
+    smoothed_scaled_pred = smoothed_scaled_pred[kernel_size:-kernel_size]
 
     # Plot run prediction
-    utils.plot_run_prediction(reduced_feature_data_df, run_pred, smoothed_pred, save_path, mouse_id, phase1, phase2, stride_number,
-                              scale_suffix="", dataset_suffix=condition_name)
-    utils.plot_run_prediction(reduced_feature_data_df, run_pred_scaled, smoothed_scaled_pred, save_path, mouse_id, phase1, phase2, stride_number,
-                              scale_suffix="scaled", dataset_suffix=condition_name)
-    return smoothed_scaled_pred
+    if plot_pred:
+        utils.plot_run_prediction(reduced_feature_data_df, run_pred, smoothed_pred, save_path, mouse_id, phase1, phase2, stride_number,
+                                  scale_suffix="", dataset_suffix=condition_name)
+        utils.plot_run_prediction(reduced_feature_data_df, run_pred_scaled, smoothed_scaled_pred, save_path, mouse_id, phase1, phase2, stride_number,
+                                  scale_suffix="scaled", dataset_suffix=condition_name)
+    return smoothed_scaled_pred, run_pred_scaled
 
 def regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy):
     # Shuffle features and run logistic regression to find unique contributions and single feature contributions
@@ -129,7 +136,7 @@ def regression_feature_contributions(loadings_df, reduced_feature_selected_data_
     utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}")
     utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}")
 
-def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition):
+def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition, plot_pred=True, plot_weights=True):
     w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
 
     # Compute feature contributions
@@ -137,13 +144,18 @@ def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selecte
 
     # Compute feature-space weights for this mouse
     feature_weights = loadings_df.dot(w.T).squeeze()
-    # Plot the weights in the original feature space
-    utils.plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number)
+
+    if plot_weights:
+        # Plot the weights in the original feature space
+        utils.plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number)
 
     # Predict runs using the full model
-    smoothed_scaled_pred = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition)
+    smoothed_scaled_pred, _ = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition, plot_pred)
 
-    return smoothed_scaled_pred, feature_weights, w
+    return smoothed_scaled_pred, feature_weights, w, normalize_mean, normalize_std
+
+def run_linear_regression_derivative(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition, plot_pred=True, plot_weights=True):
+    w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
 
 
 def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, day, stride_data_compare, phase1, phase2, selected_features, loadings_df, w, save_path):
@@ -162,7 +174,7 @@ def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, d
     # prefix path wth \\?\ to avoid Windows path length limit
     save_path_compare = "\\\\?\\" + save_path_compare
     os.makedirs(save_path_compare, exist_ok=True)
-    smoothed_scaled_pred = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, stride_number, compare_condition)
+    smoothed_scaled_pred, _ = predict_runs(loadings_df, comparison_reduced_feature_data_df, normalize_mean, normalize_std, w, save_path_compare, mouse_id, phase1, phase2, stride_number, compare_condition)
 
     return smoothed_scaled_pred, runs
 
@@ -196,4 +208,22 @@ def compute_global_regression_model(global_mouse_ids, stride_number, phase1, pha
 
     return {'w': w, 'norm_mean': norm_mean, 'norm_std': norm_std, 'selected_features': selected_features,
             'loadings_df': loadings_df}
+
+def plot_LOO_regression_accuracies(mouse_accuracies, phase1, phase2, stride_number, base_save_dir_condition):
+    # Plot the LOO accuracies for this (phase1, phase2, stride) combination.
+    plt.figure(figsize=(8, 4))
+    mice = list(mouse_accuracies.keys())
+    accuracies = list(mouse_accuracies.values())
+    plt.bar(mice, accuracies, color="skyblue")
+    plt.axhline(0.8, color="red", linestyle="--", label="Threshold (0.8)")
+    plt.xlabel("Mouse ID")
+    plt.ylabel("LOO Accuracy")
+    plt.title(f"LOO Accuracies: {phase1} vs {phase2}, Stride {stride_number}")
+    plt.legend()
+    plot_path = os.path.join(base_save_dir_condition, "LeaveOneOut", f"LOO_{phase1}_{phase2}_stride{stride_number}.png")
+    plt.savefig(plot_path)
+    plt.close()
+    print(f"Saved LOO accuracy plot for {phase1} vs {phase2}, stride {stride_number} to {plot_path}")
+
+
 

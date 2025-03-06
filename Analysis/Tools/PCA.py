@@ -5,7 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
-from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.Tools import utils_feature_reduction as utils
 
 def perform_pca(scaled_data_df, n_components):
     """

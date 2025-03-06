@@ -12,22 +12,22 @@ import numpy as np
 # ----------------------------
 # Library Imports (unchanged)
 # ----------------------------
-from Analysis.ReduceFeatures.PCA import (
+from Analysis.Tools.PCA import (
     perform_pca, plot_pca, plot_scree, cross_validate_pca,
     plot_average_variance_explained_across_folds, compute_global_pca_for_phase)
 
-from Analysis.ReduceFeatures.LogisticRegression import (run_regression)
-from Analysis.ReduceFeatures.FeatureSelection import (global_feature_selection)
-from Analysis.ReduceFeatures.ClusterFeatures import (
+from Analysis.Tools.LogisticRegression import (run_regression)
+from Analysis.Tools.FeatureSelection import (global_feature_selection)
+from Analysis.Tools.ClusterFeatures import (
     plot_feature_clustering, plot_feature_clustering_3d, plot_feature_clusters_chart,
     find_feature_clusters, plot_corr_matrix_sorted_by_cluster, cluster_features_with_pca_cv, cluster_features_with_ica_cv
 )
-from Analysis.ReduceFeatures.FindMousePools import (
+from Analysis.Tools.FindMousePools import (
     compute_mouse_similarity, get_loading_matrix_from_nested, pool_mice_by_similarity
 )
-from Analysis.ReduceFeatures import utils_feature_reduction as utils
+from Analysis.Tools import utils_feature_reduction as utils
 from Helpers.Config_23 import *
-from Analysis.ReduceFeatures.config import (
+from Analysis.Tools.config import (
     base_save_dir_no_c, global_settings, condition_specific_settings, instance_settings
 )
 

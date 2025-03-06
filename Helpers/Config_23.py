@@ -43,6 +43,7 @@ expstuff = {
             },
             'Extended': { # 10, 50, 50, 50
                 'Baseline': np.arange(0, 10),
+                'APA': np.arange(10, 110),
                 'APA1': np.arange(10, 60),
                 'APA2': np.arange(60, 110),
                 'Washout': np.arange(110, 160),

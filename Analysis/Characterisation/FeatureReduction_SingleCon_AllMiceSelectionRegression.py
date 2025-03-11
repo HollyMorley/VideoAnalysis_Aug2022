@@ -294,7 +294,7 @@ def main(stride_numbers: List[int], phases: List[str],
             [pred], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition
         )
         # Plot aggregated feature weights.
-        utils.plot_aggregated_feature_weights(
+        utils.plot_aggregated_feature_weights_byFeature(
             weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition
         )
         # Optionally, include further plotting routines as needed.

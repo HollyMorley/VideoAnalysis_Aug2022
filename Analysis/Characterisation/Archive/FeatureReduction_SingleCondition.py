@@ -461,7 +461,7 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     if not global_settings["pool_mice"]:
         for (phase1, phase2, stride_number), agg_data in aggregated_predictions.items():
             utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-            utils.plot_aggregated_feature_weights(aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
+            utils.plot_aggregated_feature_weights_byFeature(aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
             utils.plot_regression_loadings_PC_space_across_mice(global_pca_results, aggregated_feature_weights, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
 
         for (phase1, phase2), stride_dict in multi_stride_data.items():

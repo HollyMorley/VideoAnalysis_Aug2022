@@ -1,19 +1,13 @@
-from sklearn.model_selection import cross_val_score
-from sklearn.cluster import KMeans
-from sklearn.linear_model import LinearRegression, LogisticRegression
-import numpy as np
 import os
 import re
 import pandas as pd
 import itertools
-from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from scipy.signal import medfilt
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 import ast
 from joblib import Parallel, delayed
@@ -26,8 +20,12 @@ from typing import Optional, List, Dict, Tuple, Union
 from dataclasses import dataclass, field
 from scipy.optimize import curve_fit
 import json
+import hashlib
+from scipy.signal import savgol_filter
+import scipy.stats as stats
 
 from Helpers.Config_23 import *
+from Analysis.Tools.config import global_settings
 from Analysis.Tools.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
 from Analysis.Tools.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
 
@@ -75,6 +73,19 @@ class FeatureWeights:
             return self.group_id
         else:
             raise IndexError("Index out of range for FeatureWeights")
+
+
+def make_safe_feature_name(feature, max_length=50):
+    # Replace disallowed characters and remove commas.
+    safe_feature = re.sub(r'[<>:"/\\|?*]', '_', feature)
+    safe_feature = re.sub(r'\s+', '_', safe_feature)
+    safe_feature = re.sub(r',', '', safe_feature)
+
+    # If the safe_feature is too long, truncate it and append a hash.
+    if len(safe_feature) > max_length:
+        hash_suffix = hashlib.md5(safe_feature.encode()).hexdigest()[:6]
+        safe_feature = safe_feature[:max_length - 7] + '_' + hash_suffix
+    return safe_feature
 
 def log_settings(settings, log_dir, script_name):
     """
@@ -731,17 +742,157 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
 
+def get_top_features(weights_dict, phase1, phase2, stride_number, n_features):
+    # Filter weights for the current phase pair.
+    filtered_weights = {
+        mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
+        for (mouse_id, p1, p2, s), weights in weights_dict.items()
+        if p1 == phase1 and p2 == phase2 and s == stride_number
+    }
+    weights_df = pd.DataFrame(filtered_weights)
 
-def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2, stride_number, condition_label):
+    # find mean of feature weights
+    mean_weights = weights_df.mean(axis=1)
+
+    # find top n features of absolute contribution, preserving original sign
+    top_features = mean_weights.abs().nlargest(n_features)
+    top_features = top_features * mean_weights.loc[top_features.index].apply(np.sign)
+    return top_features
+
+def get_top_feature_data(data_dict, phase1, phase2, stride_number, top_features):
+    # Create an empty dictionary to hold the new DataFrames.
+    data = {}
+
+    for key, df in data_dict.items():
+        # Unpack the key.
+        mouse, phase1, phase2, stride_num = key
+        if phase1 == phase1 and phase2 == phase2 and stride_num == stride_number:
+            # Create the new grouping key.
+            new_key = (phase1, phase2, stride_num)
+
+            # Make a copy of the DataFrame so we don't modify the original.
+            df_copy = df.copy()
+            # Create a MultiIndex for the rows: level 0 is the mouse ID, level 1 is the original run index.
+            df_copy.index = pd.MultiIndex.from_product([[mouse], df_copy.index], names=['mouse', 'Run'])
+
+            # If we already have a DataFrame for this group, concatenate the new data.
+            if new_key in data:
+                data[new_key] = pd.concat([data[new_key], df_copy])
+            else:
+                data[new_key] = df_copy
+
+    phase1_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase1]
+    phase2_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase2]
+
+    # Get feature data for phase 1 and phase 2.
+    phase1_mask = data[phase1, phase2, stride_number].index.get_level_values('Run').isin(phase1_runs)
+    phase2_mask = data[phase1, phase2, stride_number].index.get_level_values('Run').isin(phase2_runs)
+
+    top_features_phase1 = data[phase1, phase2, stride_number][phase1_mask].loc(axis=1)[top_features.index]
+    top_features_phase2 = data[phase1, phase2, stride_number][phase2_mask].loc(axis=1)[top_features.index]
+
+    return (top_features_phase1, top_features_phase2)
+
+def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label):
+    top_features_phase1, top_features_phase2 = top_feature_data
+
+    mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
+    mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
+
+    name_exclusions = ['buffer_size:0']
+
+    for f in top_features_phase1.columns:
+        # remove name exclusions
+        feature_name_bits = f.split(', ')
+        feature_name_to_keep = []
+        for name_bit in feature_name_bits:
+            if name_bit not in name_exclusions:
+                feature_name_to_keep.append(name_bit)
+        feature_name = ', '.join(feature_name_to_keep)
+
+        fig, ax = plt.subplots(figsize=(4, 6))
+
+        feature_mean_p1 = mean_mouse_phase1[f].mean()
+        feature_mean_p2 = mean_mouse_phase2[f].mean()
+
+        feature_sem_p1 = mean_mouse_phase1[f].sem()
+        feature_sem_p2 = mean_mouse_phase2[f].sem()
+
+        # Test normality for each phase:
+        stat1, p_val1 = stats.shapiro(mean_mouse_phase1[f])
+        stat2, p_val2 = stats.shapiro(mean_mouse_phase2[f])
+        print("Phase1 Shapiro p-value:", p_val1)
+        print("Phase2 Shapiro p-value:", p_val2)
+
+        stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
+        # Optionally, adjust the p-value threshold or use multiple stars for very small p-values:
+        if p_val < 0.001:
+            significance = "***"
+        elif p_val < 0.01:
+            significance = "**"
+        elif p_val < 0.05:
+            significance = "*"  # you can use "**" or "***" for lower p-values if desired
+        else:
+            significance = "n.s."  # not significant
+
+        # plot mouse means as line with phases along x axis and feature values along y axis. scatter plot for each mouse
+        for mouse in mean_mouse_phase1.index:
+            ax.scatter([1], mean_mouse_phase1.loc[mouse, f], color='blue', s=100, alpha=0.5)
+            ax.scatter([2], mean_mouse_phase2.loc[mouse, f], color='red', s=100, alpha=0.5)
+
+        # plot mean of feature values for each phase
+        ax.errorbar([1, 2], [feature_mean_p1, feature_mean_p2],
+                    color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1, feature_sem_p2], capsize=5)
+
+        # Compute ymax from the errorbars as before.
+        ymax = max(feature_mean_p1 + feature_sem_p1, feature_mean_p2 + feature_sem_p2) + 0.2
+        h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+        # Draw bracket
+        ax.plot([1, 1, 2, 2], [ymax, ymax + h, ymax + h, ymax], lw=1.5, c='k')
+        # Add significance text using the computed p-value:
+        ax.text(1.5, ymax + h, significance, ha='center', va='bottom', color='k', fontsize=16)
+
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels([phase1, phase2])
+        ax.set_xlim(0.5, 2.5)
+        ax.set_ylabel(feature_name)
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        fig.tight_layout()
+
+        save_dir = os.path.join(base_save_dir, 'top_feature_descriptives')
+        os.makedirs(save_dir, exist_ok=True)
+        safe_feature_name = make_safe_feature_name(feature_name)
+        save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+        fig.savefig(save_path, dpi=300)
+        plt.close()
+
+
+
+
+
+
+
+
+
+
+def plot_aggregated_feature_weights_byFeature(weights_dict, sorted_features, feature_cluster_assignments, save_path,
+                                              phase1, phase2, stride_number, condition_label):
     """
     Plot aggregated feature-space weights across mice for a specific phase pair,
     summarizing the mean (with error bars) for each feature while overlaying individual mouse lines.
+    Also draws brackets on the left indicating the cluster each feature belongs to.
 
     Parameters:
-      - weights_dict: dict where keys are tuples (mouse_id, phase1, phase2)
+      - weights_dict: dict where keys are tuples (mouse_id, phase1, phase2, stride_number)
                       and values are pandas Series of feature weights.
+      - sorted_features: list of features sorted by cluster.
+      - feature_cluster_assignments: dict mapping feature names to their cluster assignments.
       - save_path: directory to save the resulting plot.
-      - phase1, phase2: phase names to include in the plot title.
+      - phase1, phase2: phase names.
+      - stride_number: stride number.
+      - condition_label: additional label for the plot.
     """
     # Filter weights for the current phase pair.
     filtered_weights = {
@@ -755,44 +906,174 @@ def plot_aggregated_feature_weights(weights_dict, save_path, phase1, phase2, str
         return
 
     # Combine into a DataFrame (rows = features, columns = mouse_ids)
-    # sort weights_df by sum of absolute values
     weights_df = pd.DataFrame(filtered_weights)
-    weights_df['sum_abs'] = weights_df.abs().sum(axis=1)
-    weights_df = weights_df.sort_values(by='sum_abs', ascending=False)
-    weights_df = weights_df.drop('sum_abs', axis=1)
+    weights_df = weights_df.loc[sorted_features]
 
     # Scale the weights so they are comparable (optional)
     weights_df = weights_df / weights_df.abs().max()
 
+    # Create numeric y positions and use these for plotting.
+    y_positions = np.arange(len(sorted_features))
+
     fig, ax = plt.subplots(figsize=(15, 15))
 
-    # Plot a faint line for each mouse
+    # Plot a faint line for each mouse.
     for mouse in weights_df.columns:
-        ax.plot(weights_df[mouse].values, weights_df.index, alpha=0.3,
+        ax.plot(weights_df[mouse].values, y_positions, alpha=0.3,
                 marker='o', markersize=3, linestyle='-', label=mouse)
 
-    # Compute summary statistics: mean and standard error (SEM) for each feature
+    # Compute summary statistics: mean and standard error (SEM) for each feature.
     mean_weights = weights_df.mean(axis=1)
     std_weights = weights_df.std(axis=1)
     sem = std_weights / np.sqrt(len(weights_df.columns))
 
-    # Plot the mean with error bars
-    ax.errorbar(mean_weights, weights_df.index, xerr=sem, fmt='o-', color='black',
-                label='Mean ± SEM', linewidth=2, capsize=4)
+    # Plot the mean with error bars.
+    ax.errorbar(mean_weights, y_positions, xerr=std_weights, fmt='o-', color='black',
+                label='Mean ± STD', linewidth=2, capsize=4)
 
-    # Add a vertical reference line at 0
+    # Add a vertical reference line at 0.
     ax.axvline(x=0, color='red', linestyle='--')
 
+    # Set y-ticks to use feature names.
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(sorted_features)
     ax.set_xlabel('Weight Value')
     ax.set_ylabel('Feature')
-    ax.set_title(f'Aggregated Feature Space Weights Across Mice ({phase1} vs {phase2}), stride {stride_number}\n{condition_label}')
+    ax.set_title(
+        f'Aggregated Feature Space Weights Across Mice ({phase1} vs {phase2}), stride {stride_number}\n{condition_label}')
+
+    # ---- New: Draw cluster brackets on the left ----
+    # Group features by their cluster assignments.
+    clusters = {}
+    for idx, feat in enumerate(sorted_features):
+        clust = feature_cluster_assignments.get(feat)
+        clusters.setdefault(clust, []).append(idx)
+
+    # Get current x-limits to determine bracket position.
+    x_min, x_max = ax.get_xlim()
+    offset = 0.05 * (x_max - x_min)  # horizontal offset for bracket
+
+    for clust, indices in clusters.items():
+        # Determine the vertical span with a little margin.
+        y_bottom = indices[0] - 0.4
+        y_top = indices[-1] + 0.4
+        y_mid = (y_bottom + y_top) / 2
+
+        # Draw vertical line (the bracket line) on the left of the plot.
+        ax.plot([x_min - offset, x_min - offset], [y_bottom, y_top], color='black', lw=1)
+        # Draw horizontal ticks at the top and bottom.
+        ax.plot([x_min - offset, x_min - offset * 2], [y_top, y_top], color='black', lw=1)
+        ax.plot([x_min - offset, x_min - offset * 2], [y_bottom, y_bottom], color='black', lw=1)
+        # Add a text label (e.g., "Cluster 1") centered along the bracket.
+        ax.text(x_min - offset - 0.01 * (x_max - x_min), y_mid, f'Cluster {clust}',
+                va='center', ha='right', fontsize=10)
+
     plt.tight_layout()
     plt.legend(title='Mouse ID / Summary', loc='upper right')
 
-    output_file = os.path.join(save_path, f'aggregated_feature_weights_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png')
+    output_file = os.path.join(save_path,
+                               f'aggregated_feature_weights_{phase1}_vs_{phase2}_stride{stride_number}_{condition_label}.png')
     plt.savefig(output_file)
     plt.close()
     print(f"Aggregated feature weights plot saved to: {output_file}")
+
+
+def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, save_dir, phase1, phase2, stride_number, condition_label):
+    # Filter weights for the current phase pair.
+    filtered_weights = {
+        mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
+        for (mouse_id, p1, p2, s), weights in weights_dict.items()
+        if p1 == phase1 and p2 == phase2 and s == stride_number
+    }
+
+    if not filtered_weights:
+        print(f"No weights found for {phase1} vs {phase2}.")
+        return
+
+    weights_df = pd.DataFrame(filtered_weights)
+    feature_contrib_dict = {}
+    for mouse in weights_df.columns:
+        # raw_features for a given mouse is stored with key (mouse, phase1, phase2, stride_number)
+        # Assuming raw_features[...] is a DataFrame of shape (runs, features), we transpose so that
+        # rows become features and columns become run numbers.
+        raw_features_mouse = raw_features[(mouse, phase1, phase2, stride_number)].T  # shape: (n_features, n_runs)
+        weights = weights_df[mouse]  # Series with index = features
+
+        # Ensure the order of features is the same.
+        if not weights.index.equals(raw_features_mouse.index):
+            raise ValueError("Feature order mismatch between weights and raw features.")
+
+        # Multiply each weight with its corresponding feature values.
+        per_run_contributions = weights.values.reshape(-1, 1) * raw_features_mouse.values
+        # Transpose so that each row corresponds to a run and each column to a feature.
+        per_run_contributions = per_run_contributions.T  # shape: (n_runs, n_features)
+        # Create a DataFrame with run numbers as the index and feature names as the columns.
+        df_mouse = pd.DataFrame(per_run_contributions,
+                                index=raw_features_mouse.columns,
+                                columns=weights.index)
+
+        # Append this mouse's data for each feature.
+        for feature in df_mouse.columns:
+            col = df_mouse[feature]
+            max_val = col.abs().max()
+            # Only scale if the maximum absolute value is nonzero
+            if max_val != 0:
+                col_scaled = col / max_val
+            else:
+                col_scaled = col
+            if feature not in feature_contrib_dict:
+                feature_contrib_dict[feature] = pd.DataFrame()
+            feature_contrib_dict[feature][mouse] = col_scaled
+
+    # Plotting each feature.
+    for feature, df_feature in feature_contrib_dict.items():
+        plt.figure(figsize=(12, 12))
+        traces = {}
+
+        for mouse in df_feature.columns:
+            trace = df_feature[mouse].values
+            traces[mouse] = trace
+            plt.plot(df_feature.index, trace, label=f'Mouse {mouse}', alpha=0.6)
+
+        # Create a DataFrame from the traces and compute the mean summary line.
+        df_traces = pd.DataFrame(traces, index=df_feature.index)
+        mean_line = df_traces.mean(axis=1)
+
+        # --- Interpolation ---
+        # Ensure the index is numeric for interpolation.
+        x_numeric = pd.to_numeric(mean_line.index, errors='coerce')
+        mean_line.index = x_numeric
+        # Interpolate missing values linearly.
+        mean_line_interp = mean_line.interpolate(method='linear')
+
+        # --- Savitzky-Golay Smoothing ---
+        # Set a window length (must be odd and <= length of data) and polynomial order.
+        window_length = 10  # Adjust as needed.
+        if window_length > len(mean_line_interp):
+            window_length = len(mean_line_interp) // 2 * 2 + 1  # ensure odd and not too long
+        polyorder = 2  # Adjust polynomial order as needed.
+        mean_line_smooth = savgol_filter(mean_line_interp, window_length=window_length, polyorder=polyorder)
+
+        # Plot the smoothed mean line.
+        plt.plot(mean_line_interp.index, mean_line_smooth, label='Smoothed Mean', color='black', linewidth=2,
+                 linestyle='--')
+
+        plt.vlines(x=[9.5, 109.5], ymin=df_traces.min().min(), ymax=df_traces.max().max(), color='red', linestyle='--')
+        plt.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+        plt.title(f'Feature: {feature} ({phase1} vs {phase2}, stride {stride_number})')
+        plt.xlabel('Run Number')
+        plt.ylabel('Contribution')
+        plt.legend()
+        plt.tight_layout()
+        # Save the plot for the feature.
+        out_dir = os.path.join(save_dir, 'feature_contr')
+        os.makedirs(out_dir, exist_ok=True)
+        safe_feature = make_safe_feature_name(feature)
+        feature_filename = os.path.join(out_dir, f"{safe_feature}_{phase1}{phase2}_{stride_number}.png")
+        plt.savefig(feature_filename, dpi=300)
+        plt.close()
+
+
 
 
 def plot_aggregated_feature_weights_comparison(weights_dict1, weights_dict2, save_path, phase1, phase2, cond1_label,
@@ -2097,224 +2378,312 @@ KeyType = Tuple[str, str, int]
 
 # Type for the plateau and learning rate dictionaries.
 ParameterDict = Dict[KeyType, Dict[str, float]]
+
+# --------------------------------------------------------------------------
+# Helper: Delayed exponential function.
+# --------------------------------------------------------------------------
+def delayed_exp_growth(x, y0, L, k, delay):
+    """
+    Compute a delayed exponential function.
+    For x < delay, returns y0.
+    For x >= delay, returns y0 + L*(1 - exp(-k*(x-delay))).
+    """
+    x = np.array(x)
+    result = np.empty_like(x)
+    mask = x >= delay
+    result[~mask] = y0
+    result[mask] = y0 + L * (1 - np.exp(-k * (x[mask] - delay)))
+    return result
+
+
+# --------------------------------------------------------------------------
+# Helper: Pre-assign colors for each mouse (across all strides).
+# --------------------------------------------------------------------------
+def assign_mouse_colors(colourmap) -> Dict[str, any]:
+    """Create a dictionary mapping each unique mouse id to a color."""
+    all_mice = global_settings["mouse_ids"]
+    all_mice = sorted(all_mice)  # stable order
+    num = len(all_mice)
+    cmap = plt.get_cmap(colourmap)
+    colors = cmap(np.linspace(0, 1, num))
+    #colors = plt.cm.viridis(np.linspace(0, 1, num))
+    return {mouse: colors[i] for i, mouse in enumerate(all_mice)}
+
+
+# --------------------------------------------------------------------------
+# Helper: Exponential function with offset for fitting.
+# --------------------------------------------------------------------------
+def exp_growth_offset_fit(x, y0, L, k):
+    """
+    Exponential model with a fixed offset of 10.
+    x is assumed to be >= 10.
+    Model: y = y0 + L*(1 - exp(-k*(x-10)))
+    """
+    return y0 + L * (1 - np.exp(-k * (x - 10)))
+
+
+# --------------------------------------------------------------------------
+# Helper: Process a single mouse's prediction data.
+# --------------------------------------------------------------------------
+def process_mouse_prediction(data, common_x, full_x, stride_number):
+    """
+    For a given mouse's data, fit two exponential models:
+      1. Full model: fit on all APA runs (full_x) using exp_growth.
+      2. Offset model: fit on APA runs excluding the first 10 (common_x) using exp_growth_offset_fit.
+    Then extrapolate both fits over full_x.
+
+    Returns a dictionary with:
+      - 'full_curve': the full model curve over full_x.
+      - 'offset_curve': the offset model curve over full_x.
+      - 'diff_curve': offset_curve minus full_curve.
+      - Also returns fitted parameters (params_full and params_offset) and an interpolation on the fitting window for plotting.
+
+    The data are normalized using the full APA data.
+    """
+    x_data = np.array(data.x_vals)
+    y_data = np.array(data.smoothed_scaled_pred)
+
+    # Mask full APA runs.
+    full_mask = np.isin(x_data, full_x)
+    x_data_full = x_data[full_mask]
+    y_data_full = y_data[full_mask]
+    norm = max(abs(y_data_full.min()), abs(y_data_full.max()))
+    if norm == 0:
+        norm = 1
+    y_full_norm = y_data_full / norm
+
+    # Mask for offset fitting (excluding first 10 runs).
+    offset_mask = np.isin(x_data, common_x)
+    x_data_offset = x_data[offset_mask]
+    y_data_offset = y_data[offset_mask] / norm
+
+    # Fit the full model on full APA data.
+    p0_full = [y_full_norm[0], np.max(y_full_norm) - y_full_norm[0], 0.1]
+    bounds_full = ([-np.inf, 0, 0], [np.inf, np.inf, np.inf])
+    params_full, _ = curve_fit(exp_growth, x_data_full, y_full_norm, p0=p0_full, bounds=bounds_full)
+    full_curve = exp_growth(full_x, *params_full)
+
+    # Fit the offset model on offset data (x >= 10).
+    p0_offset = [y_data_offset[0], np.max(y_data_offset) - y_data_offset[0], 0.1]
+    bounds_offset = ([-np.inf, 0, 0], [np.inf, np.inf, np.inf])
+    params_offset, _ = curve_fit(exp_growth_offset_fit, x_data_offset, y_data_offset, p0=p0_offset,
+                                 bounds=bounds_offset)
+    offset_curve = exp_growth_offset_fit(full_x, *params_offset)
+
+    # Difference curve: offset minus full.
+    diff_curve = offset_curve - full_curve
+
+    # For individual plotting on the fitting window (common_x), interpolate:
+    interp_full = np.interp(common_x, x_data_full, exp_growth(x_data_full, *params_full))
+    interp_offset = exp_growth_offset_fit(common_x, *params_offset)
+
+    return {
+        'params_full': params_full,
+        'full_curve': full_curve,
+        'params_offset': params_offset,
+        'offset_curve': offset_curve,
+        'diff_curve': diff_curve,
+        'interp_full': interp_full,
+        'interp_offset': interp_offset,
+        'norm': norm
+    }
+
+
+# --------------------------------------------------------------------------
+# Helper: Plot individual traces for one stride.
+# --------------------------------------------------------------------------
+def plot_individual_traces(stride_number: int, pred_list: List, common_x, full_x, save_dir: str,
+                           mouse_colors: Dict[str, any]):
+    """
+    For each mouse in the stride, plot:
+      - The raw normalized data (for the offset fitting window).
+      - The fitted full model (on full APA runs) over the fitting window.
+      - The fitted offset model (with a fixed offset of 10) extrapolated over full APA runs.
+    """
+    plt.figure(figsize=(10, 6))
+    for data in pred_list:
+        try:
+            result = process_mouse_prediction(data, common_x, full_x, stride_number)
+            color = mouse_colors.get(data.mouse_id, 'gray')
+            # Plot raw data for offset fitting.
+            offset_mask = np.isin(np.array(data.x_vals), common_x)
+            x_data_offset = np.array(data.x_vals)[offset_mask]
+            y_data_offset = np.array(data.smoothed_scaled_pred)[offset_mask] / result['norm']
+            plt.plot(x_data_offset, y_data_offset, color=color, ls='--', label=f'Data {data.mouse_id}')
+            # Plot the full model curve (on the fitting window).
+            plt.plot(common_x, result['interp_full'], color=color, label=f'Full {data.mouse_id}')
+            # Plot the offset model curve (extrapolated over full APA).
+            plt.plot(full_x, result['offset_curve'], color=color, ls=':', label=f'Offset {data.mouse_id}')
+        except Exception as e:
+            print(f"Error processing data for mouse {data.mouse_id}: {e}")
+    plt.xlabel('Run')
+    plt.ylabel('Normalized Prediction')
+    plt.title(f'Exponential Fits (Full vs Offset) (Stride {stride_number})')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.subplots_adjust(right=0.75)
+    trace_save_path = os.path.join(save_dir, f"Exponential_Fit_Stride_{stride_number}_traces.png")
+    plt.savefig(trace_save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+# --------------------------------------------------------------------------
+# Helper: Generic function to plot aggregated data.
+# --------------------------------------------------------------------------
+def plot_aggregated_subplot(x_vals, individual_dict: Dict, ylabel: str, title: str, save_path: str, filename: str):
+    keys = list(individual_dict.keys())
+    curves = [individual_dict[k] for k in keys]
+    curves_array = np.array(curves)
+    mean_curve = np.mean(curves_array, axis=0)
+    sem_curve = np.std(curves_array, axis=0) / np.sqrt(curves_array.shape[0])
+    plt.figure(figsize=(10, 6))
+    for key in keys:
+        plt.plot(x_vals, individual_dict[key], ls='-', label=f'Mouse {key}')
+    plt.plot(x_vals, mean_curve, linewidth=2, label='Mean', color='black')
+    plt.fill_between(x_vals, mean_curve - sem_curve, mean_curve + sem_curve, color='black', alpha=0.1)
+    plt.xlabel('Run')
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    full_save_path = os.path.join(save_path, filename)
+    plt.savefig(full_save_path, dpi=300)
+    plt.close()
+    return mean_curve, sem_curve
+
+
+# --------------------------------------------------------------------------
+# Helper: Plot aggregated results across strides.
+# --------------------------------------------------------------------------
+def plot_aggregated_results(summary_dict: Dict, ylabel: str, title: str, save_path: str, filename: str,
+                            x_axis_key: str):
+    plt.figure(figsize=(10, 8))
+    for key, summary in sorted(summary_dict.items(), reverse=True):
+        x_vals = summary[x_axis_key]
+        mean_val = summary['mean']
+        sem_val = summary['sem']
+        plt.plot(x_vals, mean_val, linewidth=2, label=f"Stride {key[2]}")
+        plt.fill_between(x_vals, mean_val - sem_val, mean_val + sem_val, alpha=0.1)
+    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='--')
+    plt.xlabel('Run')
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    full_save_path = os.path.join(save_path, filename)
+    plt.savefig(full_save_path, dpi=300)
+    plt.close()
+
+
+# --------------------------------------------------------------------------
+# Main function (refactored with two exponential fits and difference calculation)
+# --------------------------------------------------------------------------
 def fit_exponential_to_prediction(stride_dict: Dict[int, List],
                                   save_dir: str, phase1: str, phase2: str,
                                   condition: str, exp: str) -> Tuple[
-                                        Dict[KeyType, SummaryDict],
-                                        Dict[KeyType, SummaryDict],
-                                        ParameterDict,
-                                        ParameterDict]:
+    Dict[tuple, dict],
+    Dict[tuple, dict],
+    Dict[tuple, dict],
+    Dict[tuple, dict],
+    Dict[tuple, dict]]:
     """
-    For each stride (key in stride_dict), fit the exponential model to each mouse's
-    prediction data, compute derivatives, and then plot:
-      - Individual trace plots (raw data with fits) for each stride.
-      - Summary (mean and SEM) plots across mice for each stride (plotted separately).
-      - Aggregated summary plots across all strides (all summary curves on one plot).
-    The per-mouse plateaus and learning rates are stored in dictionaries with keys
-      (phase1, phase2, stride_number) mapping to a dictionary {mouse_id: value}.
-    Similarly, summary curves and derivatives are stored with keys (phase1, phase2, stride_number)
-    with values as dictionaries holding individual curves, mean, and SEM.
-    All plots are saved to save_dir.
+    For each stride, fit two exponential models per mouse:
+      - A full model fitted on all APA runs (full_x).
+      - An offset model fitted on APA runs excluding the first 10 (common_x) using an offset of 10.
+    Then extrapolate both over full_x and compute the difference (offset - full).
+    Individual traces and aggregated curves are plotted.
     """
-    # Fixed color mapping for possible strides (avoid the lightest value).
+    # Fixed color mapping for aggregated plots (by stride).
     stride_color_mapping = {
         -3: plt.cm.Blues(0.2),
         -2: plt.cm.Blues(0.45),
         -1: plt.cm.Blues(0.7),
         0: plt.cm.Blues(0.99)
     }
+    # Pre-assign mouse colors.
+    mouse_colors = assign_mouse_colors(stride_dict)
 
-    # Dictionaries for per-mouse parameters.
-    plateau_dict = {}  # key: (phase1, phase2, stride_number) -> {mouse_id: plateau}
-    learning_rate_dict = {}  # key: (phase1, phase2, stride_number) -> {mouse_id: k}
+    plateau_dict = {}
+    learning_rate_dict = {}
+    summary_curves_dict = {}  # based on full model fits on common_x (interpolated)
+    summary_differences_dict = {}  # difference between offset and full curves (both extrapolated over full_x)
 
-    # Dictionaries for summary curves.
-    summary_curves_dict = {}  # key: (phase1, phase2, stride_number) -> { 'individual': {mouse_id: curve},
-    #                                     'mean': mean_curve, 'sem': sem_curve }
-    summary_derivatives_dict = {}  # key: (phase1, phase2, stride_number) -> { 'individual': {mouse_id: deriv_curve},
-    #                                     'mean': mean_deriv, 'sem': sem_deriv }
-
-    # Define common x-axis for individual stride processing.
     con = condition.split('_')[0]
-    apa_runs = expstuff['condition_exp_runs'][con][exp]['APA']  # assuming expstuff is in scope
-    common_x = apa_runs  # for individual stride fits
+    apa_runs = expstuff['condition_exp_runs'][con][exp]['APA']
+    common_x = apa_runs[10:]  # APA runs excluding the first 10
+    full_x = apa_runs  # full APA runs
 
-    # Process each stride separately.
+    # Process each stride.
     for stride_number, pred_list in stride_dict.items():
-        # Create temporary dictionaries for this stride.
         plateau_temp = {}
         learning_rate_temp = {}
-        individual_curves = {}  # mouse_id -> interpolated curve
-        individual_derivatives = {}  # mouse_id -> interpolated derivative
+        individual_full = {}  # full exponential (fitted on full data)
+        individual_offset = {}  # offset exponential (fitted on data with x>=10)
 
-        # Lists to accumulate curves for aggregation.
-        curves_list = []
-        deriv_list = []
+        full_list = []  # aggregated full curve on full_x (per mouse)
+        offset_list = []  # aggregated offset curve on full_x (per mouse)
 
-        # Create a color palette for the mice in this stride.
-        colors = plt.cm.viridis(np.linspace(0, 1, len(pred_list)))
+        # Plot individual traces for this stride.
+        plot_individual_traces(stride_number, pred_list, common_x, full_x, save_dir, mouse_colors)
 
-        plt.figure(figsize=(10, 6))
-        for i, data in enumerate(pred_list):
-            mouse_id = data.mouse_id
-            x_data = np.array(data.x_vals)
-            y_data = np.array(data.smoothed_scaled_pred)
+        for data in pred_list:
+            try:
+                result = process_mouse_prediction(data, common_x, full_x, stride_number)
+                # Save fitted parameters (using offset model's k as representative, for example)
+                plateau_temp[data.mouse_id] = result['params_offset'][0]  # you may choose a different value
+                learning_rate_temp[data.mouse_id] = result['params_offset'][2]
+                individual_full[data.mouse_id] = result['full_curve']
+                individual_offset[data.mouse_id] = result['offset_curve']
+                full_list.append(result['full_curve'])
+                offset_list.append(result['offset_curve'])
+            except Exception as e:
+                print(f"Error processing data for mouse {data.mouse_id}: {e}")
 
-            # Mask data by APA phase using the common x-axis.
-            apa_mask = np.isin(x_data, common_x)
-            x_data_apa = x_data[apa_mask]
-            y_data_apa = y_data[apa_mask]
+        # Compute aggregated curves.
+        mean_full = np.mean(np.array(full_list), axis=0)
+        sem_full = np.std(np.array(full_list), axis=0) / np.sqrt(len(full_list))
+        mean_offset = np.mean(np.array(offset_list), axis=0)
+        sem_offset = np.std(np.array(offset_list), axis=0) / np.sqrt(len(offset_list))
+        # For SEM of difference, compute individual differences first.
+        diff_array = np.array(offset_list) - np.array(full_list)
+        aggregated_diff = np.mean(diff_array, axis=0)
+        sem_diff = np.std(diff_array, axis=0) / np.sqrt(diff_array.shape[0])
 
-            # Normalize the curve.
-            max_abs = max(abs(y_data_apa.min()), abs(y_data_apa.max()))
-            normalized_curve = y_data_apa / max_abs if max_abs != 0 else y_data_apa
-
-            # Initial guesses: [y0, L, k]
-            p0 = [normalized_curve[0], np.max(normalized_curve) - normalized_curve[0], 0.1]
-
-            # Fit the exponential model.
-            params, _ = curve_fit(exp_growth, x_data_apa, normalized_curve, p0=p0)
-            y0, L, k = params
-            print(f"Stride {stride_number} - Mouse {mouse_id} parameters:")
-            print(" y0:", y0, " L:", L, " k:", k)
-
-            # Compute the run where the prediction reaches 95% of its plateau.
-            threshold = y0 + 0.95 * L
-            x_plateau = -np.log(1 - (threshold - y0) / L) / k
-            plateau_temp[mouse_id] = x_plateau
-            learning_rate_temp[mouse_id] = k
-
-            # Generate smooth x-axis for fitted curve.
-            x_fit = np.linspace(x_data_apa.min(), x_data_apa.max(), 100)
-            y_fit = exp_growth(x_fit, *params)
-
-            # Compute derivative of the fitted curve.
-            y_fit_derivative = exp_growth_derivative(x_fit, *params)
-
-            # Interpolate fitted curve and derivative onto common_x.
-            interp_curve = np.interp(common_x, x_fit, y_fit)
-            interp_deriv = np.interp(common_x, x_fit, y_fit_derivative)
-            individual_curves[mouse_id] = interp_curve
-            individual_derivatives[mouse_id] = interp_deriv
-            curves_list.append(interp_curve)
-            deriv_list.append(interp_deriv)
-
-            # Plot raw normalized data (dashed) and fitted curve.
-            plt.plot(x_data_apa, normalized_curve, color=colors[i], ls='--', label=f'Data Mouse {mouse_id}')
-            plt.plot(x_fit, y_fit, color=colors[i], label=f'Fit Mouse {mouse_id}')
-
-        plt.xlabel('Run')
-        plt.ylabel('Normalized Prediction')
-        plt.title(f'Exponential Fit to Mouse Prediction Curves (Stride {stride_number})')
-        plt.legend()
-        trace_save_path = os.path.join(save_dir, f"Exponential_Fit_Stride_{stride_number}_traces.png")
-        plt.savefig(trace_save_path, dpi=300)
-        plt.close()
-
-        # Compute average curve and SEM for this stride.
-        curves_array = np.array(curves_list)
-        mean_curve = np.mean(curves_array, axis=0)
-        std_curve = np.std(curves_array, axis=0)
-        sem_curve = std_curve / np.sqrt(curves_array.shape[0])
-
-        # Compute average derivative and SEM.
-        deriv_array = np.array(deriv_list)
-        mean_deriv = np.mean(deriv_array, axis=0)
-        std_deriv = np.std(deriv_array, axis=0)
-        sem_deriv = std_deriv / np.sqrt(deriv_array.shape[0])
-
-        plt.figure(figsize=(10, 6))
-        for i, mouse_id in enumerate(individual_derivatives.keys()):
-            plt.plot(common_x, individual_derivatives[mouse_id], color=colors[i], ls='-',
-                     label=f'Deriv Mouse {mouse_id}')
-        plt.xlabel('Run')
-        plt.ylabel('Derivative')
-        plt.title(f'Derivatives of Exponential Fits (Stride {stride_number})')
-        plt.legend()
-        deriv_save_path = os.path.join(save_dir, f"Derivatives_Exponential_Fit_Stride_{stride_number}.png")
-        plt.savefig(deriv_save_path, dpi=300)
-        plt.close()
-
-        # Store the per-stride dictionaries in the overall summary dictionaries.
         key = (phase1, phase2, stride_number)
         plateau_dict[key] = plateau_temp
         learning_rate_dict[key] = learning_rate_temp
         summary_curves_dict[key] = {
             'x_vals': common_x,
-            'individual': individual_curves,
-            'mean': mean_curve,
-            'sem': sem_curve
+            # note: full model was fitted on full data but we use common_x for aggregated full curve display
+            'individual': individual_full,
+            'mean': np.interp(common_x, full_x, mean_full),
+            'sem': np.interp(common_x, full_x, sem_full)
         }
-        summary_derivatives_dict[key] = {
-            'x_vals': common_x,
-            'individual': individual_derivatives,
-            'mean': mean_deriv,
-            'sem': sem_deriv
+        summary_differences_dict[key] = {
+            'x_vals': full_x,
+            'mean': aggregated_diff,
+            'sem': sem_diff
         }
 
-    # Aggregated plot: summary curves from all strides.
-    plt.figure(figsize=(10, 8))
-    # Reverse order so the lightest color is plotted last.
-    for key, summary in sorted(summary_curves_dict.items(), reverse=True):
-        # key is (phase1, phase2, stride_number)
-        stride_number = key[2]
-        color = stride_color_mapping.get(stride_number, plt.cm.Blues(0.6))
-        x_vals = summary['x_vals']
-        mean_curve = summary['mean']
-        sem_curve = summary['sem']
-        # If x_vals is non-numeric, use indices.
-        try:
-            x_vals_numeric = np.array(x_vals, dtype=float)
-        except ValueError:
-            x_vals_numeric = np.arange(len(x_vals))
-        plt.plot(x_vals_numeric, mean_curve, linewidth=2, label=f"Stride {stride_number}", color=color)
-        plt.fill_between(x_vals_numeric, mean_curve - sem_curve, mean_curve + sem_curve, color=color, alpha=0.1)
-    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='--')
-    plt.grid(False)
-    plt.gca().yaxis.grid(True)
-    plt.xlabel('Run')
-    plt.ylabel('Normalized Prediction')
-    plt.title(f'Aggregated Average Exponential Fits Across Strides - APA ({phase1} vs {phase2})')
-    plt.legend()
-    agg_summary_save_path = os.path.join(save_dir, f"Aggregated_Average_Exponential_Fit_APA_({phase1}_vs_{phase2}).png")
-    plt.savefig(agg_summary_save_path, dpi=300)
-    plt.close()
+        # Plot aggregated difference for this stride.
+        plt.figure(figsize=(10, 6))
+        plt.plot(full_x, aggregated_diff, linewidth=2, label='Aggregated Difference', color='black')
+        plt.fill_between(full_x, aggregated_diff - sem_diff, aggregated_diff + sem_diff, color='black', alpha=0.1)
+        plt.xlabel('Run')
+        plt.ylabel('Difference (Offset - Full)')
+        plt.title(f'Aggregated Difference (Offset - Full Exponential) (Stride {stride_number})')
+        plt.legend()
+        diff_save_path = os.path.join(save_dir, f"Differences_Exponential_Fit_Stride_{stride_number}.png")
+        plt.savefig(diff_save_path, dpi=300)
+        plt.close()
 
-    # Aggregated derivatives plot.
-    plt.figure(figsize=(10, 8))
-    MaxY = []
-    MinY = []
-    for key, summary in sorted(summary_derivatives_dict.items(), reverse=True):
-        stride_number = key[2]
-        color = stride_color_mapping.get(stride_number, plt.cm.Blues(0.6))
-        x_vals = summary['x_vals']
-        mean_deriv = summary['mean']
-        sem_deriv = summary['sem']
-        # Get overall max and min across all strides from the summary dictionaries.
-        max_y = np.max([np.max(val['mean']) for val in summary_derivatives_dict.values()])
-        min_y = np.min([np.min(val['mean']) for val in summary_derivatives_dict.values()])
-        MaxY.append(max_y)
-        MinY.append(min_y)
-        plt.plot(x_vals, mean_deriv, linewidth=2, label=f"Stride {stride_number}", color=color)
-    ymin = np.min(MaxY) if MaxY else None
-    ymax = np.max(MinY) if MinY else None
-    plt.vlines(x=[9.5, 109.5], ymin=ymin, ymax=ymax, color='red', linestyle='--')
-    plt.grid(False)
-    plt.gca().yaxis.grid(True)
-    plt.xlabel('Run')
-    plt.ylabel('Derivative')
-    plt.title(f'Aggregated Average Derivative of Exponential Fits Across Strides - APA ({phase1} vs {phase2})')
-    plt.legend()
-    agg_deriv_save_path = os.path.join(save_dir,
-                                       f"Aggregated_Average_Derivative_Exponential_Fit_APA_({phase1}_vs_{phase2}).png")
-    plt.savefig(agg_deriv_save_path, dpi=300)
-    plt.close()
+    # Aggregated plots across strides.
+    plot_aggregated_results(summary_curves_dict, 'Normalized Prediction',
+                            f'Aggregated Average Full Exponential Fits Across Strides - APA ({phase1} vs {phase2})',
+                            save_dir, f"Aggregated_Average_Exponential_Fit_APA_({phase1}_vs_{phase2}).png", 'x_vals')
+    plot_aggregated_results(summary_differences_dict, 'Difference (Offset - Full)',
+                            f'Aggregated Average Difference Curves Across Strides - APA ({phase1} vs {phase2})',
+                            save_dir, f"Aggregated_Average_Difference_Exponential_Fit_APA_({phase1}_vs_{phase2}).png",
+                            'x_vals')
 
-    return summary_curves_dict, summary_derivatives_dict, plateau_dict, learning_rate_dict
-
-
-
-
+    return summary_curves_dict, summary_differences_dict, plateau_dict, learning_rate_dict, mouse_colors
 
 
 

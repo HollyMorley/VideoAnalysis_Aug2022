@@ -637,7 +637,7 @@ def main_feature_reduction_aggregate():
             aggregated_predictions.get((phase1, phase2), []),
             analysis_save_dir, phase1, phase2, condition_label=cond
         )
-        utils.plot_aggregated_feature_weights(
+        utils.plot_aggregated_feature_weights_byFeature(
             aggregated_feature_weights, analysis_save_dir, phase1, phase2, condition_label=cond
         )
         agg_feature_w.append(aggregated_feature_weights)

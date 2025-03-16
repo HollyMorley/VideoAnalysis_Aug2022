@@ -21,7 +21,7 @@ Description of global_settings:
 ############################################################################################################
 
 # ----------------------------- Save path: -----------------------------------
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round20-20250309-SingleCon-allmice-SepRegression-9mice')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round21-9mice_descriptives-NoOutliers')
 #base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\test')
 
 
@@ -54,7 +54,7 @@ global_settings = {
     "pool_mice": False,
     "multi_strides": True,
     "overwrite_FeatureSelection": False,
-    "overwrite_data_collection": False,
+    "overwrite_data_collection": True,
     "combine_stride_features": True,
     "plot_raw_features": False,
     # less frequently changed settings:

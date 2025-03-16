@@ -10,8 +10,8 @@ from matplotlib import cm
 from matplotlib.backend_tools import ToolZoom, ToolPan
 
 # Load video and deeplabcut coordinates
-video_path = r"H:\Dual-belt_APAs\videos\Round_3\HM_20230314_APACharRepeat_FAA-1035297_R_side_1.avi"
-coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round6_Jan25\APAChar_LowHigh\Repeats\Wash\Exp\Day3\HM_20230314_APACharRepeat_FAA-1035297_R_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
+video_path = r"H:\Dual-belt_APAs\videos\Round_3\HM_20230317_APACharExt_FAA-1035243_None_side_1.avi"
+coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\Day2\HM_20230317_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
 # video_path = r"H:\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035244_L_side_1.avi"
 # coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230306\HM_20230306_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
 print(f"Video path: {video_path}")

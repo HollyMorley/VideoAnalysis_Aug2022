@@ -484,6 +484,7 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         #         print(cluster_df)
 
         # -------------------------- Process compare condition predictions --------------------------
+        # todo need to add feature_data and feature_data_compare
         utils.process_compare_condition(mouseIDs_base=condition_specific_settings[condition]['global_fs_mouse_ids'],
                                         mouseIDs_compare=condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
                                         condition=condition, compare_condition=compare_condition, exp=exp, day=day, stride_data=stride_data,

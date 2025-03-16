@@ -158,10 +158,11 @@ def run_linear_regression_derivative(loadings_df, reduced_feature_data_df, reduc
     w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
 
 
-def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, day, stride_data_compare, phase1, phase2, selected_features, loadings_df, w, save_path):
+def predict_compare_condition(feature_data_compare, mouse_id, compare_condition, stride_number, phase1, phase2, selected_features, loadings_df, w, save_path):
     # Retrieve reduced feature data for the comparison condition
     # _, comparison_selected_scaled_data, _, _, _, _ = select_runs_data(mouse_id, stride_number, compare_condition, exp, day, stride_data_compare, phase1, phase2)
-    comparison_scaled_data = utils.load_and_preprocess_data(mouse_id, stride_number, compare_condition, exp, day)
+    #comparison_scaled_data = utils.load_and_preprocess_data(mouse_id, stride_number, compare_condition, exp, day)
+    comparison_scaled_data = feature_data_compare.loc(axis=0)[stride_number, mouse_id]
     comparison_reduced_feature_data_df = comparison_scaled_data.loc(axis=1)[selected_features]
     runs = list(comparison_reduced_feature_data_df.index)
 
@@ -179,12 +180,13 @@ def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, d
     return smoothed_scaled_pred, runs
 
 
-def compute_global_regression_model(global_mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
+def compute_global_regression_model(feature_data, global_mouse_ids, stride_number, phase1, phase2, condition, exp, day, stride_data,
                                     selected_features, loadings_df):
     aggregated_data_list = []
     y_list = []
     for mouse_id in global_mouse_ids:
-        scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        #scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
         # Get phase masks and runs.
         run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
                                                             phase1, phase2)

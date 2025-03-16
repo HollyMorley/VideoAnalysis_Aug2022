@@ -206,8 +206,8 @@ def plot_average_variance_explained_across_folds(fold_variances, p1, p2, s):
     plt.savefig(f"Average_PCA_CV_Scree_Plot_{p1}vs{p2}_{s}.png", dpi=300)
     plt.close()
 
-def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2,
-                                 condition, exp, day, stride_data, selected_features,
+def compute_global_pca_for_phase(feature_data, global_mouse_ids, stride_number, phase1, phase2,
+                                 stride_data, selected_features,
                                  n_components=10):
     """
     Aggregates data from all mice in global_mouse_ids (using only runs for phase1 and phase2),
@@ -215,7 +215,8 @@ def compute_global_pca_for_phase(global_mouse_ids, stride_number, phase1, phase2
     """
     aggregated_data = []
     for mouse_id in global_mouse_ids:
-        scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        # scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
         # Get run masks for the two phases.
         run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2)
         # Select only runs corresponding to the phases.

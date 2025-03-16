@@ -731,7 +731,7 @@ class CalculateMeasuresByStride():
                      buffer_size=0.25):
         """
         Calculates the signed angle between the vector from bodypart1 to bodypart2 and a reference vector
-        when viewed from a given plane. Positive angles are clockwise and negative anticlockwise from the reference.
+        when viewed from a given plane. **Positive angles are clockwise and negative anticlockwise from the reference.**
         If all_vals is True, returns a pd.Series of angles (in degrees) indexed by FrameIdx.
         Otherwise, returns a dictionary with two single values:
             - 'average': the average signed angle over the selected frames.

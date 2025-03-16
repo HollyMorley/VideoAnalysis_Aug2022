@@ -75,7 +75,7 @@ def sequential_feature_selector(X, y):
     print("Selected features:", selected_features)
 
 
-def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition, exp, day, stride_data, save_dir,
+def global_feature_selection(feature_data, mice_ids, stride_number, phase1, phase2, condition, exp, day, stride_data, save_dir,
                              c, nFolds, n_iterations, overwrite, method='regression'):
     results_file = os.path.join(save_dir, f'global_feature_selection_results_{phase1}_{phase2}_stride{stride_number}.csv')
 
@@ -85,7 +85,8 @@ def global_feature_selection(mice_ids, stride_number, phase1, phase2, condition,
 
     for mouse_id in mice_ids:
         # Load and preprocess data for each mouse.
-        scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        #scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+        scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
         # Get runs and phase masks.
         run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number,
                                                             phase1, phase2)

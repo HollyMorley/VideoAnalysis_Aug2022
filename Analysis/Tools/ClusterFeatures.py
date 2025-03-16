@@ -58,59 +58,59 @@ def cross_validate_ica_reconstruction(feature_matrix, n_components_range=range(1
     avg_errors = {n: np.mean(errors) for n, errors in reconstruction_errors.items()}
     return avg_errors
 
-def cluster_features_with_ica_cv(global_fs_mouse_ids, stride_number, condition, exp, day,
-                                 stride_data, phase1, phase2,
-                                 n_components_range=range(1, 15),
-                                 n_splits=10,
-                                 save_file=None):
-    """
-    Build the global runs-by-features matrix, perform cross-validated ICA to determine the optimal
-    number of independent components (based on reconstruction error), and assign each feature to the component
-    where it has the highest absolute mixing coefficient.
-
-    Parameters:
-      - n_components_range: Candidate numbers of ICA components.
-      - n_splits: Number of folds for cross-validation.
-      - save_file: If provided, the resulting mapping is saved to this file.
-
-    Returns:
-      - cluster_mapping: dict mapping feature names to component labels.
-      - feature_matrix: The original feature matrix (features as rows).
-      - ica: The ICA object fit on the entire feature matrix with the optimal number of components.
-      - optimal_n: The selected number of independent components.
-      - avg_errors: Dict mapping candidate n_components to their average reconstruction error.
-    """
-    # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
-                                               phase1, phase2, smooth=True)
-
-    # Cross-validate reconstruction error for candidate numbers of components.
-    avg_errors = cross_validate_ica_reconstruction(feature_matrix, n_components_range, n_splits)
-
-    # Select the number of components with the lowest reconstruction error.
-    optimal_n = min(avg_errors, key=avg_errors.get)
-
-    print(f"ICA CV reconstruction errors: {avg_errors}")
-    print(f"Optimal number of ICA components selected: {optimal_n}")
-
-    # Perform ICA on the entire feature matrix using the optimal number of components.
-    ica = FastICA(n_components=optimal_n, max_iter=10000, tol=0.1, random_state=42)
-    ica.fit(feature_matrix)
-
-    # Retrieve the mixing matrix.
-    A_ = ica.mixing_
-
-    # Assign each feature to the component where it has the highest absolute mixing coefficient.
-    cluster_mapping = {}
-    for i, feature in enumerate(feature_matrix.index):
-        cluster_mapping[feature] = int(np.argmax(np.abs(A_[i])))
-
-    if save_file is not None:
-        os.makedirs(os.path.dirname(save_file), exist_ok=True)
-        joblib.dump(cluster_mapping, save_file)
-        print(f"Feature clustering (using ICA CV) done and saved to {save_file} with optimal_n={optimal_n}.")
-
-    return cluster_mapping, feature_matrix, ica, optimal_n, avg_errors
+# def cluster_features_with_ica_cv(global_fs_mouse_ids, stride_number, condition, exp, day,
+#                                  stride_data, phase1, phase2,
+#                                  n_components_range=range(1, 15),
+#                                  n_splits=10,
+#                                  save_file=None):
+#     """
+#     Build the global runs-by-features matrix, perform cross-validated ICA to determine the optimal
+#     number of independent components (based on reconstruction error), and assign each feature to the component
+#     where it has the highest absolute mixing coefficient.
+#
+#     Parameters:
+#       - n_components_range: Candidate numbers of ICA components.
+#       - n_splits: Number of folds for cross-validation.
+#       - save_file: If provided, the resulting mapping is saved to this file.
+#
+#     Returns:
+#       - cluster_mapping: dict mapping feature names to component labels.
+#       - feature_matrix: The original feature matrix (features as rows).
+#       - ica: The ICA object fit on the entire feature matrix with the optimal number of components.
+#       - optimal_n: The selected number of independent components.
+#       - avg_errors: Dict mapping candidate n_components to their average reconstruction error.
+#     """
+#     # Build the global feature matrix (features as rows, runs as columns)
+#     feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+#                                                phase1, phase2, smooth=True)
+#
+#     # Cross-validate reconstruction error for candidate numbers of components.
+#     avg_errors = cross_validate_ica_reconstruction(feature_matrix, n_components_range, n_splits)
+#
+#     # Select the number of components with the lowest reconstruction error.
+#     optimal_n = min(avg_errors, key=avg_errors.get)
+#
+#     print(f"ICA CV reconstruction errors: {avg_errors}")
+#     print(f"Optimal number of ICA components selected: {optimal_n}")
+#
+#     # Perform ICA on the entire feature matrix using the optimal number of components.
+#     ica = FastICA(n_components=optimal_n, max_iter=10000, tol=0.1, random_state=42)
+#     ica.fit(feature_matrix)
+#
+#     # Retrieve the mixing matrix.
+#     A_ = ica.mixing_
+#
+#     # Assign each feature to the component where it has the highest absolute mixing coefficient.
+#     cluster_mapping = {}
+#     for i, feature in enumerate(feature_matrix.index):
+#         cluster_mapping[feature] = int(np.argmax(np.abs(A_[i])))
+#
+#     if save_file is not None:
+#         os.makedirs(os.path.dirname(save_file), exist_ok=True)
+#         joblib.dump(cluster_mapping, save_file)
+#         print(f"Feature clustering (using ICA CV) done and saved to {save_file} with optimal_n={optimal_n}.")
+#
+#     return cluster_mapping, feature_matrix, ica, optimal_n, avg_errors
 
 
 def cross_validate_pca_explained_variance(feature_matrix, n_components_range=range(1, 11), n_splits=5):
@@ -135,74 +135,74 @@ def cross_validate_pca_explained_variance(feature_matrix, n_components_range=ran
     return avg_explained
 
 
-def cluster_features_with_pca_cv(global_fs_mouse_ids, stride_number, condition, exp, day,
-                                 stride_data, phase1, phase2,
-                                 n_components_range=range(1, 15),
-                                 n_splits=10, variance_threshold=0.8,
-                                 save_file=None):
-    """
-    Build the global runs-by-features matrix, perform cross-validated PCA to determine the optimal
-    number of PCs (as the smallest number whose average cumulative explained variance exceeds a threshold),
-    and assign each feature to the PC (cluster) where it has the highest absolute loading.
+# def cluster_features_with_pca_cv(global_fs_mouse_ids, stride_number, condition, exp, day,
+#                                  stride_data, phase1, phase2,
+#                                  n_components_range=range(1, 15),
+#                                  n_splits=10, variance_threshold=0.8,
+#                                  save_file=None):
+#     """
+#     Build the global runs-by-features matrix, perform cross-validated PCA to determine the optimal
+#     number of PCs (as the smallest number whose average cumulative explained variance exceeds a threshold),
+#     and assign each feature to the PC (cluster) where it has the highest absolute loading.
+#
+#     Parameters:
+#       - n_components_range: Candidate numbers of components to try.
+#       - n_splits: Number of folds for cross-validation.
+#       - variance_threshold: Minimum cumulative explained variance (e.g. 0.9 for 90%) required.
+#       - save_file: If provided, the cluster mapping will be saved to this file.
+#
+#     Returns:
+#       - cluster_mapping: dict mapping feature names to cluster labels.
+#       - feature_matrix: The original feature matrix (features as rows).
+#       - pca: The PCA object fit on the entire feature matrix using the optimal n_components.
+#       - optimal_n: The selected number of principal components.
+#       - avg_explained: Dict mapping candidate n_components to their average explained variance.
+#     """
+#     # Build the global feature matrix (features as rows, runs as columns)
+#     feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+#                                                phase1, phase2, smooth=True)
+#
+#     # Cross-validate to compute average cumulative explained variance for candidate n_components.
+#     avg_explained = cross_validate_pca_explained_variance(feature_matrix, n_components_range, n_splits)
+#
+#     # Select the smallest n_components that meets or exceeds the threshold.
+#     valid_candidates = [n for n, ev in avg_explained.items() if ev >= variance_threshold]
+#     optimal_n = min(valid_candidates) if valid_candidates else max(n_components_range)
+#
+#     print(f"Cross-validation results (avg cumulative explained variance): {avg_explained}")
+#     print(f"Optimal number of PCs selected: {optimal_n}")
+#
+#     # Perform PCA on the entire feature matrix using the optimal number of components.
+#     pca = PCA(n_components=optimal_n, random_state=42)
+#     pca.fit(feature_matrix)
+#
+#     # Retrieve the loadings (each row corresponds to a feature, columns to PCs)
+#     loadings = pca.components_.T
+#
+#     # Assign each feature to the PC where it has the highest absolute loading.
+#     cluster_mapping = {}
+#     for i, feature in enumerate(feature_matrix.index):
+#         cluster_mapping[feature] = int(np.argmax(np.abs(loadings[i])))
+#
+#     if save_file is not None:
+#         os.makedirs(os.path.dirname(save_file), exist_ok=True)
+#         joblib.dump(cluster_mapping, save_file)
+#         print(f"Feature clustering (using PCA CV) done and saved to {save_file} using optimal_n={optimal_n}.")
+#
+#     return cluster_mapping, feature_matrix, pca, optimal_n, avg_explained
 
-    Parameters:
-      - n_components_range: Candidate numbers of components to try.
-      - n_splits: Number of folds for cross-validation.
-      - variance_threshold: Minimum cumulative explained variance (e.g. 0.9 for 90%) required.
-      - save_file: If provided, the cluster mapping will be saved to this file.
-
-    Returns:
-      - cluster_mapping: dict mapping feature names to cluster labels.
-      - feature_matrix: The original feature matrix (features as rows).
-      - pca: The PCA object fit on the entire feature matrix using the optimal n_components.
-      - optimal_n: The selected number of principal components.
-      - avg_explained: Dict mapping candidate n_components to their average explained variance.
-    """
-    # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
-                                               phase1, phase2, smooth=True)
-
-    # Cross-validate to compute average cumulative explained variance for candidate n_components.
-    avg_explained = cross_validate_pca_explained_variance(feature_matrix, n_components_range, n_splits)
-
-    # Select the smallest n_components that meets or exceeds the threshold.
-    valid_candidates = [n for n, ev in avg_explained.items() if ev >= variance_threshold]
-    optimal_n = min(valid_candidates) if valid_candidates else max(n_components_range)
-
-    print(f"Cross-validation results (avg cumulative explained variance): {avg_explained}")
-    print(f"Optimal number of PCs selected: {optimal_n}")
-
-    # Perform PCA on the entire feature matrix using the optimal number of components.
-    pca = PCA(n_components=optimal_n, random_state=42)
-    pca.fit(feature_matrix)
-
-    # Retrieve the loadings (each row corresponds to a feature, columns to PCs)
-    loadings = pca.components_.T
-
-    # Assign each feature to the PC where it has the highest absolute loading.
-    cluster_mapping = {}
-    for i, feature in enumerate(feature_matrix.index):
-        cluster_mapping[feature] = int(np.argmax(np.abs(loadings[i])))
-
-    if save_file is not None:
-        os.makedirs(os.path.dirname(save_file), exist_ok=True)
-        joblib.dump(cluster_mapping, save_file)
-        print(f"Feature clustering (using PCA CV) done and saved to {save_file} using optimal_n={optimal_n}.")
-
-    return cluster_mapping, feature_matrix, pca, optimal_n, avg_explained
-
-def find_feature_clusters(mouseIDs, stride_number, condition, exp, day, stride_data, phase1, phase2, save_dir, method='kmeans'):
+def find_feature_clusters(feature_data, mouseIDs, stride_number, condition, exp, day, stride_data, phase1, phase2, save_dir, method='kmeans'):
     if method == 'kmeans':
         # find k
-        optimal_k, avg_sil_scores = cross_validate_k_clusters_folds(mouseIDs, stride_number, condition, exp, day, stride_data,
+        optimal_k, avg_sil_scores = cross_validate_k_clusters_folds(feature_data, mouseIDs, stride_number, condition, exp, day, stride_data,
                                                                     phase1, phase2)
     cluster_save_file = os.path.join(save_dir, f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
     # cluster features
-    cluster_mapping, feature_matrix = cluster_features_run_space(mouseIDs,stride_number, condition, exp, day, stride_data, phase1,
+    cluster_mapping, feature_matrix = cluster_features_run_space(feature_data, mouseIDs,stride_number, condition, exp, day, stride_data, phase1,
                                                  phase2, n_clusters=optimal_k, save_file=cluster_save_file, method=method)
     return cluster_mapping, feature_matrix
 
-def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2, smooth=False):
+def get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data, phase1, phase2, smooth=False):
     """
     Build the global runs-by-features matrix from the provided mouse IDs.
     Returns the transposed feature matrix (rows = features, columns = runs).
@@ -212,7 +212,8 @@ def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp
         # Assume stride_data is a dict with stride numbers as keys.
         for sn in global_settings['stride_numbers']:
             for mouse in global_fs_mouse_ids:
-                data = utils.load_and_preprocess_data(mouse, sn, condition, exp, day)
+                #data = utils.load_and_preprocess_data(mouse, sn, condition, exp, day)
+                data = feature_data.loc(axis=0)[sn, mouse]
                 run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, sn, phase1, phase2)
                 selected_mask = mask_phase1 | mask_phase2
                 run_data = data.loc[selected_mask]
@@ -222,7 +223,8 @@ def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp
                 all_runs_data.append(run_data)
     else:
         for mouse in global_fs_mouse_ids:
-            data = utils.load_and_preprocess_data(mouse, stride_number, condition, exp, day)
+            #data = utils.load_and_preprocess_data(mouse, stride_number, condition, exp, day)
+            data = feature_data.loc(axis=0)[stride_number, mouse]
             # todo smooth features across runs
             # Get runs for the two phases; here we use phase1 and phase2 for example.
             run_numbers, _, mask_phase1, mask_phase2 = utils.get_runs(data, stride_data, mouse, stride_number, phase1,
@@ -242,83 +244,83 @@ def get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp
     feature_matrix = global_data.T
     return feature_matrix
 
+#
+# def cross_validate_db_score_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+#                                   phase2, k_range=range(2, 11), n_splits=10, n_init=10):
+#     """
+#     Build the global feature matrix and perform k-fold cross-validation to select the optimal number
+#     of clusters using the Davies–Bouldin score.
+#
+#     For each fold, KMeans is fitted on the training subset, and the DB score is computed on the test subset.
+#
+#     Returns:
+#       - avg_db_scores: dict mapping each k to its average Davies–Bouldin score across folds.
+#     """
+#     # Build the global feature matrix (features as rows, runs as columns)
+#     feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+#                                                phase1, phase2)
+#
+#     # Prepare KFold cross-validation over features (rows of feature_matrix)
+#     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+#     db_scores = {k: [] for k in k_range}
+#
+#     for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
+#         train_data = feature_matrix.iloc[train_idx]
+#         test_data = feature_matrix.iloc[test_idx]
+#
+#         for k in k_range:
+#             # Use built-in n_init for efficiency.
+#             kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+#             kmeans.fit(train_data)
+#             # Predict test labels.
+#             test_labels = kmeans.predict(test_data)
+#             # Compute the Davies–Bouldin score on the test data.
+#             db_score = davies_bouldin_score(test_data, test_labels)
+#             db_scores[k].append(db_score)
+#
+#     # Average DB scores across folds for each candidate k.
+#     avg_db_scores = {k: np.mean(scores) for k, scores in db_scores.items()}
+#     for k, score in avg_db_scores.items():
+#         print(f"k={k}, Average Davies–Bouldin Score (CV): {score:.3f}")
+#     return avg_db_scores
 
-def cross_validate_db_score_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
-                                  phase2, k_range=range(2, 11), n_splits=10, n_init=10):
-    """
-    Build the global feature matrix and perform k-fold cross-validation to select the optimal number
-    of clusters using the Davies–Bouldin score.
+# def cross_validate_inertia_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+#                                  phase2, k_range=range(2, 11), n_splits=10, n_init=10):
+#     """
+#     Build the global feature matrix and perform k-fold cross-validation to evaluate the average inertia
+#     (within-cluster sum-of-squares) for each candidate number of clusters k.
+#     Returns:
+#       - avg_inertia: dict mapping each k to its average inertia across folds.
+#     """
+#     # Build the global feature matrix (features as rows, runs as columns)
+#     feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+#                                                phase1, phase2)
+#
+#     # Prepare KFold cross-validation over features (rows of feature_matrix)
+#     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+#     inertia_scores = {k: [] for k in k_range}
+#
+#     for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
+#         train_data = feature_matrix.iloc[train_idx]
+#         test_data = feature_matrix.iloc[test_idx]
+#
+#         for k in k_range:
+#             # Use built-in n_init for efficiency.
+#             kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+#             kmeans.fit(train_data)
+#             # Compute inertia on the test set by assigning test_data to the nearest cluster center.
+#             # (This is a simple approximation; you could also compute it on the training set.)
+#             test_labels = kmeans.predict(test_data)
+#             inertia = kmeans.inertia_  # inertia from the training set.
+#             inertia_scores[k].append(inertia)
+#
+#     # Average inertia scores across folds for each candidate k.
+#     avg_inertia = {k: np.mean(scores) for k, scores in inertia_scores.items()}
+#     for k, inertia in avg_inertia.items():
+#         print(f"k={k}, Average Inertia (CV): {inertia:.3f}")
+#     return avg_inertia
 
-    For each fold, KMeans is fitted on the training subset, and the DB score is computed on the test subset.
-
-    Returns:
-      - avg_db_scores: dict mapping each k to its average Davies–Bouldin score across folds.
-    """
-    # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
-                                               phase1, phase2)
-
-    # Prepare KFold cross-validation over features (rows of feature_matrix)
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    db_scores = {k: [] for k in k_range}
-
-    for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
-        train_data = feature_matrix.iloc[train_idx]
-        test_data = feature_matrix.iloc[test_idx]
-
-        for k in k_range:
-            # Use built-in n_init for efficiency.
-            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
-            kmeans.fit(train_data)
-            # Predict test labels.
-            test_labels = kmeans.predict(test_data)
-            # Compute the Davies–Bouldin score on the test data.
-            db_score = davies_bouldin_score(test_data, test_labels)
-            db_scores[k].append(db_score)
-
-    # Average DB scores across folds for each candidate k.
-    avg_db_scores = {k: np.mean(scores) for k, scores in db_scores.items()}
-    for k, score in avg_db_scores.items():
-        print(f"k={k}, Average Davies–Bouldin Score (CV): {score:.3f}")
-    return avg_db_scores
-
-def cross_validate_inertia_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
-                                 phase2, k_range=range(2, 11), n_splits=10, n_init=10):
-    """
-    Build the global feature matrix and perform k-fold cross-validation to evaluate the average inertia
-    (within-cluster sum-of-squares) for each candidate number of clusters k.
-    Returns:
-      - avg_inertia: dict mapping each k to its average inertia across folds.
-    """
-    # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
-                                               phase1, phase2)
-
-    # Prepare KFold cross-validation over features (rows of feature_matrix)
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    inertia_scores = {k: [] for k in k_range}
-
-    for train_idx, test_idx in tqdm(list(kf.split(feature_matrix)), total=n_splits, desc="Folds"):
-        train_data = feature_matrix.iloc[train_idx]
-        test_data = feature_matrix.iloc[test_idx]
-
-        for k in k_range:
-            # Use built-in n_init for efficiency.
-            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
-            kmeans.fit(train_data)
-            # Compute inertia on the test set by assigning test_data to the nearest cluster center.
-            # (This is a simple approximation; you could also compute it on the training set.)
-            test_labels = kmeans.predict(test_data)
-            inertia = kmeans.inertia_  # inertia from the training set.
-            inertia_scores[k].append(inertia)
-
-    # Average inertia scores across folds for each candidate k.
-    avg_inertia = {k: np.mean(scores) for k, scores in inertia_scores.items()}
-    for k, inertia in avg_inertia.items():
-        print(f"k={k}, Average Inertia (CV): {inertia:.3f}")
-    return avg_inertia
-
-def cross_validate_k_clusters_folds(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
+def cross_validate_k_clusters_folds(feature_data, global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
                                     phase2,
                                     k_range=range(2, 11), n_splits=10, n_init=10):
     """
@@ -338,7 +340,7 @@ def cross_validate_k_clusters_folds(global_fs_mouse_ids, stride_number, conditio
       - avg_sil_scores: dict mapping each k to its average silhouette score.
     """
     # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+    feature_matrix = get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data,
                                                phase1, phase2)
 
     # Prepare KFold cross-validation over features (rows of feature_matrix)
@@ -369,64 +371,64 @@ def cross_validate_k_clusters_folds(global_fs_mouse_ids, stride_number, conditio
     print(f"Optimal k determined to be: {optimal_k}")
     return optimal_k, avg_sil_scores
 
-def cross_validate_k_clusters_folds_pca(global_fs_mouse_ids, stride_number, condition, exp, day,
-                                        stride_data, phase1, phase2,
-                                        n_components=10,
-                                        k_range=range(2, 11),
-                                        n_splits=10, n_init=10):
-    """
-    Build the global feature matrix, apply PCA to reduce its dimensionality, and then perform
-    k-fold cross-validation to select the optimal number of clusters using the silhouette score.
+# def cross_validate_k_clusters_folds_pca(global_fs_mouse_ids, stride_number, condition, exp, day,
+#                                         stride_data, phase1, phase2,
+#                                         n_components=10,
+#                                         k_range=range(2, 11),
+#                                         n_splits=10, n_init=10):
+#     """
+#     Build the global feature matrix, apply PCA to reduce its dimensionality, and then perform
+#     k-fold cross-validation to select the optimal number of clusters using the silhouette score.
+#
+#     Parameters:
+#       - global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2:
+#           parameters used to load data.
+#       - n_components: number of PCA components to retain.
+#       - k_range: range of candidate k values.
+#       - n_splits: number of folds in the KFold cross-validation.
+#       - n_init: number of initializations for KMeans.
+#
+#     Returns:
+#       - optimal_k: the k value with the highest average silhouette score across folds.
+#       - avg_sil_scores: dict mapping each k to its average silhouette score.
+#     """
+#     # Build the global feature matrix (rows = features, columns = runs)
+#     feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day,
+#                                                stride_data, phase1, phase2)
+#     # Apply PCA to reduce dimensionality
+#     pca = PCA(n_components=n_components)
+#     X_reduced = pca.fit_transform(feature_matrix.values)
+#     # Reconstruct a DataFrame with the same feature index.
+#     X_reduced_df = pd.DataFrame(X_reduced, index=feature_matrix.index)
+#
+#     # Prepare KFold cross-validation over the features (rows of X_reduced_df)
+#     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+#     fold_scores = {k: [] for k in k_range}
+#
+#     # Wrap the outer loop with tqdm to show progress.
+#     for train_idx, test_idx in tqdm(list(kf.split(X_reduced_df)), total=n_splits, desc="PCA Folds"):
+#         train_data = X_reduced_df.iloc[train_idx]
+#         test_data = X_reduced_df.iloc[test_idx]
+#
+#         for k in k_range:
+#             kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
+#             kmeans.fit(train_data)
+#             test_labels = kmeans.predict(test_data)
+#             score = silhouette_score(test_data, test_labels)
+#             fold_scores[k].append(score)
+#
+#     # Average the silhouette scores over folds for each candidate k.
+#     avg_sil_scores = {k: np.mean(scores) for k, scores in fold_scores.items()}
+#     for k, score in avg_sil_scores.items():
+#         print(f"k={k}, Average Silhouette Score (CV, PCA): {score:.3f}")
+#
+#     # Select the k with the highest average silhouette score.
+#     optimal_k = max(avg_sil_scores, key=avg_sil_scores.get)
+#     print(f"Optimal k based on silhouette score (after PCA) determined to be: {optimal_k}")
+#     return optimal_k, avg_sil_scores
 
-    Parameters:
-      - global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2:
-          parameters used to load data.
-      - n_components: number of PCA components to retain.
-      - k_range: range of candidate k values.
-      - n_splits: number of folds in the KFold cross-validation.
-      - n_init: number of initializations for KMeans.
 
-    Returns:
-      - optimal_k: the k value with the highest average silhouette score across folds.
-      - avg_sil_scores: dict mapping each k to its average silhouette score.
-    """
-    # Build the global feature matrix (rows = features, columns = runs)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day,
-                                               stride_data, phase1, phase2)
-    # Apply PCA to reduce dimensionality
-    pca = PCA(n_components=n_components)
-    X_reduced = pca.fit_transform(feature_matrix.values)
-    # Reconstruct a DataFrame with the same feature index.
-    X_reduced_df = pd.DataFrame(X_reduced, index=feature_matrix.index)
-
-    # Prepare KFold cross-validation over the features (rows of X_reduced_df)
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    fold_scores = {k: [] for k in k_range}
-
-    # Wrap the outer loop with tqdm to show progress.
-    for train_idx, test_idx in tqdm(list(kf.split(X_reduced_df)), total=n_splits, desc="PCA Folds"):
-        train_data = X_reduced_df.iloc[train_idx]
-        test_data = X_reduced_df.iloc[test_idx]
-
-        for k in k_range:
-            kmeans = KMeans(n_clusters=k, n_init=n_init, random_state=42)
-            kmeans.fit(train_data)
-            test_labels = kmeans.predict(test_data)
-            score = silhouette_score(test_data, test_labels)
-            fold_scores[k].append(score)
-
-    # Average the silhouette scores over folds for each candidate k.
-    avg_sil_scores = {k: np.mean(scores) for k, scores in fold_scores.items()}
-    for k, score in avg_sil_scores.items():
-        print(f"k={k}, Average Silhouette Score (CV, PCA): {score:.3f}")
-
-    # Select the k with the highest average silhouette score.
-    optimal_k = max(avg_sil_scores, key=avg_sil_scores.get)
-    print(f"Optimal k based on silhouette score (after PCA) determined to be: {optimal_k}")
-    return optimal_k, avg_sil_scores
-
-
-def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2,
+def cluster_features_run_space(feature_data, global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2,
                                n_clusters, save_file, method):
     """
     Build the global runs-by-features matrix, transpose it so that rows are features,
@@ -435,7 +437,7 @@ def cluster_features_run_space(global_fs_mouse_ids, stride_number, condition, ex
       cluster_mapping: dict mapping feature names to cluster labels.
     """
     os.makedirs(os.path.dirname(save_file), exist_ok=True)
-    feature_matrix = get_global_feature_matrix(global_fs_mouse_ids, stride_number, condition, exp, day, stride_data,
+    feature_matrix = get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data,
                                                phase1, phase2, smooth=True)
     if method == 'kmeans':
         kmeans = KMeans(n_clusters=n_clusters, random_state=42)

@@ -742,14 +742,25 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
 
-def get_top_features(weights_dict, phase1, phase2, stride_number, n_features):
-    # Filter weights for the current phase pair.
+def get_top_features(weights_dict, stride_features, phase1, phase2, stride_number, n_features):
+    """
+    Get the top n features (out of the specifically selected features for that stride) based on the mean of their weights across mice.
+    :param weights_dict:
+    :param stride_features:
+    :param phase1:
+    :param phase2:
+    :param stride_number:
+    :param n_features:
+    :return:
+    """
     filtered_weights = {
         mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
         for (mouse_id, p1, p2, s), weights in weights_dict.items()
         if p1 == phase1 and p2 == phase2 and s == stride_number
     }
     weights_df = pd.DataFrame(filtered_weights)
+    # filter weights_df by stride_features
+    weights_df = weights_df.loc[stride_features]
 
     # find mean of feature weights
     mean_weights = weights_df.mean(axis=1)
@@ -759,7 +770,16 @@ def get_top_features(weights_dict, phase1, phase2, stride_number, n_features):
     top_features = top_features * mean_weights.loc[top_features.index].apply(np.sign)
     return top_features
 
-def get_top_feature_data(data_dict, phase1, phase2, stride_number, top_features):
+def get_top_feature_data(data_dict, phase1, phase2, stride_number, top_features)-> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Get the top features for phase 1 and phase 2.
+    :param data_dict:
+    :param phase1:
+    :param phase2:
+    :param stride_number:
+    :param top_features:
+    :return: dictionary of top features for phase 1 and phase 2
+    """
     # Create an empty dictionary to hold the new DataFrames.
     data = {}
 
@@ -793,13 +813,13 @@ def get_top_feature_data(data_dict, phase1, phase2, stride_number, top_features)
 
     return (top_features_phase1, top_features_phase2)
 
-def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label):
+def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label, connect_mice):
     top_features_phase1, top_features_phase2 = top_feature_data
 
     mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
     mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
 
-    name_exclusions = ['buffer_size:0']
+    name_exclusions = ['buffer_size:0','all_vals:False','full_stride:False','step_phase:None']
 
     for f in top_features_phase1.columns:
         # remove name exclusions
@@ -818,11 +838,9 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
         feature_sem_p1 = mean_mouse_phase1[f].sem()
         feature_sem_p2 = mean_mouse_phase2[f].sem()
 
-        # Test normality for each phase:
-        stat1, p_val1 = stats.shapiro(mean_mouse_phase1[f])
-        stat2, p_val2 = stats.shapiro(mean_mouse_phase2[f])
-        print("Phase1 Shapiro p-value:", p_val1)
-        print("Phase2 Shapiro p-value:", p_val2)
+        # # Test normality for each phase:
+        # stat1, p_val1 = stats.shapiro(mean_mouse_phase1[f])
+        # stat2, p_val2 = stats.shapiro(mean_mouse_phase2[f])
 
         stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
         # Optionally, adjust the p-value threshold or use multiple stars for very small p-values:
@@ -837,36 +855,176 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
 
         # plot mouse means as line with phases along x axis and feature values along y axis. scatter plot for each mouse
         for mouse in mean_mouse_phase1.index:
-            ax.scatter([1], mean_mouse_phase1.loc[mouse, f], color='blue', s=100, alpha=0.5)
-            ax.scatter([2], mean_mouse_phase2.loc[mouse, f], color='red', s=100, alpha=0.5)
+            if connect_mice == False:
+                ax.scatter([1], mean_mouse_phase1.loc[mouse, f], color='blue', s=100, alpha=0.5)
+                ax.scatter([2], mean_mouse_phase2.loc[mouse, f], color='red', s=100, alpha=0.5)
+            else:
+                ax.plot([1, 2], [mean_mouse_phase1.loc[mouse, f], mean_mouse_phase2.loc[mouse, f]], color='black')
+                # add label next to phase 2 point
+                ax.text(2.05, mean_mouse_phase2.loc[mouse, f], mouse, fontsize=6, verticalalignment='center')
+
 
         # plot mean of feature values for each phase
-        ax.errorbar([1, 2], [feature_mean_p1, feature_mean_p2],
-                    color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1, feature_sem_p2], capsize=5)
+        if connect_mice == False:
+            ax.errorbar([1, 2], [feature_mean_p1, feature_mean_p2],
+                        color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1, feature_sem_p2], capsize=5)
 
-        # Compute ymax from the errorbars as before.
-        ymax = max(feature_mean_p1 + feature_sem_p1, feature_mean_p2 + feature_sem_p2) + 0.2
-        h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
-        # Draw bracket
-        ax.plot([1, 1, 2, 2], [ymax, ymax + h, ymax + h, ymax], lw=1.5, c='k')
-        # Add significance text using the computed p-value:
-        ax.text(1.5, ymax + h, significance, ha='center', va='bottom', color='k', fontsize=16)
+            # Compute ymax from the errorbars as before.
+            ymax = max(feature_mean_p1 + feature_sem_p1, feature_mean_p2 + feature_sem_p2) + 0.2
+            h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+            # Draw bracket
+            ax.plot([1, 1, 2, 2], [ymax, ymax + h, ymax + h, ymax], lw=1.5, c='k')
+            # Add significance text using the computed p-value:
+            ax.text(1.5, ymax + h, significance, ha='center', va='bottom', color='k', fontsize=16)
 
         ax.set_xticks([1, 2])
         ax.set_xticklabels([phase1, phase2])
         ax.set_xlim(0.5, 2.5)
         ax.set_ylabel(feature_name)
+        ax.set_title(f'Stride {stride_number}')
         ax.grid(False)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         fig.tight_layout()
 
-        save_dir = os.path.join(base_save_dir, 'top_feature_descriptives')
+        save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
         os.makedirs(save_dir, exist_ok=True)
         safe_feature_name = make_safe_feature_name(feature_name)
-        save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+        save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}_cm{connect_mice}.png')
         fig.savefig(save_path, dpi=300)
         plt.close()
+
+
+def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_dir, phase1, phase2, stride_number,
+                                                  condition_label):
+    top_features_phase1, top_features_phase2 = top_feature_data
+
+    mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
+    mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
+
+    name_exclusions = ['buffer_size:0', 'all_vals:False', 'full_stride:False', 'step_phase:None']
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    len_features = len(top_features_phase1.columns)
+
+    short_names = []
+    for fidx, f in enumerate(top_features_phase1.columns):
+        # Calculate the difference between the two phases.
+        feature_phase_diff = mean_mouse_phase2[f] - mean_mouse_phase1[f]
+        feature_phase_diff_mean = feature_phase_diff.mean()
+        feature_phase_diff_sem = feature_phase_diff.sem()
+
+        # Introduce jitter along x for each point
+        jitter = np.random.uniform(-0.1, 0.1, len(feature_phase_diff))
+        x_values = np.full(len(feature_phase_diff), fidx) + jitter
+
+        ax.scatter(x_values, feature_phase_diff, color='red', alpha=0.5)
+        ax.scatter([fidx], feature_phase_diff_mean, color='black')
+        ax.errorbar([fidx], feature_phase_diff_mean, yerr=feature_phase_diff_sem, color='black', capsize=5)
+
+        name_bits = f.split(', ')
+        name_to_keep = []
+        for name_bit in name_bits:
+            if name_bit not in name_exclusions:
+                name_to_keep.append(name_bit)
+        name = ', '.join(name_to_keep)
+        short_names.append(name)
+
+    ax.axhline(0, color='black', linestyle='--', alpha=0.2)
+
+    # Set x-axis ticks to each feature and rotate labels
+    ax.set_xticks(np.arange(len_features))
+    ax.set_xticklabels(top_features_phase1.columns, rotation=45, ha='right')
+
+    # Adjust x-axis limits so that all labels are fully in frame.
+    ax.set_xlim(-0.5, len_features - 0.5)
+    ax.set_ylabel('Mean Feature Difference')
+    ax.grid(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_title(f'Feature Differences between {phase2} - {phase1} - Stride {stride_number}')
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.6)
+
+    save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir,
+                             f'FeatureDifferences__{phase2}-{phase1}_stride{stride_number}_{condition_label}.png')
+    fig.savefig(save_path, dpi=300)
+    plt.close()
+
+
+def get_back_data(data_dict, phase1, phase2, stride_number):
+    # Filter weights for the current phase pair.
+    filtered_weights = {
+        mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
+        for (mouse_id, p1, p2, s), weights in data_dict.items()
+        if p1 == phase1 and p2 == phase2 and s == stride_number
+    }
+    data = pd.concat(filtered_weights, axis=0)
+    data.index.names = ['mouse', 'Run']
+
+    phase1_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase1]
+    phase2_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase2]
+
+    phase1_mask = data.index.get_level_values('Run').isin(phase1_runs)
+    phase2_mask = data.index.get_level_values('Run').isin(phase2_runs)
+
+    back_phase1 = data[phase1_mask]
+    back_phase2 = data[phase2_mask]
+
+    # filter by 'back_height' and 'step_phase:0' snippets
+    back_phase1 = back_phase1.filter(like='back_height', axis=1)
+    back_phase1 = back_phase1.filter(like='step_phase:0', axis=1)
+    back_phase2 = back_phase2.filter(like='back_height', axis=1)
+    back_phase2 = back_phase2.filter(like='step_phase:0', axis=1)
+
+    return (back_phase1, back_phase2)
+
+def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_number, condition_label):
+    back_phase1, back_phase2 = back_data
+
+    mean_mouse_phase1 = back_phase1.groupby(level='mouse').mean()
+    mean_mouse_phase2 = back_phase2.groupby(level='mouse').mean()
+
+    mean_mouse_difference =  mean_mouse_phase2 - mean_mouse_phase1
+
+    mean_phase1 = mean_mouse_phase1.mean()
+    mean_phase2 = mean_mouse_phase2.mean()
+    mean_difference = mean_mouse_difference.mean()
+
+    if len(mean_mouse_difference.columns) != 12:
+        raise ValueError(f"Expected 12 columns in mean_mouse_difference, but got {len(mean_mouse_difference.columns)}")
+    # reduce feature names by looking for 'back_label:' and finding string after this which should follow the pattern Back(number)
+    back_names = [col.split('back_label:')[1].split(',')[0] for col in mean_mouse_difference.columns]
+    back_numbers = [int(name.split('Back')[1]) for name in back_names]
+    back_names_numbers_sorted = {name: x for x, name in sorted(zip(back_numbers, mean_mouse_difference.columns))}
+
+    mouse_colours = assign_mouse_colors('viridis')
+
+    save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
+    os.makedirs(save_dir, exist_ok=True)
+
+    def plot_backs(x,y,ymean,title,ylabel,filename):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        for mouse in y.index:
+            ax.plot(x, y.loc(axis=0)[mouse], alpha=0.3, label=mouse, color=mouse_colours[mouse])
+        ax.plot(x, ymean, color='black', linestyle='--', label='Mean Phase 1')
+        ax.grid(False)
+        ax.set_title(title)
+        ax.set_xlabel(ylabel)
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        fig.tight_layout()
+        save_path = os.path.join(save_dir,filename)
+        fig.savefig(save_path, dpi=300)
+        plt.close()
+
+    plot_backs(back_names[::-1], mean_mouse_phase1[::-1], mean_phase1[::-1], f'Back Height Phase Comparison - {phase1}', 'Back Height', f'BackHeightP1__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+    plot_backs(back_names[::-1], mean_mouse_phase2[::-1], mean_phase2[::-1], f'Back Height Phase Comparison - {phase2}', 'Back Height', f'BackHeightP2__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+    plot_backs(back_names[::-1], mean_mouse_difference[::-1], mean_difference[::-1], f'Back Height Phase Difference - {phase2} - {phase1}', 'Back Height Difference', f'BackHeightDifferenceP1vsP2__{phase2}-{phase1}_stride{stride_number}_{condition_label}.png')
+
+
+
 
 
 
@@ -1619,7 +1777,7 @@ def get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2):
 
     return pcs_combined, labels, pcs_phase1, pcs_phase2
 
-def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compare_condition, exp, day, stride_data, stride_data_compare, phases,
+def process_compare_condition(feature_data, feature_data_df_compare, mouseIDs_base, mouseIDs_compare, condition, compare_condition, exp, day, stride_data, stride_data_compare, phases,
                               stride_numbers, base_save_dir_condition, aggregated_save_dir,
                               global_fs_results, global_pca_results):
     global_regression_params = {}
@@ -1629,6 +1787,7 @@ def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compar
             pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
 
             regression_params = compute_global_regression_model(
+                feature_data,
                 mouseIDs_base,
                 stride_number,
                 phase1, phase2,
@@ -1659,8 +1818,8 @@ def process_compare_condition(mouseIDs_base, mouseIDs_compare, condition, compar
                         os.makedirs(compare_save_path, exist_ok=True)
 
                         smoothed_scaled_pred, runs = predict_compare_condition(
-                            mouse_id, compare_condition, stride_number, exp, day,
-                            stride_data_compare, phase1, phase2,
+                            feature_data_df_compare,
+                            mouse_id, compare_condition, stride_number, phase1, phase2,
                             selected_features, loadings_df, w, compare_save_path
                         )
 
@@ -2128,29 +2287,29 @@ def compare_within_between_variability(runs_dict: dict, mouse_runs: dict, aggreg
     color_mapping = {mouse: cmap(i / len(unique_mice)) for i, mouse in enumerate(unique_mice)}
     plotted = set()
 
-    for key in mouse_params:
-        mouse, p1, p2, s = key
-        runs = np.array(runs_dict[key])
-        if runs.ndim == 1:
-            runs = np.atleast_2d(runs)
-        label = mouse if mouse not in plotted else None
-        # Plot all runs.
-        ax.scatter(runs[:, 0], runs[:, 1], runs[:, 2],
-                   color=color_mapping[mouse],
-                   label=label,
-                   s=50,
-                   alpha=0.8)
-        # Highlight outliers for this mouse.
-        if mouse in outlier_runs:
-            outlier_indices = list(outlier_runs[mouse])
-            if len(outlier_indices) > 0:
-                outlier_points = runs[outlier_indices, :]
-                ax.scatter(outlier_points[:, 0], outlier_points[:, 1], outlier_points[:, 2],
-                           color=color_mapping[mouse],
-                           marker='x',
-                           s=100,
-                           linewidths=2)
-        plotted.add(mouse)
+    # for key in mouse_params:
+    #     mouse, p1, p2, s = key
+    #     runs = np.array(runs_dict[key])
+    #     if runs.ndim == 1:
+    #         runs = np.atleast_2d(runs)
+    #     label = mouse if mouse not in plotted else None
+    #     # Plot all runs.
+    #     ax.scatter(runs[:, 0], runs[:, 1], runs[:, 2],
+    #                color=color_mapping[mouse],
+    #                label=label,
+    #                s=50,
+    #                alpha=0.8)
+    #     # Highlight outliers for this mouse.
+    #     if mouse in outlier_runs:
+    #         outlier_indices = list(outlier_runs[mouse])
+    #         if len(outlier_indices) > 0:
+    #             outlier_points = runs[outlier_indices, :]
+    #             ax.scatter(outlier_points[:, 0], outlier_points[:, 1], outlier_points[:, 2],
+    #                        color=color_mapping[mouse],
+    #                        marker='x',
+    #                        s=100,
+    #                        linewidths=2)
+    #     plotted.add(mouse)
 
     # Plot each mouse's mean (from within mouse data) as a diamond.
     for mouse in unique_mice:
@@ -2182,10 +2341,51 @@ def compare_within_between_variability(runs_dict: dict, mouse_runs: dict, aggreg
     plt.savefig(save_path_plot, bbox_inches='tight')
     plt.close()
 
-    # save the outliers as a csv
-    save_outliers_csv_updated(outlier_runs, mouse_runs, aggregated_save_dir, condition_label, phase1, phase2, stride_number, stride_data)
+    # # save the outliers as a csv
+    # save_outliers_csv_updated(outlier_runs, mouse_runs, aggregated_save_dir, condition_label, phase1, phase2, stride_number, stride_data)
 
     return within_vars, between_vars, rank
+
+def plot_pcs_outliers(pc, outlier_runs, p, phase1, phase2, stride, base_save_dir):
+    # Plot all runs for each mouse in 3D, with outliers highlighted.
+    fig = plt.figure(figsize=(15, 13))
+    ax = fig.add_subplot(111, projection='3d')
+
+    unique_mice = sorted({key[0] for key in pc.keys()})
+    cmap = plt.get_cmap("tab20")
+    color_mapping = {mouse: cmap(i / len(unique_mice)) for i, mouse in enumerate(unique_mice)}
+    plotted = set()
+    for (mouse, _, _, _) in pc.keys():
+        runs = np.array(pc[(mouse, phase1, phase2, stride)])
+        if runs.ndim == 1:
+            runs = np.atleast_2d(runs)
+        label = mouse if mouse not in plotted else None
+        # Plot all runs.
+        ax.scatter(runs[:, 0], runs[:, 1], runs[:, 2],
+                   color=color_mapping[mouse],
+                   label=label,
+                   s=50,
+                   alpha=0.8)
+        # Highlight outliers for this mouse.
+        if mouse in outlier_runs:
+            outlier_indices = list(outlier_runs[mouse])
+            if len(outlier_indices) > 0:
+                outlier_points = runs[outlier_indices, :]
+                ax.scatter(outlier_points[:, 0], outlier_points[:, 1], outlier_points[:, 2],
+                           color=color_mapping[mouse],
+                           marker='x',
+                           s=100,
+                           linewidths=2)
+        plotted.add(mouse)
+    # save
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_zlabel("PC3")
+    ax.set_title(f"Outliers for {p} stride {stride} ({phase1} vs {phase2})\nRun-level PC Projections")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    save_path_plot = os.path.join(base_save_dir,
+                                  f"Run_PC_projections_{p}_stride{stride}_({phase1}-{phase2})_outliers.png")
+    fig.savefig(save_path_plot, bbox_inches='tight')
 
 
 def find_outlier_runs_global_std(runs_dict: dict, phase: str, stride_number: int, factor: float = 2.0):
@@ -2262,7 +2462,7 @@ def find_outlier_runs_global_std(runs_dict: dict, phase: str, stride_number: int
     return outliers, threshold, global_stats
 
 
-def save_outliers_csv_updated(outlier_runs: dict, real_run_mapping: dict, aggregated_save_dir: str, condition_label: str,
+def save_outliers_csv_updated(outlier_runs: dict, base_save_dir_condition: str, condition_label: str,
                               phase1: str, phase2: str, stride_number: int, stride_data: pd.DataFrame, csv_filename: str = "outlier_runs.csv"):
     """
     Update or create a CSV file that contains outlier run indices for various phases and strides.
@@ -2274,40 +2474,32 @@ def save_outliers_csv_updated(outlier_runs: dict, real_run_mapping: dict, aggreg
 
     Parameters:
         outlier_runs (dict): Dictionary mapping mouse IDs to a set of outlier run indices.
-        real_run_mapping (dict): Dictionary mapping each mouse ID to its list of real run IDs (in the same order as processed data).
-        aggregated_save_dir (str): Directory where the CSV file is located.
+        base_save_dir_condition (str): Directory where the CSV file is located.
         condition_label (str): The condition label.
         phase1 (str): The first phase.
         phase2 (str): The second phase.
         stride_number (int): The stride number.
         csv_filename (str): The name of the CSV file (default "outlier_runs.csv").
     """
-    file_path = os.path.join(aggregated_save_dir, csv_filename)
+    import os, json, pandas as pd
+
+    file_path = os.path.join(base_save_dir_condition, csv_filename)
 
     # Prepare new rows as a DataFrame, skipping mice with no outliers.
     rows = []
     for mouse, indices in outlier_runs.items():
         if not indices:  # Skip if empty
             continue
-        indices_str = ",".join(str(i) for i in sorted(list(indices)))
-
-        # Map each outlier index to the corresponding real run ID.
-        # It is assumed that real_run_mapping[mouse] is a list (in order) of the real run IDs.
-        real_runs = real_run_mapping.get(mouse, [])
-        # Make sure the list is long enough:
-        outlier_real_runs = [real_runs[i] for i in sorted(list(indices)) if i < len(real_runs)]
+        outlier_real_runs = outlier_runs.get(mouse, [])
         real_runs_str = ",".join(str(r) for r in outlier_real_runs)
 
         frame_numbers = []
         for run in outlier_real_runs:
             try:
-                # Example: if your stride_data index has levels ['Mouse', 'Run', 'FrameIdx'], you might do:
-                #frame = stride_data.loc[(mouse, run)].index.get_level_values('FrameIdx')[0]
                 frame = int(stride_data.loc[(mouse, run)].index.get_level_values('FrameIdx')[0])
                 frame_numbers.append(frame)
             except Exception as e:
                 frame_numbers.append("NA")
-        #rames_str = ",".join(str(f) for f in frame_numbers)
         frames_str = json.dumps(frame_numbers)
 
         rows.append({
@@ -2316,8 +2508,7 @@ def save_outliers_csv_updated(outlier_runs: dict, real_run_mapping: dict, aggreg
             "phase1": phase1,
             "phase2": phase2,
             "stride_number": stride_number,
-            "outlier_run_indices": indices_str,
-            "real_run_ids": real_runs_str,
+            "outlier_run_indices": real_runs_str,
             "frame_numbers": frames_str
         })
 
@@ -2326,31 +2517,25 @@ def save_outliers_csv_updated(outlier_runs: dict, real_run_mapping: dict, aggreg
         return
 
     new_df = pd.DataFrame(rows, columns=["condition_label", "mouseID", "phase1", "phase2",
-                                         "stride_number", "outlier_run_indices", "real_run_ids", "frame_numbers"])
+                                          "stride_number", "outlier_run_indices", "frame_numbers"])
 
+    # Load the existing CSV if it exists.
     if os.path.exists(file_path):
         existing_df = pd.read_csv(file_path)
     else:
         existing_df = pd.DataFrame(columns=["condition_label", "mouseID", "phase1", "phase2",
-                                            "stride_number", "outlier_run_indices", "real_run_ids", "frame_numbers"])
+                                            "stride_number", "outlier_run_indices", "frame_numbers"])
 
-    for idx, new_row in new_df.iterrows():
-        key_mask = (
-                (existing_df["condition_label"] == new_row["condition_label"]) &
-                (existing_df["mouseID"] == new_row["mouseID"]) &
-                (existing_df["phase1"] == new_row["phase1"]) &
-                (existing_df["phase2"] == new_row["phase2"]) &
-                (existing_df["stride_number"] == new_row["stride_number"])
-        )
-        if key_mask.any():
-            existing_df.loc[key_mask, "outlier_run_indices"] = new_row["outlier_run_indices"]
-            existing_df.loc[key_mask, "real_run_ids"] = new_row["real_run_ids"]
-            existing_df.loc[key_mask, "frame_numbers"] = new_row["frame_numbers"]
-        else:
-            existing_df = pd.concat([existing_df, pd.DataFrame([new_row])], ignore_index=True)
+    # Combine existing and new rows, then drop duplicates based on the key columns.
+    key_columns = ["condition_label", "mouseID", "phase1", "phase2", "stride_number"]
+    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+    # Drop duplicates, keeping the last occurrence (i.e. the new row)
+    combined_df = combined_df.drop_duplicates(subset=key_columns, keep="last")
 
-    existing_df.to_csv(file_path, index=False)
+    combined_df.to_csv(file_path, index=False)
     print(f"Updated outlier runs CSV: {file_path}")
+
+
 
 
 def exp_growth(x, y0, L, k):
@@ -2598,7 +2783,7 @@ def fit_exponential_to_prediction(stride_dict: Dict[int, List],
         0: plt.cm.Blues(0.99)
     }
     # Pre-assign mouse colors.
-    mouse_colors = assign_mouse_colors(stride_dict)
+    mouse_colors = assign_mouse_colors('viridis')
 
     plateau_dict = {}
     learning_rate_dict = {}

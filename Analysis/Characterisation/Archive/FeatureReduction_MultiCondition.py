@@ -382,7 +382,7 @@ def predict_compare_condition(mouse_id, compare_condition, stride_number, exp, d
     # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
     Xdr = np.dot(loadings_df.T, comparison_reduced_feature_data_df.T)
     # Normalize X
-    Xdr, normalize_mean, normalize_std = utils.normalize(Xdr)
+    Xdr, normalize_mean, normalize_std = utils.normalize_Xdr(Xdr)
 
     save_path_compare = os.path.join(save_path, f"vs_{compare_condition}")
     # prefix path wth \\?\ to avoid Windows path length limit
@@ -414,7 +414,7 @@ def compute_global_regression_model(global_mouse_ids, stride_number, phase1, pha
 
     # Project aggregated data into PCA space using the global loadings.
     Xdr = np.dot(loadings_df.T, global_data_df.T)
-    Xdr, norm_mean, norm_std = utils.normalize(Xdr)
+    Xdr, norm_mean, norm_std = utils.normalize_Xdr(Xdr)
 
     # Compute regression weights (using your chosen regression function).
     w, full_accuracy = compute_regression(Xdr, y_global)

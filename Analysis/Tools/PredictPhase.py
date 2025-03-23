@@ -10,7 +10,7 @@ from sklearn.linear_model import LinearRegression
 from Analysis.Tools.PCA import (
     plot_pca, plot_scree, compute_global_pca_for_phase)
 
-from Analysis.Tools.LogisticRegression import (run_regression, run_linear_regression_derivative)
+from Analysis.Tools.LogisticRegression import (run_regression)
 from Analysis.Tools.FeatureSelection import (global_feature_selection)
 from Analysis.Tools.ClusterFeatures import (
     plot_feature_clustering, plot_feature_clustering_3d, plot_feature_clusters_chart,
@@ -136,8 +136,9 @@ def global_pca_main(feature_data, global_stride_fs_results, phases, stride_numbe
     return global_pca_results
 
 def process_mice_main(mouse_ids: List[str], phases: List[str], stride_numbers: List[int], condition: str,
-                        compare_condition: str, exp: str, day: Optional[str],
-                        stride_data: pd.DataFrame, stride_data_compare: pd.DataFrame, base_save_dir_condition: str,
+                        exp: str, day: Optional[str],
+                        stride_data: pd.DataFrame, base_save_dir_condition: str,
+                        feature_data: pd.DataFrame,
                         global_fs_results: Dict[Tuple[str, str, int], List[str]],
                         global_pca_results: Dict[Tuple[str, str, int], Tuple[LinearRegression, pd.DataFrame]],
                         global_stride_fs_results: Dict[Tuple[str, str], List[str]],
@@ -154,6 +155,8 @@ def process_mice_main(mouse_ids: List[str], phases: List[str], stride_numbers: L
     odd_ws = {}
     phase1_pc = {}
     phase2_pc = {}
+    normalize_mean_pc = {}
+    normalize_std_pc = {}
 
     for mouse_id in mouse_ids:
         for stride_number in stride_numbers:
@@ -169,17 +172,18 @@ def process_mice_main(mouse_ids: List[str], phases: List[str], stride_numbers: L
                     current_cluster_mapping = cluster_mappings.get((phase1, phase2, stride_number), {})
 
                     # Process phase comparison and collect aggregated info
-                    agg_info, ftr_wghts, raw_features, raw_features_all, cluster_loadings, evenW, oddW, pcs_p1, pcs_p2 = process_mouse_phase_comparison(
+                    results = process_mouse_phase_comparison(
                         mouse_id=mouse_id, stride_number=stride_number,
                         phase1=phase1, phase2=phase2,
-                        stride_data=stride_data, stride_data_compare=stride_data_compare,
+                        stride_data=stride_data,
                         condition=condition, exp=exp, day=day,
                         base_save_dir_condition=base_save_dir_condition,
+                        feature_data=feature_data,
                         selected_features=selected_features,
                         global_pca=global_pca,
-                        compare_condition=compare_condition,
                         cluster_mapping=current_cluster_mapping
                     )
+                    agg_info, ftr_wghts, raw_features, raw_features_all, cluster_loadings, evenW, oddW, pcs_p1, pcs_p2, normalize_mean, normalize_std = results
 
                     # Store the prediction in the multi_stride_data dictionary.
                     key = (phase1, phase2)
@@ -203,15 +207,17 @@ def process_mice_main(mouse_ids: List[str], phases: List[str], stride_numbers: L
                     odd_ws[(mouse_id, phase1, phase2, stride_number)] = oddW
                     phase1_pc[(mouse_id, phase1, phase2, stride_number)] = pcs_p1
                     phase2_pc[(mouse_id, phase1, phase2, stride_number)] = pcs_p2
+                    normalize_mean_pc[(mouse_id, phase1, phase2, stride_number)] = normalize_mean
+                    normalize_std_pc[(mouse_id, phase1, phase2, stride_number)] = normalize_std
 
                 except ValueError as e:
                     print(f"Error processing {mouse_id}, stride {stride_number}, {phase1} vs {phase2}: {e}")
-    return aggregated_predictions, aggregated_feature_weights, aggregated_raw_features, aggregated_raw_features_all, aggregated_cluster_loadings, multi_stride_data, even_ws, odd_ws, phase1_pc, phase2_pc
+    return aggregated_predictions, aggregated_feature_weights, aggregated_raw_features, aggregated_raw_features_all, aggregated_cluster_loadings, multi_stride_data, even_ws, odd_ws, phase1_pc, phase2_pc, normalize_mean_pc, normalize_std_pc
 
 
-def get_mouse_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2, selected_features):
+def get_mouse_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2, selected_features):
     # Get the data for this mouse and phase comparison.
-    scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2)
+    scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.select_runs_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2)
 
     # Optionally, reduce the data to only the selected features.
     if global_settings["select_features"] == True:
@@ -227,13 +233,13 @@ def get_mouse_data(mouse_id, stride_number, condition, exp, day, stride_data, ph
     return scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2, reduced_feature_data_df, reduced_feature_selected_data_df
 
 def process_mouse_phase_comparison(mouse_id: str, stride_number: int, phase1: str, phase2: str,
-                                   stride_data, stride_data_compare, condition: str, exp: str, day,
+                                   stride_data, condition: str, exp: str, day,
                                    base_save_dir_condition: str,
+                                   feature_data: pd.DataFrame,
                                    selected_features: Optional[List[str]] = None,
                                    global_pca: Optional[Tuple] = None,
-                                   compare_condition: Optional[str] = None,
                                    cluster_mapping: Optional[Dict] = None) -> (
-        Tuple)[utils.PredictionData, utils.FeatureWeights, pd.DataFrame, pd.DataFrame, Optional[Dict[int, any]], any, any, any, any]:
+        Tuple)[utils.PredictionData, utils.FeatureWeights, pd.DataFrame, pd.DataFrame, Optional[Dict[int, any]], any, any, any, any, any, any]:
     """
     Process a single phase comparison for a given mouse.
     Returns:
@@ -246,9 +252,9 @@ def process_mouse_phase_comparison(mouse_id: str, stride_number: int, phase1: st
     save_path = utils.create_save_directory(base_save_dir_condition, mouse_id, stride_number, phase1, phase2)
     print(f"Processing Mouse {mouse_id}, Stride {stride_number}: {phase1} vs {phase2} (saving to {save_path})")
 
-    # Get the data for this mouse and phase comparison.
+    # Get the data for this mouse and phase comparison. # todo: I am calculating data again here!!!!
     (scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2,
-     reduced_feature_data_df, reduced_feature_selected_data_df) = get_mouse_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2, selected_features)
+     reduced_feature_data_df, reduced_feature_selected_data_df) = get_mouse_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2, selected_features)
 
     # ---------------- PCA Plotting (loaded from global) ----------------
 
@@ -263,11 +269,11 @@ def process_mouse_phase_comparison(mouse_id: str, stride_number: int, phase1: st
     labels = np.concatenate([labels_phase1, labels_phase2])
     pcs_combined = np.vstack([pcs_phase1, pcs_phase2])
     # Plot using the global PCA.
-    plot_pca(pca, pcs_combined, labels, phase1, phase2, stride_number, stepping_limbs, run_numbers, mouse_id, save_path)
-    plot_scree(pca, phase1, phase2, stride_number, save_path)
+    plot_pca(pca, pcs_combined, labels, phase1, phase2, stride_number, stepping_limbs, run_numbers, mouse_id, condition, save_path)
+    plot_scree(pca, phase1, phase2, stride_number, condition, save_path)
 
     # ---------------- Prediction - Regression-Based Feature Contributions ----------------
-    smoothed_scaled_pred, feature_weights, _, _, _ = run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition)
+    smoothed_scaled_pred, feature_weights, _, normalize_mean_pc, normalize_std_pc = run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition)
 
     # ---------------- Within vs between mice comparison - setup ----------------
     # fit regression model using even and odd Xdr values separately
@@ -304,10 +310,10 @@ def process_mouse_phase_comparison(mouse_id: str, stride_number: int, phase1: st
     ftr_wghts = utils.FeatureWeights(mouse_id=mouse_id,
                                     feature_weights=feature_weights)
 
-    return pred_data, ftr_wghts, reduced_feature_data_df, scaled_data_df, cluster_loadings, even_weights, odd_weights, pcs_phase1, pcs_phase2
+    return pred_data, ftr_wghts, reduced_feature_data_df, scaled_data_df, cluster_loadings, even_weights, odd_weights, pcs_phase1, pcs_phase2, normalize_mean_pc, normalize_std_pc
 
 def get_mouse_pcs_by_run(mouse_id: str, stride_number: int, phase1: str, phase2: str,
-                                   stride_data, condition: str, exp: str, day,
+                                   stride_data, feature_data: pd.DataFrame,
                                    base_save_dir_condition: str,
                                    global_pca: Optional[Tuple] = None,
                                    selected_features: Optional[List[str]] = None):
@@ -316,8 +322,7 @@ def get_mouse_pcs_by_run(mouse_id: str, stride_number: int, phase1: str, phase2:
     print(f"Processing Mouse {mouse_id}, Stride {stride_number}: {phase1} vs {phase2} (saving to {save_path})")
 
     # Get the data for this mouse and phase comparison.
-    (_, _, _, _, mask_phase1, mask_phase2, reduced_feature_data_df, _) = get_mouse_data(mouse_id, stride_number, condition,
-                                                                                 exp, day, stride_data, phase1, phase2, selected_features)
+    (_, _, _, _, mask_phase1, mask_phase2, reduced_feature_data_df, _) = get_mouse_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2, selected_features)
 
     # ---------------- PCA Plotting (loaded from global) ----------------
 
@@ -338,4 +343,64 @@ def find_pcs_outliers_to_remove(pcs_runs_dict, mouse_runs, phase, stride_number)
         real_runs = [runs[i] for i in sorted(list(outlier_indices)) if i < len(runs)]
         real_runs_to_remove[mouse] = real_runs
     return real_runs_to_remove, outlier_runs
+
+def find_outliers(feature_data, condition, exp, day, stride_data, phases, stride_numbers, base_save_dir_condition):
+    all_feats_pca = global_pca_main(feature_data, None, phases, stride_numbers, condition, stride_data,
+                                    select_feats=False)
+    pcs_p1 = {}
+    pcs_p2 = {}
+    for mouse in condition_specific_settings[condition]['global_fs_mouse_ids']:
+        for stride in stride_numbers:
+            for phase1, phase2 in itertools.combinations(phases, 2):
+                stride_pca = all_feats_pca[(phase1, phase2, stride)]
+                features = list(feature_data.loc(axis=0)[stride, mouse].columns)
+                pcs_phase1, pcs_phase2 = get_mouse_pcs_by_run(mouse, stride, phase1, phase2, stride_data, feature_data, base_save_dir_condition, stride_pca, features)
+                pcs_p1[(mouse, phase1, phase2, stride)] = pcs_phase1
+                pcs_p2[(mouse, phase1, phase2, stride)] = pcs_phase2
+
+    to_drop = set()
+    for phase1, phase2 in itertools.combinations(phases, 2):
+        print(f"\n--- Outlier removal for {phase1} vs {phase2} ---")
+        #phase1, phase2 = phases
+        print(f"\nLength of feature data before outlier removal: {len(feature_data)}")
+        for stride in stride_numbers:
+            print("\n----- Finding outliers for stride", stride)
+            all_runs_to_remove = {}
+            for p in [phase1, phase2]:
+                pc = pcs_p1 if p == phase1 else pcs_p2
+                # filter by (phase1, phase2, stride_number), keeping format of (mouse_id, phase1, phase2, stride_number)
+                pc = {k: v for k, v in pc.items() if k[1] == phase1 and k[2] == phase2 and k[3] == stride}
+
+                # get available mice from feature_data
+                mouse_runs = {}
+                for m in condition_specific_settings[condition]['global_fs_mouse_ids']:
+                    phase_runs = expstuff['condition_exp_runs'][condition.split('_')[0]][exp][p]
+                    # get available mouse runs from within phase runs
+                    mouse_phase_runs = [run for run in phase_runs if run in feature_data.loc(axis=0)[stride, m].index]
+                    mouse_runs[m] = mouse_phase_runs
+                runs_to_remove, outlier_runs_indices = find_pcs_outliers_to_remove(pc, mouse_runs, p, stride)
+                utils.plot_pcs_outliers(pc, outlier_runs_indices, p, phase1, phase2, stride, base_save_dir_condition)
+                all_runs_to_remove[p] = runs_to_remove
+
+            # combine the runs to remove from both phases for each mouse
+            all_runs_to_remove_comb = {m: sorted(list(set(all_runs_to_remove[phase1][m] + all_runs_to_remove[phase2][m])))
+                                       for m in condition_specific_settings[condition]['global_fs_mouse_ids']}
+
+            utils.save_outliers_csv_updated(all_runs_to_remove_comb, base_save_dir_condition, condition, phase1, phase2,
+                                            stride, stride_data)
+
+            # Remove outliers from feature data
+            for m, runs in all_runs_to_remove_comb.items():
+                for run in runs:
+                    # Construct the full multi-index key (stride, mouse, run)
+                    key = (stride, m, run)
+                    # Optionally, check if the key exists in your DataFrame index
+                    if key in feature_data.index:
+                        to_drop.add(key)
+
+    feature_data = feature_data.drop(index=list(to_drop))
+    print(f"\n--- Outliers removed for phases ---\nLength of feature data after outlier removal: {len(feature_data)}")
+    return feature_data
+
+
 

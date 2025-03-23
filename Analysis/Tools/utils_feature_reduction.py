@@ -26,7 +26,7 @@ import scipy.stats as stats
 
 from Helpers.Config_23 import *
 from Analysis.Tools.config import global_settings
-from Analysis.Tools.LogisticRegression import compute_lasso_regression, compute_global_regression_model, predict_compare_condition
+from Analysis.Tools.LogisticRegression import compute_lasso_regression
 from Analysis.Tools.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
 
 
@@ -181,11 +181,11 @@ def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
     if filtered_data_imputed.isnull().sum().sum() > 0:
         print("Warning: There are still missing values after imputation.")
 
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(filtered_data_imputed)
-    scaled_data_df = pd.DataFrame(scaled_data, index=filtered_data_imputed.index,
-                                  columns=filtered_data_imputed.columns)
-    return scaled_data_df
+    # scaler = StandardScaler()
+    # scaled_data = scaler.fit_transform(filtered_data_imputed)
+    # scaled_data_df = pd.DataFrame(scaled_data, index=filtered_data_imputed.index,
+    #                               columns=filtered_data_imputed.columns)
+    return filtered_data_imputed
 
 def collect_stride_data(condition, exp, day, compare_condition):
     stride_data_path = None
@@ -203,21 +203,20 @@ def collect_stride_data(condition, exp, day, compare_condition):
     return stride_data, stride_data_compare
 
 
-def select_runs_data(mouse_id, stride_number, condition, exp, day, stride_data, phase1, phase2):
-    # Load and preprocess data.
-    scaled_data_df = load_and_preprocess_data(mouse_id, stride_number, condition, exp,
-                                              day)  # Load data for the specified mouse and preprocess it by selecting desired features, imputing missing values, and standardizing.
-    print('Data loaded and preprocessed.')
+def select_runs_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2):
+    try:
+        scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
+        # Get runs and stepping limbs for each phase.
+        run_numbers, stepping_limbs, mask_phase1, mask_phase2 = get_runs(scaled_data_df, stride_data, mouse_id,
+                                                                         stride_number, phase1, phase2)
 
-    # Get runs and stepping limbs for each phase.
-    run_numbers, stepping_limbs, mask_phase1, mask_phase2 = get_runs(scaled_data_df, stride_data, mouse_id,
-                                                                     stride_number, phase1, phase2)
+        # Select only runs from the two phases in feature data
+        selected_mask = mask_phase1 | mask_phase2
+        selected_scaled_data_df = scaled_data_df.loc[selected_mask].T
 
-    # Select only runs from the two phases in feature data
-    selected_mask = mask_phase1 | mask_phase2
-    selected_scaled_data_df = scaled_data_df.loc[selected_mask].T
-
-    return scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2
+        return scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2
+    except KeyError:
+        raise ValueError(f"Stride: {stride_number} and mouse: {mouse_id} not found in the data.")
 
 def unified_feature_selection(feature_data_df, y, c, method='regression', cv=5, n_iterations=100, fold_assignment=None, save_file=None, overwrite_FeatureSelection=False):
     """
@@ -374,18 +373,31 @@ def process_single_feature(feature, X, fold_assignment, y_reg, run_numbers, nFol
 
     return feature, {"true_accuracy": avg_true_accuracy, "iteration_diffs": avg_feature_diffs}
 
-def normalize(Xdr):
+def normalize_Xdr(Xdr):
     normalize_mean = []
     normalize_std = []
     for row in range(Xdr.shape[0]):
         mean = np.mean(Xdr[row, :])
         std = np.std(Xdr[row, :])
-        Xdr[row, :] = (Xdr[row, :] - mean) / std
+        Xdr[row, :] = (Xdr[row, :] - mean) / std # normalise each mouse's data
         normalize_mean.append(mean)
         normalize_std.append(std)
     normalize_std = np.array(normalize_std)
     normalize_mean = np.array(normalize_mean)
     return Xdr, normalize_mean, normalize_std
+
+def normalize_df(df):
+    normalize_mean = []
+    normalize_std = []
+    for col in df.columns:
+        mean = df[col].mean()
+        std = df[col].std()
+        df[col] = (df[col] - mean) / std
+        normalize_mean.append(mean)
+        normalize_std.append(std)
+    normalize_std = np.array(normalize_std)
+    normalize_mean = np.array(normalize_mean)
+    return df, normalize_mean, normalize_std
 
 def balanced_accuracy(y_true, y_pred):
     """
@@ -720,7 +732,7 @@ def cluster_weights(w, loadings_df, save_path, mouse_id, phase1, phase2, n_clust
     return cluster_df, kmeans
 
 
-def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number):
+def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number, condition):
     """
     Plot the feature-space weights as a bar plot with feature names on the x-axis.
     """
@@ -737,7 +749,7 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     plt.title(f'Feature Weights in Original Space for Mouse {mouse_id} ({phase1} vs {phase2})')
     plt.tight_layout()
 
-    plot_file = os.path.join(save_path, f'feature_space_weights_{mouse_id}_{phase1}_vs_{phase2}_stride{stride_number}.png')
+    plot_file = os.path.join(save_path, f'feature_space_weights_{mouse_id}_{phase1}_vs_{phase2}_stride{stride_number}_{condition}.png')
     plt.savefig(plot_file)
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
@@ -904,11 +916,13 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
 
     name_exclusions = ['buffer_size:0', 'all_vals:False', 'full_stride:False', 'step_phase:None']
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    len_features = len(top_features_phase1.columns)
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    sorted_features = sorted(top_features_phase1.columns)
+    len_features = len(sorted_features)
 
     short_names = []
-    for fidx, f in enumerate(top_features_phase1.columns):
+    for fidx, f in enumerate(sorted_features):
         # Calculate the difference between the two phases.
         feature_phase_diff = mean_mouse_phase2[f] - mean_mouse_phase1[f]
         feature_phase_diff_mean = feature_phase_diff.mean()
@@ -934,7 +948,7 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
 
     # Set x-axis ticks to each feature and rotate labels
     ax.set_xticks(np.arange(len_features))
-    ax.set_xticklabels(top_features_phase1.columns, rotation=45, ha='right')
+    ax.set_xticklabels(short_names, rotation=45, ha='right')
 
     # Adjust x-axis limits so that all labels are fully in frame.
     ax.set_xlim(-0.5, len_features - 0.5)
@@ -1777,66 +1791,66 @@ def get_pc_run_info(pcs, mask_phase1, mask_phase2, phase1, phase2):
 
     return pcs_combined, labels, pcs_phase1, pcs_phase2
 
-def process_compare_condition(feature_data, feature_data_df_compare, mouseIDs_base, mouseIDs_compare, condition, compare_condition, exp, day, stride_data, stride_data_compare, phases,
-                              stride_numbers, base_save_dir_condition, aggregated_save_dir,
-                              global_fs_results, global_pca_results):
-    global_regression_params = {}
-    for phase1, phase2 in itertools.combinations(phases, 2):
-        for stride_number in stride_numbers:
-            selected_features, fs_df = global_fs_results[(phase1, phase2, stride_number)]
-            pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
-
-            regression_params = compute_global_regression_model(
-                feature_data,
-                mouseIDs_base,
-                stride_number,
-                phase1, phase2,
-                condition, exp, day,
-                stride_data,
-                selected_features, loadings_df
-            )
-            global_regression_params[(phase1, phase2, stride_number)] = regression_params
-
-    aggregated_compare_predictions = {}
-    if compare_condition != 'None':
-        compare_mouse_ids = mouseIDs_compare
-        for phase1, phase2 in itertools.combinations(phases, 2):
-            for stride_number in stride_numbers:
-                # Retrieve regression parameters computed from the base condition.
-                regression_params = global_regression_params.get((phase1, phase2, stride_number), None)
-                if regression_params is None:
-                    print(f"No regression model for phase pair {phase1} vs {phase2}, stride {stride_number}.")
-                    continue
-                w = regression_params['w']
-                loadings_df = regression_params['loadings_df']
-                selected_features = regression_params['selected_features']
-
-                for mouse_id in compare_mouse_ids:
-                    try:
-                        compare_save_path = os.path.join(base_save_dir_condition, f"{compare_condition}_predictions",
-                                                         mouse_id)
-                        os.makedirs(compare_save_path, exist_ok=True)
-
-                        smoothed_scaled_pred, runs = predict_compare_condition(
-                            feature_data_df_compare,
-                            mouse_id, compare_condition, stride_number, phase1, phase2,
-                            selected_features, loadings_df, w, compare_save_path
-                        )
-
-                        #x_vals = np.arange(len(smoothed_scaled_pred))
-                        aggregated_compare_predictions.setdefault((phase1, phase2, stride_number), []).append(
-                            PredictionData(mouse_id=mouse_id, x_vals=runs,
-                                                 smoothed_scaled_pred=smoothed_scaled_pred)
-                        )
-
-
-                    except Exception as e:
-                        print(
-                            f"Error processing compare condition for mouse {mouse_id}, phase pair {phase1} vs {phase2}: {e}")
-
-        # Plot aggregated compare predictions.
-        for (phase1, phase2, stride_number), agg_data in aggregated_compare_predictions.items():
-            plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=f"vs_{compare_condition}")
+# def process_compare_condition(feature_data, feature_data_df_compare, mouseIDs_base, mouseIDs_compare, condition, compare_condition, exp, day, stride_data, stride_data_compare, phases,
+#                               stride_numbers, base_save_dir_condition, aggregated_save_dir,
+#                               global_fs_results, global_pca_results):
+#     global_regression_params = {}
+#     for phase1, phase2 in itertools.combinations(phases, 2):
+#         for stride_number in stride_numbers:
+#             selected_features, fs_df = global_fs_results[(phase1, phase2, stride_number)]
+#             pca, loadings_df = global_pca_results[(phase1, phase2, stride_number)]
+#
+#             regression_params = compute_global_regression_model(
+#                 feature_data,
+#                 mouseIDs_base,
+#                 stride_number,
+#                 phase1, phase2,
+#                 condition, exp, day,
+#                 stride_data,
+#                 selected_features, loadings_df
+#             )
+#             global_regression_params[(phase1, phase2, stride_number)] = regression_params
+#
+#     aggregated_compare_predictions = {}
+#     if compare_condition != 'None':
+#         compare_mouse_ids = mouseIDs_compare
+#         for phase1, phase2 in itertools.combinations(phases, 2):
+#             for stride_number in stride_numbers:
+#                 # Retrieve regression parameters computed from the base condition.
+#                 regression_params = global_regression_params.get((phase1, phase2, stride_number), None)
+#                 if regression_params is None:
+#                     print(f"No regression model for phase pair {phase1} vs {phase2}, stride {stride_number}.")
+#                     continue
+#                 w = regression_params['w']
+#                 loadings_df = regression_params['loadings_df']
+#                 selected_features = regression_params['selected_features']
+#
+#                 for mouse_id in compare_mouse_ids:
+#                     try:
+#                         compare_save_path = os.path.join(base_save_dir_condition, f"{compare_condition}_predictions",
+#                                                          mouse_id)
+#                         os.makedirs(compare_save_path, exist_ok=True)
+#
+#                         smoothed_scaled_pred, runs = predict_compare_condition(
+#                             feature_data_df_compare,
+#                             mouse_id, compare_condition, stride_number, phase1, phase2,
+#                             selected_features, loadings_df, w, compare_save_path
+#                         )
+#
+#                         #x_vals = np.arange(len(smoothed_scaled_pred))
+#                         aggregated_compare_predictions.setdefault((phase1, phase2, stride_number), []).append(
+#                             PredictionData(mouse_id=mouse_id, x_vals=runs,
+#                                                  smoothed_scaled_pred=smoothed_scaled_pred)
+#                         )
+#
+#
+#                     except Exception as e:
+#                         print(
+#                             f"Error processing compare condition for mouse {mouse_id}, phase pair {phase1} vs {phase2}: {e}")
+#
+#         # Plot aggregated compare predictions.
+#         for (phase1, phase2, stride_number), agg_data in aggregated_compare_predictions.items():
+#             plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=f"vs_{compare_condition}")
 
 def plot_significant_features(selected_features_accuracies, save_path, selected_features):
     for fidx, feature in enumerate(selected_features):
@@ -2386,6 +2400,7 @@ def plot_pcs_outliers(pc, outlier_runs, p, phase1, phase2, stride, base_save_dir
     save_path_plot = os.path.join(base_save_dir,
                                   f"Run_PC_projections_{p}_stride{stride}_({phase1}-{phase2})_outliers.png")
     fig.savefig(save_path_plot, bbox_inches='tight')
+    plt.close()
 
 
 def find_outlier_runs_global_std(runs_dict: dict, phase: str, stride_number: int, factor: float = 2.0):

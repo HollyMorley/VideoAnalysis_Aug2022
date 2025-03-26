@@ -214,42 +214,126 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     # Plot aggregated cluster loadings.
     utils.plot_cluster_loadings_lines(global_data["aggregated_cluster_loadings"], aggregated_save_dir)
 
-    for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions"].items():
-        top_features = utils.get_top_features(global_data["aggregated_feature_weights"], global_data["global_fs_results"][(phase1,phase2,stride_number)], phase1, phase2, stride_number, n_features=15)
-        top_feature_data = utils.get_top_feature_data(global_data["aggregated_raw_features"], phase1, phase2, stride_number, top_features)
-        # Find original feature values pre normalization, using the normalize_mean and normalize_std
-        top_feature_data_real_p1 = top_feature_data[0].copy()
-        top_feature_data_real_p2 = top_feature_data[1].copy()
+    def unnormalize_top_features(df_p1, df_p2, norm_dict, mouse_ids, stride):
+        df1, df2 = df_p1.copy(), df_p2.copy()
+        idx = pd.IndexSlice
 
-        # get list of all original features
+        for mouse in mouse_ids:
+            norm = norm_dict[(stride, mouse)]
+            top_norm = norm.loc(axis=1)[df1.columns]
+
+            for feat in top_norm.columns:
+                sel = idx[mouse, :]
+                mean = top_norm.loc(axis=1)[feat]['mean']
+                std = top_norm.loc(axis=1)[feat]['std']
+                df1.loc[sel, feat] = df1.loc[sel, feat] * std + mean
+                df2.loc[sel, feat] = df2.loc[sel, feat] * std + mean
+
+        return df1, df2
+
+    def build_condition_dict_and_plot(preds, weights, raw_feats, norm_dict, mouse_ids, label):
+        out = {}
+        for (phase1, phase2, stride), _ in preds.items():
+            top_feats = utils.get_top_features(weights, global_data["global_fs_results"][(phase1, phase2, stride)],
+                                               phase1, phase2, stride, n_features=15)
+            p1, p2 = utils.get_top_feature_data(raw_feats, phase1, phase2, stride, top_feats)
+            real_p1, real_p2 = unnormalize_top_features(p1, p2, norm_dict, mouse_ids, stride)
+            out[(phase1, phase2, stride)] = [real_p1, real_p2]
+
+            for cm in (True, False):
+                utils.plot_top_feature_phase_comparison([real_p1, real_p2],
+                                                        base_save_dir, phase1, phase2, stride,
+                                                        condition_label=label, connect_mice=cm)
+            utils.plot_top_feature_phase_comparison_differences([real_p1, real_p2],
+                                                                base_save_dir, phase1, phase2, stride,
+                                                                condition_label=label)
+            back_data, back_orig = utils.get_back_data(raw_feats, norm_dict[(stride, mouse_ids[0])], phase1, phase2,
+                                                       stride)
+            utils.plot_back_phase_comparison(back_orig, base_save_dir, phase1, phase2, stride, condition_label=label)
+        return out
+
+    real_dict = build_condition_dict_and_plot(global_data["aggregated_predictions"],
+                                     global_data["aggregated_feature_weights"],
+                                     global_data["aggregated_raw_features"],
+                                     global_data["normalize"],
+                                     condition_specific_settings[condition]['global_fs_mouse_ids'],
+                                     condition)
+
+    compare_dict = build_condition_dict_and_plot(global_data["aggregated_predictions_compare"],
+                                        global_data["aggregated_feature_weights_compare"],
+                                        global_data["aggregated_raw_features_compare"],
+                                        global_data["normalize_compare"],
+                                        condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
+                                        compare_condition)
+
+    for key, real_data in real_dict.items():
+        comp_data = compare_dict[key]
+        utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
+                                                                           comp_data,
+                                                                           base_save_dir,
+                                                                           *key,
+                                                                           condition_label=condition,
+                                                                           compare_condition_label=compare_condition)
+
+    # top_feature_data_real_all = {}
+    # for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions"].items():
+    #     top_features = utils.get_top_features(global_data["aggregated_feature_weights"], global_data["global_fs_results"][(phase1,phase2,stride_number)], phase1, phase2, stride_number, n_features=15)
+    #     top_feature_data = utils.get_top_feature_data(global_data["aggregated_raw_features"], phase1, phase2, stride_number, top_features)
+    #     # Find original feature values pre normalization, using the normalize_mean and normalize_std
+    #     top_feature_data_real_p1 = top_feature_data[0].copy()
+    #     top_feature_data_real_p2 = top_feature_data[1].copy()
+    #
+    #     idx = pd.IndexSlice
+    #     for mouse_id in condition_specific_settings[condition]['global_fs_mouse_ids']:
+    #         norm = global_data["normalize"][(stride_number, mouse_id)]
+    #         top_norm = norm.loc(axis=1)[top_features.keys()]
+    #         for feature in top_norm.columns:
+    #             # get position of feature in all features
+    #             sel = idx[mouse_id, :]
+    #             top_feature_data_real_p1.loc[sel,feature] = top_feature_data_real_p1.loc[sel,feature] * top_norm.loc(axis=1)[feature]['std'] + top_norm.loc(axis=1)[feature]['mean']
+    #             top_feature_data_real_p2.loc[sel,feature] = top_feature_data_real_p2.loc[sel,feature] * top_norm.loc(axis=1)[feature]['std'] + top_norm.loc(axis=1)[feature]['mean']
+    #     top_feature_data_real = [top_feature_data_real_p1, top_feature_data_real_p2]
+    #     top_feature_data_real_all[(phase1, phase2, stride_number)] = top_feature_data_real
+    #
+    #     for cm in [True, False]:
+    #         utils.plot_top_feature_phase_comparison(top_feature_data_real, base_save_dir, phase1, phase2, stride_number, condition_label=condition, connect_mice=cm)
+    #     utils.plot_top_feature_phase_comparison_differences(top_feature_data_real, base_save_dir, phase1, phase2, stride_number, condition_label=condition)
+    #     # Now plot all back values during stance as phase1 - phase2
+    #     back_data, back_data_original = utils.get_back_data(global_data["aggregated_raw_features_all"], norm, phase1, phase2, stride_number)
+    #     utils.plot_back_phase_comparison(back_data_original, base_save_dir, phase1, phase2, stride_number, condition_label=condition)
+    #
+    # top_feature_data_real_compare_all = {}
+    # for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions_compare"].items():
+    #     top_features = utils.get_top_features(global_data["aggregated_feature_weights_compare"], global_data["global_fs_results"][(phase1,phase2,stride_number)], phase1, phase2, stride_number, n_features=15)
+    #     top_feature_data = utils.get_top_feature_data(global_data["aggregated_raw_features_compare"], phase1, phase2, stride_number, top_features)
+    #
+    #     top_feature_data_real_p1 = top_feature_data[0].copy()
+    #     top_feature_data_real_p2 = top_feature_data[1].copy()
+    #     idx = pd.IndexSlice
+    #     for mouse_id in condition_specific_settings[compare_condition]['global_fs_mouse_ids']:
+    #         norm = global_data["normalize_compare"][(stride_number, mouse_id)]
+    #         top_norm = norm.loc(axis=1)[top_features.keys()]
+    #         for feature in top_norm.columns:
+    #             # get position of feature in all features
+    #             sel = idx[mouse_id, :]
+    #             top_feature_data_real_p1.loc[sel,feature] = top_feature_data_real_p1.loc[sel,feature] * top_norm.loc(axis=1)[feature]['std'] + top_norm.loc(axis=1)[feature]['mean']
+    #             top_feature_data_real_p2.loc[sel,feature] = top_feature_data_real_p2.loc[sel,feature] * top_norm.loc(axis=1)[feature]['std'] + top_norm.loc(axis=1)[feature]['mean']
+    #     top_feature_data_real = [top_feature_data_real_p1, top_feature_data_real_p2]
+    #     top_feature_data_real_compare_all[(phase1, phase2, stride_number)] = top_feature_data_real
+    #
+    #     for cm in [True, False]:
+    #         utils.plot_top_feature_phase_comparison(top_feature_data_real, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition, connect_mice=cm)
+    #     utils.plot_top_feature_phase_comparison_differences(top_feature_data_real, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition)
+    #     # Now plot all back values during stance as phase1 - phase2
+    #     back_data, back_data_original = utils.get_back_data(global_data["aggregated_raw_features_all_compare"], norm, phase1, phase2, stride_number)
+    #     utils.plot_back_phase_comparison(back_data_original, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition)
+    #
+    # for (phase1, phase2, stride_number), top_feature_data_real in top_feature_data_real_all.items():
+    #     top_feature_data_real_compare = top_feature_data_real_compare_all[(phase1, phase2, stride_number)]
+    #     utils.plot_top_feature_phase_comparison_differences_BothConditions(top_feature_data_real, top_feature_data_real_compare, base_save_dir, phase1, phase2, stride_number, condition_label=condition, compare_condition_label=compare_condition)
 
 
-        for mouse_id in condition_specific_settings[condition]['global_fs_mouse_ids']:
-            norm_mean = global_data["normalize_mean"][(stride_number, mouse_id)]
-            norm_std = global_data["normalize_std"][(stride_number, mouse_id)]
-            for feature in top_features.keys():
-                # get position of feature in all features
 
-                top_feature_data_real_p1.loc[mouse_id,feature] = top_feature_data[0].loc[mouse_id,feature] * norm_std[feature] + norm_mean[feature]
-                top_feature_data_real_p2.loc[mouse_id,feature] = top_feature_data[1][mouse_id][feature] * norm_std[feature] + norm_mean[feature]
-
-
-        for cm in [True, False]:
-            utils.plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label=condition, connect_mice=cm)
-        utils.plot_top_feature_phase_comparison_differences(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        # Now plot all back values during stance as phase1 - phase2
-        back_data = utils.get_back_data(global_data["aggregated_raw_features_all"], phase1, phase2, stride_number)
-        utils.plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_number, condition_label=condition)
-
-    for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions_compare"].items():
-        top_features = utils.get_top_features(global_data["aggregated_feature_weights_compare"], global_data["global_fs_results"][(phase1,phase2,stride_number)], phase1, phase2, stride_number, n_features=15)
-        top_feature_data = utils.get_top_feature_data(global_data["aggregated_raw_features_compare"], phase1, phase2, stride_number, top_features)
-        for cm in [True, False]:
-            utils.plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition, connect_mice=cm)
-        utils.plot_top_feature_phase_comparison_differences(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition)
-        # Now plot all back values during stance as phase1 - phase2
-        back_data = utils.get_back_data(global_data["aggregated_raw_features_all_compare"], phase1, phase2, stride_number)
-        utils.plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_number, condition_label=compare_condition)
 
     # Single stride data plots
     for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions"].items():

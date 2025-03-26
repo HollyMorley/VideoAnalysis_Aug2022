@@ -184,6 +184,7 @@ def process_mice_main(mouse_ids: List[str], phases: List[str], stride_numbers: L
                         cluster_mapping=current_cluster_mapping
                     )
                     agg_info, ftr_wghts, raw_features, raw_features_all, cluster_loadings, evenW, oddW, pcs_p1, pcs_p2, normalize_mean, normalize_std = results
+                    # agg_info, ftr_wghts, raw_features, raw_features_all, cluster_loadings, evenW, oddW, pcs_p1, pcs_p2 = results
 
                     # Store the prediction in the multi_stride_data dictionary.
                     key = (phase1, phase2)
@@ -273,6 +274,7 @@ def process_mouse_phase_comparison(mouse_id: str, stride_number: int, phase1: st
     plot_scree(pca, phase1, phase2, stride_number, condition, save_path)
 
     # ---------------- Prediction - Regression-Based Feature Contributions ----------------
+    # smoothed_scaled_pred, feature_weights, _, normalize_mean_pc, normalize_std_pc = run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition)
     smoothed_scaled_pred, feature_weights, _, normalize_mean_pc, normalize_std_pc = run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition)
 
     # ---------------- Within vs between mice comparison - setup ----------------

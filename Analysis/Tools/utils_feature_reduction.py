@@ -379,7 +379,8 @@ def normalize_Xdr(Xdr):
     for row in range(Xdr.shape[0]):
         mean = np.mean(Xdr[row, :])
         std = np.std(Xdr[row, :])
-        Xdr[row, :] = (Xdr[row, :] - mean) / std # normalise each mouse's data
+        # Xdr[row, :] = Xdr[row, :]/np.max(np.abs(Xdr[row, :]))
+        Xdr[row, :] = (Xdr[row, :] - mean) / std # normalise each pcs's data
         normalize_mean.append(mean)
         normalize_std.append(std)
     normalize_std = np.array(normalize_std)
@@ -925,6 +926,8 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
     for fidx, f in enumerate(sorted_features):
         # Calculate the difference between the two phases.
         feature_phase_diff = mean_mouse_phase2[f] - mean_mouse_phase1[f]
+        # scale max abs
+        feature_phase_diff = feature_phase_diff / max(abs(feature_phase_diff.min()), abs(feature_phase_diff.max()))
         feature_phase_diff_mean = feature_phase_diff.mean()
         feature_phase_diff_sem = feature_phase_diff.sem()
 
@@ -952,13 +955,13 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
 
     # Adjust x-axis limits so that all labels are fully in frame.
     ax.set_xlim(-0.5, len_features - 0.5)
-    ax.set_ylabel('Mean Feature Difference')
+    ax.set_ylabel('Mean Feature Difference (max abs)')
     ax.grid(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_title(f'Feature Differences between {phase2} - {phase1} - Stride {stride_number}')
     fig.tight_layout()
-    fig.subplots_adjust(bottom=0.6)
+    fig.subplots_adjust(bottom=0.7)
 
     save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
     os.makedirs(save_dir, exist_ok=True)
@@ -967,8 +970,104 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
     fig.savefig(save_path, dpi=300)
     plt.close()
 
+def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_data, top_feature_data_compare, base_save_dir, phase1, phase2, stride_number, condition_label, compare_condition_label):
+    # Unpack & group
+    p1, p2 = top_feature_data
+    p1c, p2c = top_feature_data_compare
+    mean1 = p1.groupby(level='mouse').mean()
+    mean2 = p2.groupby(level='mouse').mean()
+    mean1c = p1c.groupby(level='mouse').mean()
+    mean2c = p2c.groupby(level='mouse').mean()
 
-def get_back_data(data_dict, phase1, phase2, stride_number):
+    name_exclusions = ['buffer_size:0', 'all_vals:False', 'full_stride:False', 'step_phase:None']
+
+    # find common features
+    features = mean1.columns.intersection(mean1c.columns)
+
+    # Compute phase‑differences and scale
+    diff = (mean2.loc(axis=1)[features] - mean1.loc(axis=1)[features])
+    diff_comp = (mean2c.loc(axis=1)[features] - mean1c.loc(axis=1)[features])
+    scaled = diff.div(diff.abs().max(axis=0))
+    scaled_comp = diff_comp.div(diff_comp.abs().max(axis=0))
+
+    # Restrict both DataFrames to the same mice
+    common_mice = scaled.index.intersection(scaled_comp.index)
+    scaled = scaled.loc[common_mice]
+    scaled_comp = scaled_comp.loc[common_mice]
+
+    means = scaled.mean()
+    sems = scaled.sem()
+    means_comp = scaled_comp.mean()
+    sems_comp = scaled_comp.sem()
+
+    # Paired related t‑tests
+    pvals = {}
+    for f in features:
+        if len(common_mice) < 2:
+            pvals[f] = np.nan
+        else:
+            pvals[f] = stats.ttest_rel(scaled[f], scaled_comp[f]).pvalue
+
+    # Plot
+    x = np.arange(len(features))
+    width = 0.15
+    fig, ax = plt.subplots(figsize=(len(features) * (width + 1.5), 8))
+    ax.bar(x - width / 2, means, width, yerr=sems, label=condition_label, color='navy')
+    ax.bar(x + width / 2, means_comp, width, yerr=sems_comp, label=compare_condition_label, color='crimson')
+    short_names = []
+    for feat in features:
+        name_bits = feat.split(', ')
+        name_to_keep = [bit for bit in name_bits if bit not in name_exclusions]
+        short_names.append(', '.join(name_to_keep))
+    ax.set_xticks(x)
+    ax.set_xticklabels(short_names, rotation=-45, ha='left', )
+    # Significance stars
+    ylim = ax.get_ylim()
+    height = ylim[1] - ylim[0]
+    for i, feat in enumerate(features):
+        p = pvals.get(feat, np.nan)
+        if np.isnan(p) or p >= 0.05:
+            continue
+        # Choose star‑string
+        if p < 0.001:
+            sig = '***'
+        elif p < 0.01:
+            sig = '**'
+        else:
+            sig = '*'
+        # Determine bracket vertical position
+        y1 = means[feat] + sems[feat]
+        y2 = means_comp[feat] + sems_comp[feat]
+        y = max(y1, y2)
+        h = 0.05 * height
+        # Draw bracket
+        ax.plot(
+            [x[i] - width / 2, x[i] - width / 2, x[i] + width / 2, x[i] + width / 2],
+            [y + h, y + 2 * h, y + 2 * h, y + h],
+            lw=1.5, c='k'
+        )
+        # Add significance text
+        ax.text(
+            x[i], y + 2 * h + 0.01 * height,
+            sig, ha='center', va='bottom', fontsize=12
+        )
+    ax.grid(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_ylabel('Scaled Phase Difference')
+    ax.set_title(f'{phase2}–{phase1} Phase Difference by Feature\nPaired T-Test, Only common mice:\n{list(common_mice)}')
+    ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0.)
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.4)
+    # Save
+    save_dir = os.path.join(base_save_dir, f'top_feature_descriptives/stride{stride_number}')
+    os.makedirs(save_dir, exist_ok=True)
+    fname = f'PhaseDiff_BothConditions__{phase1}vs{phase2}_stride{stride_number}.png'
+    fig.savefig(os.path.join(save_dir, fname), dpi=300)
+    plt.close()
+
+
+def get_back_data(data_dict, norm, phase1, phase2, stride_number):
     # Filter weights for the current phase pair.
     filtered_weights = {
         mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
@@ -993,7 +1092,13 @@ def get_back_data(data_dict, phase1, phase2, stride_number):
     back_phase2 = back_phase2.filter(like='back_height', axis=1)
     back_phase2 = back_phase2.filter(like='step_phase:0', axis=1)
 
-    return (back_phase1, back_phase2)
+    # Reverse normalisation
+    back_phase1_original, back_phase2_original = back_phase1.copy(), back_phase2.copy()
+    for back_feat in back_phase1.columns:
+        back_phase1_original[back_feat] = back_phase1_original[back_feat] * norm.loc['std', back_feat] + norm.loc['mean', back_feat]
+        back_phase2_original[back_feat] = back_phase2_original[back_feat] * norm.loc['std', back_feat] + norm.loc['mean', back_feat]
+
+    return (back_phase1, back_phase2), (back_phase1_original, back_phase2_original)
 
 def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_number, condition_label):
     back_phase1, back_phase2 = back_data
@@ -1012,30 +1117,38 @@ def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_
     # reduce feature names by looking for 'back_label:' and finding string after this which should follow the pattern Back(number)
     back_names = [col.split('back_label:')[1].split(',')[0] for col in mean_mouse_difference.columns]
     back_numbers = [int(name.split('Back')[1]) for name in back_names]
-    back_names_numbers_sorted = {name: x for x, name in sorted(zip(back_numbers, mean_mouse_difference.columns))}
+    back_names_numbers_sorted = {name: x for x, name in sorted(zip(back_numbers, mean_mouse_difference.columns), reverse=True)}
 
     mouse_colours = assign_mouse_colors('viridis')
 
     save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
     os.makedirs(save_dir, exist_ok=True)
 
-    def plot_backs(x,y,ymean,title,ylabel,filename):
-        fig, ax = plt.subplots(figsize=(8, 6))
+    def plot_backs(xnames,y,ymean,title,ylabel,filename):
+        y_sorted = y.loc(axis=1)[xnames.keys()]
+        ymean_sorted_vals = ymean[xnames.keys()].values
+        x_sorted_vals = list(xnames.values())
+
+        fig, ax = plt.subplots(figsize=(14, 6))
         for mouse in y.index:
-            ax.plot(x, y.loc(axis=0)[mouse], alpha=0.3, label=mouse, color=mouse_colours[mouse])
-        ax.plot(x, ymean, color='black', linestyle='--', label='Mean Phase 1')
+            ax.plot(x_sorted_vals, y_sorted.loc(axis=0)[mouse], alpha=0.3, label=mouse, color=mouse_colours[mouse])
+        ax.plot(x_sorted_vals, ymean_sorted_vals, color='black', linestyle='--', label='Mean Phase 1')
         ax.grid(False)
         ax.set_title(title)
-        ax.set_xlabel(ylabel)
+        ax.set_xticks(x_sorted_vals)
+        ax.set_xticklabels(x_sorted_vals)
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel('Tail <- Back positions -> Head')
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
         fig.tight_layout()
+        ax.invert_xaxis()
         save_path = os.path.join(save_dir,filename)
         fig.savefig(save_path, dpi=300)
         plt.close()
 
-    plot_backs(back_names[::-1], mean_mouse_phase1[::-1], mean_phase1[::-1], f'Back Height Phase Comparison - {phase1}', 'Back Height', f'BackHeightP1__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
-    plot_backs(back_names[::-1], mean_mouse_phase2[::-1], mean_phase2[::-1], f'Back Height Phase Comparison - {phase2}', 'Back Height', f'BackHeightP2__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
-    plot_backs(back_names[::-1], mean_mouse_difference[::-1], mean_difference[::-1], f'Back Height Phase Difference - {phase2} - {phase1}', 'Back Height Difference', f'BackHeightDifferenceP1vsP2__{phase2}-{phase1}_stride{stride_number}_{condition_label}.png')
+    plot_backs(back_names_numbers_sorted, mean_mouse_phase1, mean_phase1, f'Back Height Phase Comparison - {phase1}', 'Back Height', f'BackHeightP1__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+    plot_backs(back_names_numbers_sorted, mean_mouse_phase2, mean_phase2, f'Back Height Phase Comparison - {phase2}', 'Back Height', f'BackHeightP2__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
+    plot_backs(back_names_numbers_sorted, mean_mouse_difference, mean_difference, f'Back Height Phase Difference - {phase2} - {phase1}', 'Back Height Difference', f'BackHeightDifferenceP1vsP2__{phase2}-{phase1}_stride{stride_number}_{condition_label}.png')
 
 
 

@@ -95,6 +95,7 @@ def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_pha
     w, full_accuracy = compute_regression(Xdr, y_reg)
     print(f"Full model accuracy: {full_accuracy:.3f}")
 
+    # return w, y_reg, full_accuracy
     return w, normalize_mean, normalize_std, y_reg, full_accuracy
     # return w, y_reg, full_accuracy
 
@@ -102,7 +103,7 @@ def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_pha
 def predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition_name, plot_pred):
     # Apply the full model to all runs (scaled and unscaled)
     all_trials_dr = np.dot(loadings_df.T, reduced_feature_data_df.T)
-    all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T
+    all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T # pc wise normalization
     run_pred = np.dot(w, np.dot(loadings_df.T, reduced_feature_data_df.T))
     run_pred_scaled = np.dot(w, all_trials_dr)
 
@@ -140,6 +141,7 @@ def regression_feature_contributions(loadings_df, reduced_feature_selected_data_
 
 def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition, plot_pred=True, plot_weights=True):
     w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
+    # w, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
 
     # Compute feature contributions
     regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, condition, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
@@ -154,7 +156,7 @@ def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selecte
     # Predict runs using the full model
     smoothed_scaled_pred, _ = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition, plot_pred)
 
-    return smoothed_scaled_pred, feature_weights, w, normalize_mean, normalize_std
+    return smoothed_scaled_pred, feature_weights, w , normalize_mean, normalize_std
 
 # def predict_compare_condition(feature_data_compare, mouse_id, compare_condition, stride_number, phase1, phase2, selected_features, loadings_df, w, save_path):
 #     # Retrieve reduced feature data for the comparison condition

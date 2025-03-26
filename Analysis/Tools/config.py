@@ -54,7 +54,7 @@ global_settings = {
     "pool_mice": False,
     "multi_strides": True,
     "overwrite_FeatureSelection": False,
-    "overwrite_data_collection": True,
+    "overwrite_data_collection": False,
     "combine_stride_features": False,
     "plot_raw_features": False,
     # less frequently changed settings:

@@ -28,6 +28,7 @@ from Helpers.Config_23 import *
 from Analysis.Tools.config import global_settings
 from Analysis.Tools.LogisticRegression import compute_lasso_regression
 from Analysis.Tools.FeatureSelection import rfe_feature_selection, random_forest_feature_selection
+from Analysis.Tools.SignificanceTesting import ShufflingTest_ComparePhases, ShufflingTest_CompareConditions
 
 
 @dataclass
@@ -851,11 +852,14 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
         feature_sem_p1 = mean_mouse_phase1[f].sem()
         feature_sem_p2 = mean_mouse_phase2[f].sem()
 
-        # # Test normality for each phase:
-        # stat1, p_val1 = stats.shapiro(mean_mouse_phase1[f])
-        # stat2, p_val2 = stats.shapiro(mean_mouse_phase2[f])
+        p_val, Eff_obs, EffNull_vals = ShufflingTest_ComparePhases(Obs_p1=top_features_phase1.loc(axis=1)[f],
+                                                                   Obs_p2=top_features_phase2.loc(axis=1)[f],
+                                                                   meanObs_p1=mean_mouse_phase1[f],
+                                                                   meanObs_p2=mean_mouse_phase2[f],
+                                                                   phase1=phase1,
+                                                                   phase2=phase2)
 
-        stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
+        #stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
         # Optionally, adjust the p-value threshold or use multiple stars for very small p-values:
         if p_val < 0.001:
             significance = "***"
@@ -880,10 +884,10 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
         # plot mean of feature values for each phase
         if connect_mice == False:
             ax.errorbar([1, 2], [feature_mean_p1, feature_mean_p2],
-                        color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1, feature_sem_p2], capsize=5)
+                        color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1*1.645, feature_sem_p2*1.645], capsize=5)
 
             # Compute ymax from the errorbars as before.
-            ymax = max(feature_mean_p1 + feature_sem_p1, feature_mean_p2 + feature_sem_p2) + 0.2
+            ymax = max(feature_mean_p1 + feature_sem_p1*1.645, feature_mean_p2 + feature_sem_p2*1.645) + 0.2
             h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
             # Draw bracket
             ax.plot([1, 1, 2, 2], [ymax, ymax + h, ymax + h, ymax], lw=1.5, c='k')
@@ -894,7 +898,10 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
         ax.set_xticklabels([phase1, phase2])
         ax.set_xlim(0.5, 2.5)
         ax.set_ylabel(feature_name)
-        ax.set_title(f'Stride {stride_number}')
+        if connect_mice == False:
+            ax.set_title(f'Stride {stride_number}\nShuffling Test, Err=90% CI')
+        else:
+            ax.set_title(f'Stride {stride_number}')
         ax.grid(False)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -937,7 +944,7 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
 
         ax.scatter(x_values, feature_phase_diff, color='red', alpha=0.5)
         ax.scatter([fidx], feature_phase_diff_mean, color='black')
-        ax.errorbar([fidx], feature_phase_diff_mean, yerr=feature_phase_diff_sem, color='black', capsize=5)
+        ax.errorbar([fidx], feature_phase_diff_mean, yerr=feature_phase_diff_sem*1.645, color='black', capsize=5)
 
         name_bits = f.split(', ')
         name_to_keep = []
@@ -959,7 +966,7 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
     ax.grid(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_title(f'Feature Differences between {phase2} - {phase1} - Stride {stride_number}')
+    ax.set_title(f'Feature Differences between {phase2} - {phase1} - Stride {stride_number}\nErr=90% CI')
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.7)
 
@@ -970,10 +977,11 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
     fig.savefig(save_path, dpi=300)
     plt.close()
 
-def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_data, top_feature_data_compare, base_save_dir, phase1, phase2, stride_number, condition_label, compare_condition_label):
+def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_data, top_feature_data_compare, base_save_dir, phase1, phase2, stride_number, condition_label, compare_condition_label, suffix):
     # Unpack & group
     p1, p2 = top_feature_data
     p1c, p2c = top_feature_data_compare
+
     mean1 = p1.groupby(level='mouse').mean()
     mean2 = p2.groupby(level='mouse').mean()
     mean1c = p1c.groupby(level='mouse').mean()
@@ -986,34 +994,50 @@ def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_dat
 
     # Compute phase‑differences and scale
     diff = (mean2.loc(axis=1)[features] - mean1.loc(axis=1)[features])
-    diff_comp = (mean2c.loc(axis=1)[features] - mean1c.loc(axis=1)[features])
+    diffc = (mean2c.loc(axis=1)[features] - mean1c.loc(axis=1)[features])
     scaled = diff.div(diff.abs().max(axis=0))
-    scaled_comp = diff_comp.div(diff_comp.abs().max(axis=0))
+    scaledc = diffc.div(diffc.abs().max(axis=0))
 
     # Restrict both DataFrames to the same mice
-    common_mice = scaled.index.intersection(scaled_comp.index)
+    common_mice = diff.index.intersection(diffc.index)
+    diff = diff.loc[common_mice]
+    diffc = diffc.loc[common_mice]
     scaled = scaled.loc[common_mice]
-    scaled_comp = scaled_comp.loc[common_mice]
+    scaledc = scaledc.loc[common_mice]
+    p1 = p1.loc[common_mice]
+    p2 = p2.loc[common_mice]
+    p1c = p1c.loc[common_mice]
+    p2c = p2c.loc[common_mice]
 
     means = scaled.mean()
     sems = scaled.sem()
-    means_comp = scaled_comp.mean()
-    sems_comp = scaled_comp.sem()
+    means_comp = scaledc.mean()
+    sems_comp = scaledc.sem()
 
-    # Paired related t‑tests
+    # significance testing
     pvals = {}
     for f in features:
         if len(common_mice) < 2:
             pvals[f] = np.nan
         else:
-            pvals[f] = stats.ttest_rel(scaled[f], scaled_comp[f]).pvalue
+            p_val, _, _ = ShufflingTest_CompareConditions(
+                Obs_p1=p1.loc(axis=1)[f],
+                Obs_p2=p2.loc(axis=1)[f],
+                Obs_p1c=p1c.loc(axis=1)[f],
+                Obs_p2c=p2c.loc(axis=1)[f],
+                pdiff_Obs=diff[f],
+                pdiff_c_Obs=diffc[f],
+                phase1=phase1,
+                phase2=phase2)
+            pvals[f] = p_val
+            # pvals[f] = stats.ttest_rel(scaled[f], scaled_comp[f]).pvalue
 
     # Plot
     x = np.arange(len(features))
     width = 0.15
     fig, ax = plt.subplots(figsize=(len(features) * (width + 1.5), 8))
-    ax.bar(x - width / 2, means, width, yerr=sems, label=condition_label, color='navy')
-    ax.bar(x + width / 2, means_comp, width, yerr=sems_comp, label=compare_condition_label, color='crimson')
+    ax.bar(x - width / 2, means, width, yerr=sems*1.645, label=condition_label, color='navy')
+    ax.bar(x + width / 2, means_comp, width, yerr=sems_comp*1.645, label=compare_condition_label, color='crimson')
     short_names = []
     for feat in features:
         name_bits = feat.split(', ')
@@ -1036,14 +1060,14 @@ def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_dat
         else:
             sig = '*'
         # Determine bracket vertical position
-        y1 = means[feat] + sems[feat]
-        y2 = means_comp[feat] + sems_comp[feat]
+        y1 = means[feat] + sems[feat]*1.645
+        y2 = means_comp[feat] + sems_comp[feat]*1.645
         y = max(y1, y2)
         h = 0.05 * height
         # Draw bracket
         ax.plot(
             [x[i] - width / 2, x[i] - width / 2, x[i] + width / 2, x[i] + width / 2],
-            [y + h, y + 2 * h, y + 2 * h, y + h],
+            [y + h, y + 1.5 * h, y + 1.5 * h, y + h],
             lw=1.5, c='k'
         )
         # Add significance text
@@ -1055,14 +1079,14 @@ def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_dat
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_ylabel('Scaled Phase Difference')
-    ax.set_title(f'{phase2}–{phase1} Phase Difference by Feature\nPaired T-Test, Only common mice:\n{list(common_mice)}')
+    ax.set_title(f'{phase2}–{phase1} Phase Difference by Feature_{suffix}\nShuffling Test, err= 90% CI, Only common mice:\n{list(common_mice)}')
     ax.legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0.)
     fig.tight_layout()
-    fig.subplots_adjust(bottom=0.4)
+    fig.subplots_adjust(bottom=0.45)
     # Save
     save_dir = os.path.join(base_save_dir, f'top_feature_descriptives/stride{stride_number}')
     os.makedirs(save_dir, exist_ok=True)
-    fname = f'PhaseDiff_BothConditions__{phase1}vs{phase2}_stride{stride_number}.png'
+    fname = f'PhaseDiff_BothConditions__{phase1}vs{phase2}_stride{stride_number}_{suffix}.png'
     fig.savefig(os.path.join(save_dir, fname), dpi=300)
     plt.close()
 
@@ -1100,6 +1124,7 @@ def get_back_data(data_dict, norm, phase1, phase2, stride_number):
 
     return (back_phase1, back_phase2), (back_phase1_original, back_phase2_original)
 
+
 def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_number, condition_label):
     back_phase1, back_phase2 = back_data
 
@@ -1117,6 +1142,7 @@ def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_
     # reduce feature names by looking for 'back_label:' and finding string after this which should follow the pattern Back(number)
     back_names = [col.split('back_label:')[1].split(',')[0] for col in mean_mouse_difference.columns]
     back_numbers = [int(name.split('Back')[1]) for name in back_names]
+    back_numbers_sorted = sorted(back_numbers, reverse=True)
     back_names_numbers_sorted = {name: x for x, name in sorted(zip(back_numbers, mean_mouse_difference.columns), reverse=True)}
 
     mouse_colours = assign_mouse_colors('viridis')
@@ -1146,9 +1172,84 @@ def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_
         fig.savefig(save_path, dpi=300)
         plt.close()
 
+    def plot_backs_phase_difference(xnames, y1_allruns, y2_allruns, y1, y2, ymean1, ymean2, phase1, phase2, title, ylabel, filename):
+        # Choose hatch patterns
+        phase1_pattern = '' if phase1 == 'APA2' else '/'
+        phase2_pattern = '' if phase2 == 'APA2' else '/'
+
+        # Reverse order so Back12→…→Back1
+        x_sorted_names = list(xnames.keys())
+        back_positions = list(xnames.values())
+        x = np.arange(len(x_sorted_names))
+        width = 0.35
+
+        # Compute means & SEMs in exactly that order
+        ymean1_vals = ymean1[x_sorted_names].values
+        ysem1_vals = y1.loc(axis=1)[x_sorted_names].sem(axis=0).values
+        ymean2_vals = ymean2[x_sorted_names].values
+        ysem2_vals = y2.loc(axis=1)[x_sorted_names].sem(axis=0).values
+
+        # significance
+        pvals = []
+        common = y1.index.intersection(y2.index)
+        for col in x_sorted_names:
+            if len(common) < 2:
+                pvals.append(np.nan)
+            else:
+                a = y1[col].loc[common]
+                b = y2[col].loc[common]
+                p_val, _, _ = ShufflingTest_ComparePhases(
+                    Obs_p1=y1_allruns[col].loc[common],
+                    Obs_p2=y2_allruns[col].loc[common],
+                    meanObs_p1=a,
+                    meanObs_p2=b,
+                    phase1=phase1,
+                    phase2=phase2
+                )
+                pvals.append(p_val)
+                #pvals.append(stats.ttest_rel(a, b).pvalue)
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        # Plot bars
+        ax.bar(x - width / 2, ymean1_vals, width, yerr=ysem1_vals*1.645,
+               facecolor=('black' if phase1_pattern == '' else 'white'),
+               edgecolor='black', hatch=phase1_pattern, label=phase1)
+        ax.bar(x + width / 2, ymean2_vals, width, yerr=ysem2_vals*1.645,
+               facecolor=('black' if phase2_pattern == '' else 'white'),
+               edgecolor='black', hatch=phase2_pattern, label=phase2)
+
+        # Significance brackets
+        ylim = ax.get_ylim()
+        h = 0.05 * (ylim[1] - ylim[0])
+        for i, p in enumerate(pvals):
+            if p < 0.05:
+                sig = '***' if p < 0.001 else '**' if p < 0.01 else '*'
+                y_top = max(ymean1_vals[i] + ysem1_vals[i], ymean2_vals[i] + ysem2_vals[i])
+                ax.plot([x[i] - width / 2, x[i] - width / 2, x[i] + width / 2, x[i] + width / 2],
+                        [y_top + h, y_top + 1.5 * h, y_top + 1.5 * h, y_top + h], color='k')
+                ax.text(x[i], y_top + 2 * h + 0.01 * (ylim[1] - ylim[0]), sig, ha='center')
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(back_positions)
+        ax.set_ylim(bottom=22)
+        ax.set_xlabel('Tail <- Back positions -> Head')
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(save_dir, filename), dpi=300)
+        plt.close()
+
     plot_backs(back_names_numbers_sorted, mean_mouse_phase1, mean_phase1, f'Back Height Phase Comparison - {phase1}', 'Back Height', f'BackHeightP1__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
     plot_backs(back_names_numbers_sorted, mean_mouse_phase2, mean_phase2, f'Back Height Phase Comparison - {phase2}', 'Back Height', f'BackHeightP2__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
     plot_backs(back_names_numbers_sorted, mean_mouse_difference, mean_difference, f'Back Height Phase Difference - {phase2} - {phase1}', 'Back Height Difference', f'BackHeightDifferenceP1vsP2__{phase2}-{phase1}_stride{stride_number}_{condition_label}.png')
+
+    plot_backs_phase_difference(back_names_numbers_sorted, back_phase1, back_phase2, mean_mouse_phase1, mean_mouse_phase2, mean_phase1, mean_phase2, phase1, phase2, f'Back Height Comparison - {phase2} vs {phase1}\nShuffling Test, err=90% CI', 'Back Height (mm)', f'BackHeightP1vsP2_Bar__{phase1}vs{phase2}_stride{stride_number}_{condition_label}.png')
 
 
 

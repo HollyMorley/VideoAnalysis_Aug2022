@@ -23,6 +23,7 @@ import json
 import hashlib
 from scipy.signal import savgol_filter
 import scipy.stats as stats
+from curlyBrace import curlyBrace
 
 from Helpers.Config_23 import *
 from Analysis.Tools.config import global_settings
@@ -75,6 +76,37 @@ class FeatureWeights:
         else:
             raise IndexError("Index out of range for FeatureWeights")
 
+@dataclass
+class ContributionData:
+    mouse_id: str
+    unique_feature_contribution: pd.Series
+    unique_pc_contribution: pd.Series
+    single_feature_contribution: pd.Series
+    single_pc_contribution: pd.Series
+    group_id: Optional[int] = None
+
+    def as_tuple(self) -> Tuple:
+        """Return a tuple representation for backward compatibility."""
+        return (self.mouse_id, self.unique_feature_contribution,
+                self.unique_pc_contribution, self.single_feature_contribution,
+                self.single_pc_contribution, self.group_id)
+
+        # Add __getitem__ so that indexing works like with a tuple.
+
+    def __getitem__(self, index):
+        if index == 0:
+            return self.mouse_id
+        elif index == 1:
+            return self.unique_feature_contribution
+        elif index == 2:
+            return self.unique_pc_contribution
+        elif index == 3:
+            return self.single_feature_contribution
+        elif index == 4:
+            return self.single_pc_contribution
+        else:
+            raise IndexError("Index out of range for ContributionData")
+
 
 def make_safe_feature_name(feature, max_length=50):
     # Replace disallowed characters and remove commas.
@@ -116,7 +148,7 @@ def log_settings(settings, log_dir, script_name):
         f.write(log_content)
     print(f"Settings logged to {log_file}")
 
-def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
+def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day, measures):
     """
     Load data for the specified mouse and preprocess it by selecting desired features,
     imputing missing values, and standardizing.
@@ -134,8 +166,8 @@ def load_and_preprocess_data(mouse_id, stride_number, condition, exp, day):
     except KeyError:
         raise ValueError(f"Mouse ID {mouse_id} not found in the dataset.")
 
-    # Build desired columns using the simplified build_desired_columns function
-    measures = measures_list_feature_reduction
+    # # Build desired columns using the simplified build_desired_columns function
+    # measures = measures_list_feature_reduction
 
     col_names = []
     for feature in measures.keys():
@@ -441,7 +473,7 @@ def shuffle_unique(feature, raw_features):
     shuffled.loc(axis=0)[feature] = np.random.permutation(shuffled.loc(axis=0)[feature].values)
     return shuffled
 
-def plot_feature_accuracy(single_cvaccuracy, mouseID, save_path, title_suffix="Single_Feature_cvaccuracy"):
+def plot_feature_accuracy(single_cvaccuracy, mouseID, save_path, x_label_offset_multiple=0.95, title_suffix="Single_Feature_cvaccuracy"):
     """
     Plots the single-feature model accuracy values.
 
@@ -451,20 +483,56 @@ def plot_feature_accuracy(single_cvaccuracy, mouseID, save_path, title_suffix="S
         title_suffix (str): Suffix for the plot title and filename.
     """
     df = pd.DataFrame(list(single_cvaccuracy.items()), columns=['Feature', 'cvaccuracy'])
-    # Replace the separator so that group headers appear as "Group: FeatureName"
-    df['Display'] = df['Feature'].apply(lambda x: x.replace('|', ': '))
-    #df = df.sort_values(by='cvaccuracy', ascending=False)
+    if not df['Feature'].str.contains('PC').all():
+        df['Display'] = df['Feature'].apply(lambda x: short_names.get(x, x))
+        df['cluster'] = df['Feature'].map(manual_clusters['cluster_mapping'])
+        df = df.dropna(subset=['cluster'])
+        df['cluster'] = df['cluster'].astype(int)
 
-    plt.figure(figsize=(14, max(8, len(df) * 0.3)))
-    sns.barplot(data=df, x='cvaccuracy', y='Display', palette='viridis')
+        order_map = {feat: idx for idx, feat in enumerate(manual_clusters['cluster_mapping'].keys())}
+        df['order'] = df['Feature'].map(order_map)
+        df = df.sort_values(by='order').reset_index(drop=True)
+
+    fig, ax = plt.subplots(figsize=(14, max(8, int(len(df) * 0.3))))
+    if not df['Feature'].str.contains('PC').all():
+        sns.barplot(data=df, x='cvaccuracy', y='Display', palette='viridis')
+    else:
+        sns.barplot(data=df, x='cvaccuracy', y='Feature', palette='viridis')
+    plt.xlim(0.5, 1.0)
     plt.title(f'{mouseID}\nSingle Feature Model accuracy ' + title_suffix)
     plt.xlabel('accuracy')
-    plt.ylabel('Feature (Group: FeatureName)')
+    plt.ylabel('')
     plt.tight_layout()
+
+    lower_x_lim = df['cvaccuracy'].min()
+    upper_x_lim = df['cvaccuracy'].max()
+    x_range = upper_x_lim - lower_x_lim
+
+    if not df['Feature'].str.contains('PC').all():
+        for i, cl in enumerate(sorted(df['cluster'].unique())):
+            group_indices = df.index[df['cluster'] == cl].tolist()
+            x_pos = lower_x_lim - x_range * x_label_offset_multiple
+            y_positions = group_indices
+            y0 = min(y_positions) - 0.05
+            y1 = max(y_positions) + 0.05
+            k_r = 0.1
+            span = abs(y1 - y0)
+            desired_depth = 0.1  # or any value that gives you the uniform look you want
+            k_r_adjusted = desired_depth / span if span != 0 else k_r
+
+            # Alternate the int_line_num value for every other cluster:
+            base_line_num = 2
+            int_line_num = base_line_num + 5 if i % 2 else base_line_num
+
+            cluster_label = [k for k, v in manual_clusters['cluster_values'].items() if v == cl][0]
+
+            add_vertical_brace_curly(ax, y0, y1, x_pos, k_r=k_r_adjusted, int_line_num=int_line_num,
+                                     xoffset=0.2, label=cluster_label, rot_label=90)
+        plt.subplots_adjust(left=0.35)
     plt.savefig(os.path.join(save_path, f"Single_Feature_cvaccuracy_{title_suffix}.png"), dpi=300)
     plt.close()
 
-def plot_unique_delta_accuracy(unique_delta_accuracy, mouseID, save_path, title_suffix="Unique_Δaccuracy"):
+def plot_unique_delta_accuracy(unique_delta_accuracy, mouseID, save_path, x_label_offset_multiple=0.65, title_suffix="Unique_Δaccuracy"):
     """
     Plots the unique contribution (Δaccuracy) for each feature.
 
@@ -475,16 +543,55 @@ def plot_unique_delta_accuracy(unique_delta_accuracy, mouseID, save_path, title_
     """
 
     df = pd.DataFrame(list(unique_delta_accuracy.items()), columns=['Feature', 'Unique_Δaccuracy'])
-    df['Display'] = df['Feature'].apply(lambda x: x.replace('|', ': '))
-    #df = df.sort_values(by='Unique_Δaccuracy', ascending=False)
+    if not df['Feature'].str.contains('PC').all():
+        df['Display'] = df['Feature'].apply(lambda x: short_names.get(x, x))
+        df['cluster'] = df['Feature'].map(manual_clusters['cluster_mapping'])
+        df = df.dropna(subset=['cluster'])
+        df['cluster'] = df['cluster'].astype(int)
 
-    plt.figure(figsize=(14, max(8, len(df) * 0.3)))
-    sns.barplot(data=df, x='Unique_Δaccuracy', y='Display', palette='magma')
+        order_map = {feat: idx for idx, feat in enumerate(manual_clusters['cluster_mapping'].keys())}
+        df['order'] = df['Feature'].map(order_map)
+        df = df.sort_values(by='order').reset_index(drop=True)
+
+    fig, ax = plt.subplots(figsize=(14, max(8, int(len(df) * 0.3))))
+    if not df['Feature'].str.contains('PC').all():
+        sns.barplot(data=df, x='Unique_Δaccuracy', y='Display', palette='magma')
+    else:
+        sns.barplot(data=df, x='Unique_Δaccuracy', y='Feature', palette='magma')
     plt.title(f'{mouseID}\nUnique Feature Contributions (Δaccuracy) ' + title_suffix)
     plt.xlabel('Δaccuracy')
-    plt.ylabel('Feature (Group: FeatureName)')
+    plt.ylabel('')
     plt.axvline(0, color='black', linestyle='--')
     plt.tight_layout()
+
+    lower_x_lim = df['Unique_Δaccuracy'].min()
+    upper_x_lim = df['Unique_Δaccuracy'].max()
+    x_range = upper_x_lim - lower_x_lim
+
+    plt.xlim(lower_x_lim - x_range*0.1, upper_x_lim + x_range*0.1)
+
+    if not df['Feature'].str.contains('PC').all():
+        for i, cl in enumerate(sorted(df['cluster'].unique())):
+            group_indices = df.index[df['cluster'] == cl].tolist()
+            x_pos = lower_x_lim - x_range * x_label_offset_multiple
+            y_positions = group_indices
+            y0 = min(y_positions) - 0.05
+            y1 = max(y_positions) + 0.05
+            k_r = 0.1
+            span = abs(y1 - y0)
+            desired_depth = 0.1  # or any value that gives you the uniform look you want
+            k_r_adjusted = desired_depth / span if span != 0 else k_r
+
+            # Alternate the int_line_num value for every other cluster:
+            base_line_num = 2
+            int_line_num = base_line_num + 5 if i % 2 else base_line_num
+
+            cluster_label = [k for k, v in manual_clusters['cluster_values'].items() if v == cl][0]
+
+            add_vertical_brace_curly(ax, y0, y1, x_pos, k_r=k_r_adjusted, int_line_num=int_line_num,
+                                     xoffset=0, label=cluster_label, rot_label=90)
+        plt.subplots_adjust(left=0.35)
+
     plt.savefig(os.path.join(save_path, f"Unique_delta_accuracy_{title_suffix}.png"), dpi=300)
     plt.close()
 
@@ -540,6 +647,8 @@ def plot_aggregated_run_predictions(aggregated_data: List[PredictionData],
     common_npoints = max(len(data.x_vals) for data in aggregated_data)
     common_x = np.linspace(global_min_x, global_max_x, common_npoints)
 
+    plt.axvspan(9.5, 109.5, color='lightblue', alpha=0.2)
+
     interpolated_curves = []
     for data in aggregated_data:
         mouse_id = data.mouse_id
@@ -560,21 +669,22 @@ def plot_aggregated_run_predictions(aggregated_data: List[PredictionData],
         interp_curve = np.interp(common_x, x_vals, normalized_curve)
         interpolated_curves.append(interp_curve)
 
-        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id}', alpha=0.3)
+        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id}', alpha=0.3, color='grey')
 
     all_curves_array = np.vstack(interpolated_curves)
     mean_curve = np.mean(all_curves_array, axis=0)
     plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
 
-    plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    #plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    plt.axhline(0, color='black', linestyle='--', alpha=0.5)
     plt.title(f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {phase1} vs {phase2}, stride {stride_number}\n{condition_label}')
     plt.xlabel('Run Number')
     plt.ylabel('Normalized Prediction (Smoothed)')
     if normalization_method == 'maxabs':
         plt.ylim(-1, 1)
-    plt.legend(loc='upper right')
+    #plt.legend(loc='upper right')
     plt.grid(False)
-    plt.gca().yaxis.grid(True)
+    #plt.gca().yaxis.grid(True)
     plt.tight_layout()
 
     save_path_full = os.path.join(save_dir,
@@ -734,29 +844,63 @@ def cluster_weights(w, loadings_df, save_path, mouse_id, phase1, phase2, n_clust
     return cluster_df, kmeans
 
 
-def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number, condition):
+def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, phase2, stride_number, condition, x_label_offset=0.5):
     """
     Plot the feature-space weights as a bar plot with feature names on the x-axis.
     """
     # Create a DataFrame for plotting and sort for easier visualization
-    df = pd.DataFrame({'feature': feature_weights.index, 'weight': feature_weights.values})
+    df = pd.DataFrame({'Feature': feature_weights.index, 'weight': feature_weights.values})
+    df['Display'] = df['Feature'].apply(lambda x: short_names.get(x, x))
+    df['cluster'] = df['Feature'].map(manual_clusters['cluster_mapping'])
+    df = df.dropna(subset=['cluster'])
+    df['cluster'] = df['cluster'].astype(int)
+
+    order_map = {feat: idx for idx, feat in enumerate(manual_clusters['cluster_mapping'].keys())}
+    df['order'] = df['Feature'].map(order_map)
+    df = df.sort_values(by='order').reset_index(drop=True)
 
     #sort df by weight
     #df = df.sort_values(by='weight', ascending=False)
-
-    plt.figure(figsize=(12, 8))
-    sns.barplot(x='weight', y='feature', data=df, palette='viridis')
+    fig, ax = plt.subplots(figsize=(14, max(8, int(len(df) * 0.3))))
+    sns.barplot(x='weight', y='Display', data=df, palette='viridis')
     plt.xlabel('Weight Value')
-    plt.ylabel('Feature')
+    plt.ylabel('')
     plt.title(f'Feature Weights in Original Space for Mouse {mouse_id} ({phase1} vs {phase2})')
     plt.tight_layout()
+
+    lower_x_lim = df['weight'].min()
+    upper_x_lim = df['weight'].max()
+    x_range = upper_x_lim - lower_x_lim
+
+    if not df['Feature'].str.contains('PC').all():
+        for i, cl in enumerate(sorted(df['cluster'].unique())):
+            group_indices = df.index[df['cluster'] == cl].tolist()
+            x_pos = lower_x_lim - x_range * x_label_offset
+            y_positions = group_indices
+            y0 = min(y_positions) - 0.05
+            y1 = max(y_positions) + 0.05
+            k_r = 0.1
+            span = abs(y1 - y0)
+            desired_depth = 0.1  # or any value that gives you the uniform look you want
+            k_r_adjusted = desired_depth / span if span != 0 else k_r
+
+            # Alternate the int_line_num value for every other cluster:
+            base_line_num = 2
+            int_line_num = base_line_num + 0.5 if i % 2 else base_line_num
+
+            cluster_label = [k for k, v in manual_clusters['cluster_values'].items() if v == cl][0]
+
+            add_vertical_brace_curly(ax, y0, y1, x_pos, k_r=k_r_adjusted, int_line_num=int_line_num,
+                                     xoffset=0.2, label=cluster_label, rot_label=90)
+        plt.subplots_adjust(left=0.35)
+        plt.xlim(lower_x_lim, upper_x_lim)
 
     plot_file = os.path.join(save_path, f'feature_space_weights_{mouse_id}_{phase1}_vs_{phase2}_stride{stride_number}_{condition}.png')
     plt.savefig(plot_file)
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
 
-def get_top_features(weights_dict, stride_features, phase1, phase2, stride_number, n_features):
+def get_top_features(contrib_dict, stride_features, phase1, phase2, stride_number, n_features, quartile):
     """
     Get the top n features (out of the specifically selected features for that stride) based on the mean of their weights across mice.
     :param weights_dict:
@@ -767,22 +911,35 @@ def get_top_features(weights_dict, stride_features, phase1, phase2, stride_numbe
     :param n_features:
     :return:
     """
-    filtered_weights = {
-        mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
-        for (mouse_id, p1, p2, s), weights in weights_dict.items()
+    filtered_contribution = {
+        mouse_id: (contribs.single_feature_contribution )
+        for (mouse_id, p1, p2, s), contribs in contrib_dict.items()
         if p1 == phase1 and p2 == phase2 and s == stride_number
     }
-    weights_df = pd.DataFrame(filtered_weights)
-    # filter weights_df by stride_features
-    weights_df = weights_df.loc[stride_features]
+    contrib_df = pd.DataFrame(filtered_contribution)
+    # filter contribs_df by stride_features
+    contrib_df = contrib_df.loc[stride_features]
 
-    # find mean of feature weights
-    mean_weights = weights_df.mean(axis=1)
+    # find mean of feature contribs
+    median_contribs = contrib_df.median(axis=1)
+    all_features = median_contribs
+
+    # find top quartile of features by absolute contribution, preserving original sign
+    threshold = median_contribs.abs().quantile(quartile)
+    top_features_quartile = median_contribs[median_contribs.abs() >= threshold]
 
     # find top n features of absolute contribution, preserving original sign
-    top_features = mean_weights.abs().nlargest(n_features)
-    top_features = top_features * mean_weights.loc[top_features.index].apply(np.sign)
-    return top_features
+    top_features_top10 = median_contribs.nlargest(n_features)
+    #top_features_top10 = top_features_top10 * median_contribs.loc[top_features_top10.index].apply(np.sign)
+    return top_features_top10, top_features_quartile, all_features
+
+
+def select_top_quantile_features(feature_weights: pd.Series, quantile: float = 0.9):
+    # Compute the threshold based on the absolute values of the feature weights
+    threshold = feature_weights.abs().quantile(quantile)
+    # Filter the features that have an absolute loading greater than or equal to the threshold
+    selected_features = feature_weights[feature_weights.abs() >= threshold]
+    return selected_features
 
 def get_top_feature_data(data_dict, phase1, phase2, stride_number, top_features)-> Tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -854,10 +1011,11 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
 
         p_val, Eff_obs, EffNull_vals = ShufflingTest_ComparePhases(Obs_p1=top_features_phase1.loc(axis=1)[f],
                                                                    Obs_p2=top_features_phase2.loc(axis=1)[f],
-                                                                   meanObs_p1=mean_mouse_phase1[f],
-                                                                   meanObs_p2=mean_mouse_phase2[f],
+                                                                   mouseObs_p1=mean_mouse_phase1[f],
+                                                                   mouseObs_p2=mean_mouse_phase2[f],
                                                                    phase1=phase1,
-                                                                   phase2=phase2)
+                                                                   phase2=phase2,
+                                                                   type='mean')
 
         #stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
         # Optionally, adjust the p-value threshold or use multiple stars for very small p-values:
@@ -911,6 +1069,252 @@ def plot_top_feature_phase_comparison(top_feature_data, base_save_dir, phase1, p
         os.makedirs(save_dir, exist_ok=True)
         safe_feature_name = make_safe_feature_name(feature_name)
         save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}_cm{connect_mice}.png')
+        fig.savefig(save_path, dpi=300)
+        plt.close()
+
+def plot_top_feature_phase_comparison_connected_means(top_feature_data, base_save_dir, phase1, phase2, stride_number, condition_label):
+    top_features_phase1, top_features_phase2 = top_feature_data
+
+    mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
+    mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
+
+    name_exclusions = ['buffer_size:0','all_vals:False','full_stride:False','step_phase:None']
+
+    for f in top_features_phase1.columns:
+        # remove name exclusions
+        feature_name_bits = f.split(', ')
+        feature_name_to_keep = []
+        for name_bit in feature_name_bits:
+            if name_bit not in name_exclusions:
+                feature_name_to_keep.append(name_bit)
+        feature_name = ', '.join(feature_name_to_keep)
+
+        fig, ax = plt.subplots(figsize=(4, 6))
+
+        feature_mean_p1 = mean_mouse_phase1[f].mean()
+        feature_mean_p2 = mean_mouse_phase2[f].mean()
+
+        feature_sem_p1 = mean_mouse_phase1[f].sem()
+        feature_sem_p2 = mean_mouse_phase2[f].sem()
+
+        p_val, Eff_obs, EffNull_vals = ShufflingTest_ComparePhases(Obs_p1=top_features_phase1.loc(axis=1)[f],
+                                                                   Obs_p2=top_features_phase2.loc(axis=1)[f],
+                                                                   mouseObs_p1=mean_mouse_phase1[f],
+                                                                   mouseObs_p2=mean_mouse_phase2[f],
+                                                                   phase1=phase1,
+                                                                   phase2=phase2,
+                                                                   type='mean')
+
+        #stat, p_val = stats.ttest_rel(mean_mouse_phase1[f], mean_mouse_phase2[f])
+        # Optionally, adjust the p-value threshold or use multiple stars for very small p-values:
+        if p_val < 0.001:
+            significance = "***"
+        elif p_val < 0.01:
+            significance = "**"
+        elif p_val < 0.05:
+            significance = "*"  # you can use "**" or "***" for lower p-values if desired
+        else:
+            significance = "n.s."  # not significant
+
+        # plot mouse means as line with phases along x axis and feature values along y axis. scatter plot for each mouse
+        for mouse in mean_mouse_phase1.index:
+            ax.plot([1, 2], [mean_mouse_phase1.loc[mouse, f], mean_mouse_phase2.loc[mouse, f]], color='grey')
+            # add label next to phase 2 point
+            ax.text(2.05, mean_mouse_phase2.loc[mouse, f], mouse, fontsize=6, verticalalignment='center', color='grey')
+
+        # plot median of feature values for each phase
+        ax.errorbar([1, 2], [feature_mean_p1, feature_mean_p2],
+                    color='black', linestyle='--', marker='o', markersize=5, yerr=[feature_sem_p1*1.645, feature_sem_p2*1.645], capsize=5)
+
+        # Compute ymax from the errorbars as before.
+        ymax = max(feature_mean_p1 + feature_sem_p1*1.645, feature_mean_p2 + feature_sem_p2*1.645) + 0.2
+        h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+        # Draw bracket
+        ax.plot([1, 1, 2, 2], [ymax, ymax + h, ymax + h, ymax], lw=1.5, c='k')
+        # Add significance text using the computed p-value:
+        ax.text(1.5, ymax + h, significance, ha='center', va='bottom', color='k', fontsize=16)
+
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels([phase1, phase2])
+        ax.set_xlim(0.5, 2.5)
+        ax.set_ylabel(feature_name)
+        ax.set_title(f'Stride {stride_number}\nShuffling Test (mean), Err=90% CI')
+        ax.grid(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        fig.tight_layout()
+
+        save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
+        os.makedirs(save_dir, exist_ok=True)
+        safe_feature_name = make_safe_feature_name(feature_name)
+        save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}_mean.png')
+        fig.savefig(save_path, dpi=300)
+        plt.close()
+
+def plot_common_across_strides_top_features(top_feats, real_dict, condition_label, base_save_dir):
+    # find common top_feats between strides
+    all_top_feats = []
+    all_top_feats_data = []
+    for (phase1, phase2, stride), top_feats_list in top_feats.items():
+        all_top_feats.append(list(top_feats_list.index))
+    common_top_feats = list(set.intersection(*map(set, all_top_feats)))
+
+    # plot the common features across all strides
+    common_top_feats_real_data = {}
+    for (phase1, phase2, stride), data in real_dict.items():
+        p1, p2 = data
+        top_p1 = p1.loc(axis=1)[common_top_feats]
+        top_p2 = p2.loc(axis=1)[common_top_feats]
+        common_top_feats_real_data[(phase1, phase2, stride)] = [top_p1, top_p2]
+
+    for (phase1, phase2, stride), data in common_top_feats_real_data.items():
+        p1, p2 = data
+        mean_mouse_p1 = p1.groupby(level='mouse').mean()
+        mean_mouse_p2 = p2.groupby(level='mouse').mean()
+
+        n_feats = len(common_top_feats)
+        # Create a single row of subplots, one for each feature
+        fig, axes = plt.subplots(1, n_feats, figsize=(2 * n_feats, 5))
+        if n_feats == 1:
+            axes = [axes]
+
+        fig.suptitle(f'Stride {stride}: {phase1} vs {phase2}', fontsize=16)
+
+        for i, f in enumerate(common_top_feats):
+            ax = axes[i]
+
+            # Calculate means and SEM (using 90% CI: SEM*1.645)
+            feature_mean_p1 = mean_mouse_p1[f].mean()
+            feature_mean_p2 = mean_mouse_p2[f].mean()
+            feature_sem_p1 = mean_mouse_p1[f].sem() * 1.645
+            feature_sem_p2 = mean_mouse_p2[f].sem() * 1.645
+
+            # Compute p-value and significance using your shuffling test.
+            p_val, _, _ = ShufflingTest_ComparePhases(
+                p1.loc(axis=1)[f], p2.loc(axis=1)[f],
+                mean_mouse_p1[f], mean_mouse_p2[f],
+                phase1, phase2, type='mean'
+            )
+            if p_val < 0.001:
+                significance = "***"
+            elif p_val < 0.01:
+                significance = "**"
+            elif p_val < 0.05:
+                significance = "*"
+            else:
+                significance = "n.s."
+
+            # Offsets so that scatter points don't overlap
+            offset = 0.1
+
+            # Plot each mouse's data as scatter points and connect them with a line
+            for mouse in mean_mouse_p1.index:
+                val1 = mean_mouse_p1.loc[mouse, f]
+                val2 = mean_mouse_p2.loc[mouse, f]
+                # ax.scatter(1 - offset, val1, color='blue', alpha=0.5)
+                # ax.scatter(2 + offset, val2, color='red', alpha=0.5)
+                ax.plot([1 - offset, 2 + offset], [val1, val2], color='grey', linewidth=1, alpha=0.7)
+                # Optionally add the mouse label next to the phase2 point
+                #ax.text(2.05, val2, mouse, fontsize=6, verticalalignment='center', color='grey')
+
+            # Plot mean markers with error bars (90% CI)
+            ax.errorbar([1 - offset, 2 + offset],
+                        [feature_mean_p1, feature_mean_p2],
+                        yerr=[feature_sem_p1, feature_sem_p2],
+                        color='black', linestyle='--', marker='o', markersize=5, capsize=5)
+
+            # Determine y position for significance bracket (above the highest errorbar)
+            ymin = min(feature_mean_p1 - feature_sem_p1, feature_mean_p2 - feature_sem_p2)
+            ymax = max(feature_mean_p1 + feature_sem_p1, feature_mean_p2 + feature_sem_p2)
+            yrange = ymax - ymin
+            sig_y = ymax + 0.2 * yrange
+            h = 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+            # Draw bracket using the x positions (1-offset and 2+offset)
+            ax.plot([1 - offset, 1 - offset, 2 + offset, 2 + offset],
+                    [sig_y, sig_y + h, sig_y + h, sig_y], lw=1.5, c='k')
+            # Place significance text centered above the bracket.
+            ax.text((1 - offset + 2 + offset) / 2, sig_y + h, significance,
+                    ha='center', va='bottom', color='k', fontsize=16)
+
+            # Set x-axis ticks and labels for the phases
+            ax.set_xticks([1, 2])
+            ax.set_xticklabels([phase1, phase2])
+            ax.set_xlim(0.8, 2.2)
+
+            # Remove grid lines and subplot borders
+            ax.grid(False)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+
+            # Instead of a subplot title, put the feature name as an extra label at the bottom.
+           # ax.text(0.5, -0.25, f, transform=ax.transAxes, ha='center', va='center', fontsize=8, rotation=45)
+            # Optionally, remove the y-axis label if not needed.
+            ax.set_ylabel(f)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+        save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride}')
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir,
+                                 f'CommonFeaturesByStride__{phase1}vs{phase2}_stride{stride}_{condition_label}_mean.png')
+        fig.savefig(save_path, dpi=300)
+        plt.close()
+
+        # Define your stride color mapping
+        stride_color_mapping = {
+            -3: plt.cm.Blues(0.2),
+            -2: plt.cm.Blues(0.45),
+            -1: plt.cm.Blues(0.7),
+            0: plt.cm.Blues(0.99)
+        }
+
+        # Create a new figure for aggregated phase means across strides
+        n_feats = len(common_top_feats)
+        fig, axes = plt.subplots(1, n_feats, figsize=(2 * n_feats, 5), sharey=False)
+        if n_feats == 1:
+            axes = [axes]
+
+        # For consistency, extract a representative phase1 and phase2 label
+        # (Assuming they are the same across strides; if not, adjust accordingly.)
+        # Here we take the first key from common_top_feats_real_data:
+        first_key = next(iter(common_top_feats_real_data))
+        phase1_label, phase2_label, _ = first_key
+
+        for i, f in enumerate(common_top_feats):
+            ax = axes[i]
+            # For each stride, plot the phase means with connecting lines
+            # (Note: if a given stride is missing data for a feature, you might skip it.)
+            for (phase1, phase2, stride), data in common_top_feats_real_data.items():
+                p1, p2 = data
+                mean_mouse_p1 = p1.groupby(level='mouse').mean()
+                mean_mouse_p2 = p2.groupby(level='mouse').mean()
+                # Compute the mean for the feature in both phases
+                med1 = mean_mouse_p1[f].mean()
+                med2 = mean_mouse_p2[f].mean()
+                color = stride_color_mapping.get(stride, 'black')
+                ax.plot([1, 2], [med1, med2], color=color, marker='o', markersize=5, label=f'Stride {stride}')
+
+            # Set x-axis ticks to represent the two phases
+            ax.set_xticks([1, 2])
+            ax.set_xticklabels([phase1_label, phase2_label])
+            ax.set_xlim(0.8, 2.2)
+            # Remove grid lines and all subplot borders
+            ax.grid(False)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            # Place the feature name at the bottom (as if it were an x-axis label)
+            ax.set_ylabel(f)
+
+        # Add a legend to the first subplot (avoid duplicate legends)
+        axes[0].legend(fontsize=8, loc='upper left')
+        fig.suptitle(f'Common Top Feature Meadians Across Strides: {phase1_label} vs {phase2_label}', fontsize=14)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+        save_dir = os.path.join(base_save_dir, f'top_feature_descriptives')
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir,
+                                 f'CommonFeaturesByStride__{phase1}vs{phase2}_allstrides_{condition_label}_mean.png')
         fig.savefig(save_path, dpi=300)
         plt.close()
 
@@ -1028,7 +1432,8 @@ def plot_top_feature_phase_comparison_differences_BothConditions(top_feature_dat
                 pdiff_Obs=diff[f],
                 pdiff_c_Obs=diffc[f],
                 phase1=phase1,
-                phase2=phase2)
+                phase2=phase2,
+                type='mean')
             pvals[f] = p_val
             # pvals[f] = stats.ttest_rel(scaled[f], scaled_comp[f]).pvalue
 
@@ -1201,10 +1606,11 @@ def plot_back_phase_comparison(back_data, base_save_dir, phase1, phase2, stride_
                 p_val, _, _ = ShufflingTest_ComparePhases(
                     Obs_p1=y1_allruns[col].loc[common],
                     Obs_p2=y2_allruns[col].loc[common],
-                    meanObs_p1=a,
-                    meanObs_p2=b,
+                    mouseObs_p1=a,
+                    mouseObs_p2=b,
                     phase1=phase1,
-                    phase2=phase2
+                    phase2=phase2,
+                    type='mean'
                 )
                 pvals.append(p_val)
                 #pvals.append(stats.ttest_rel(a, b).pvalue)
@@ -3099,7 +3505,103 @@ def fit_exponential_to_prediction(stride_dict: Dict[int, List],
 
     return summary_curves_dict, summary_differences_dict, plateau_dict, learning_rate_dict, mouse_colors
 
+def add_vertical_brace_curly(ax, y0, y1, x, xoffset, label=None, k_r=0.1, int_line_num=2, fontdict=None, rot_label=0, **kwargs):
+    """
+    Add a vertical curly brace using the curlyBrace package.
+    The brace is drawn at the given x coordinate.
+    """
+    fig = ax.figure
 
+    fontdict = fontdict or {}
+    if 'fontsize' in kwargs:
+        fontdict['fontsize'] = kwargs.pop('fontsize')
+
+    p1 = [x, y0]
+    p2 = [x, y1]
+    # Do not pass the label here.12
+    brace = curlyBrace(fig, ax, p1, p2, k_r=k_r, bool_auto=True, str_text=label,
+                       int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
+    # if label:
+    #     y_center = (y0 + y1) / 2.0
+    #     # Place the label to the left of the brace.
+    #     ax.text(x - xoffset, y_center, label,
+    #             ha="center", va="center", fontsize=12, fontweight="normal",
+    #             color='black', clip_on=False, rotation=rot_label, rotation_mode='anchor',
+    #             transform=ax.transData)
+def add_horizontal_brace_curly(ax, x0, x1, y, label=None, k_r=0.1, int_line_num=2, fontdict=None, **kwargs):
+    """
+    Add a horizontal curly brace using the curlyBrace package.
+    The brace is drawn at the given y coordinate.
+    """
+    fig = ax.figure
+
+    fontdict = fontdict or {}
+    if 'fontsize' in kwargs:
+        fontdict['fontsize'] = kwargs.pop('fontsize')
+
+    # Swap p1 and p2 so that the brace opens toward the plot.
+    p1 = [x1, y]
+    p2 = [x0, y]
+    brace = curlyBrace(fig, ax, p2, p1, k_r=k_r, bool_auto=True, str_text=label,
+                       int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
+    # if label:
+    #     x_center = (x0 + x1) / 2.0
+    #     # Adjust the offset so the label appears above the brace.
+    #     ax.text(x_center, y - 12 , label,
+    #             ha="center", va="bottom", fontsize=12, fontweight="normal", color='black', clip_on=False)
+
+
+def plot_top_feature_pc_single_contributors(contributions, p1, p2, s, condition_label, save_dir):
+    from collections import defaultdict
+
+    # Group series by stride:
+    feature_data_by_stride = defaultdict(list)
+    pc_data_by_stride = defaultdict(list)
+
+    for key, contr in contributions.items():
+        # Key example: ('1035243', 'APA2', 'Wash2', -3)
+        stride = key[-1]
+        feature_data_by_stride[stride].append(contr.single_feature_contribution)
+        pc_data_by_stride[stride].append(contr.single_pc_contribution)
+
+    # Compute the mean contributions for each stride:
+    feature_median_by_stride = {}
+    pc_median_by_stride = {}
+    for stride, series_list in feature_data_by_stride.items():
+        # Convert list of Series to DataFrame and compute column-wise mean
+        df_features = pd.DataFrame(series_list)
+        feature_median_by_stride[stride] = df_features.median()
+
+    for stride, series_list in pc_data_by_stride.items():
+        df_pcs = pd.DataFrame(series_list)
+        pc_median_by_stride[stride] = df_pcs.median()
+
+    # Plotting: Generate a bar plot for each stride – one for features and one for PCs.
+    for stride, median_series in feature_median_by_stride.items():
+        plt.figure(figsize=(10, 6))
+        median_series.sort_values().plot(kind='bar')
+        plt.title(f'Mean Single Feature Contribution for Stride {stride}')
+        plt.ylabel('Contribution')
+        plt.xlabel('Feature')
+        plt.ylim(0.5, 1.1)
+        plt.tight_layout()
+
+        save_path = os.path.join(save_dir,f'MeanSingleFeatureContributions__{p1}vs{p2}_stride{s}_{condition_label}.png')
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+
+    for stride, median_series in pc_median_by_stride.items():
+        plt.figure(figsize=(8, 6))
+        median_series.sort_values().plot(kind='bar')
+        plt.title(f'Mean Single PC Contribution for Stride {stride}')
+        plt.ylabel('Contribution')
+        plt.xlabel('PC')
+        plt.ylim(0.5, 1.1)
+        plt.tight_layout()
+
+        save_path = os.path.join(save_dir,f'MeanSinglePCContributions__{p1}vs{p2}_stride{s}_{condition_label}.png')
+        plt.savefig(save_path, dpi=300)
+        plt.close()
 
 
 

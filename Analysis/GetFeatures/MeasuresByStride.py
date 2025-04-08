@@ -233,6 +233,9 @@ class CalculateMeasuresByStride():
             return length - self.calculate_belt_x_displacement()
 
     def net_displacement_rel(self, coord, bodypart, step_phase, all_vals, full_stride, buffer_size=0.25):
+        """
+        The difference in bodypart coordinates in x, y, z relative to tailbase from start to end of step phase.
+        """
         if bodypart == 'FrontIpsi':
             bodypart = 'ForepawToe%s' % utils.Utils().picking_left_or_right(self.stepping_limb, 'ipsi')
         elif bodypart == 'FrontContra':
@@ -706,7 +709,12 @@ class CalculateMeasuresByStride():
 
     def limb_rel_to_body(self, time, step_phase, all_vals, full_stride,
                          buffer_size=0.25):  # back1 is 1, back 12 is 0, further forward than back 1 is 1+
-        ### WARNING: while mapping is not fixed, this will be nonsense as back and legs mapped separately
+        """
+        The relative position of the stepping limb to the body, normalized to the distance between Back1 and Back12.
+        A value of 0 indicates that the limb is at the same position as Back12, while a value of 1 indicates that
+        the limb is at the same position as Back1. Values greater than 1 indicate that the limb is further forward
+        than Back1.
+        """
         limb_name = self.convert_notoe_to_toe(self.stepping_limb)
         if full_stride:
             buffer_chunk = self.get_buffer_chunk(buffer_size)

@@ -626,3 +626,272 @@ measures_list_feature_reduction = {
 }
 
 
+measures_list_manual_reduction = {
+            'stride_duration': [],
+            'cadence': [],
+            'duty_factor': [],
+            'brake_prop_duration': {
+                'type': ['brake', 'propulsion'],
+            },
+            'walking_speed': {
+                'bodypart': ['Tail1'],
+                'speed_correct': [True]
+            },
+            'swing_velocity': {
+                'speed_correct': [True]
+            },
+            'stride_length': {
+                'speed_correct': [True]
+            },
+            'stance_phase': {
+                'stance_limb': ['contra_front', 'contra_hind', 'ipsi_hind']
+            },
+            'nose_tail_phase': {
+                'bodypart': ['Nose', 'Tail1'],
+                'frontback': ['front', 'hind'],
+                'coord': ['x', 'y', 'z'],
+            },
+            'double_support': {
+                'type': ['frontonly'],#, 'homolateral', 'diagonal'],
+            },
+            'triple_support': {
+                'mode': ['any'],#, 'front_hind'],
+            },
+            'quadruple_support': [],
+            'distance_to_transition': {
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'distance_from_midline': {
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'coo_euclidean': [],
+            'bos_stancestart': {
+                'ref_or_contr': ['ref','contr'],
+                'y_or_euc': ['y','euc']
+            },
+            'ptp_amplitude_stride': {
+                'bodypart': ['Tail1','Back6']
+            },
+            'body_length': {
+                'bodyparts': [['Back1','Back12']],
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            'back_height': {
+                'back_label': ['Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12'],
+                'step_phase': [None],
+                'all_vals': [False],
+                'full_stride': [True],
+                'buffer_size': [0]
+            },
+            'tail_height': {
+                'tail_label': ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12'],
+                'step_phase': [None],
+                'all_vals': [False],
+                'full_stride': [True],
+                'buffer_size': [0]
+            },
+            'back_skew': {
+                'step_phase': ['0', '1'],
+                'all_vals': [False],
+                'full_stride': [False],
+                'buffer_size': [0]
+            },
+            # 'limb_rel_to_body': {
+            #     'time': ['start','end'],
+            #     'step_phase': ['0', '1', None],
+            #     'all_vals': [False],
+            #     'full_stride': [True, False],
+            #     'buffer_size': [0]
+            # },
+            'signed_angle': {
+                'ToeKnuckle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeKnuckle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_ipsi_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'ToeAnkle_contra_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'Back1Back12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'NoseBack1_side_zref_swing_mean': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Back1Back12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'mean',0],
+                'Tail1Tail12_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                'NoseBack1_overhead_xref_swing_mean': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'mean', 0],
+                # maybe should add in some stance values for angle!
+                'ToeKnuckle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeKnuckle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontKnuckleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_ipsi_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['FrontAnkleIpsi', 'FrontToeIpsi'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'ToeAnkle_contra_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]),['FrontAnkleContra', 'FrontToeContra'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'Back1Back12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'NoseBack1_side_zref_swing_peak': [np.array([0, 0, 1]), np.array([0, 1, 0]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Back1Back12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Back1', 'Back12'],locostuff['swst_vals_2025']['sw'],False,False,'peak',0],
+                'Tail1Tail12_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Tail1', 'Tail12'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+                'NoseBack1_overhead_xref_swing_peak': [np.array([1, 0, 0]), np.array([0, 0, 1]), ['Nose', 'Back1'],locostuff['swst_vals_2025']['sw'],False,False,'peak', 0],
+            }
+}
+
+manual_clusters = {
+    'cluster_values': {
+        'Gait timing': 1,
+        'Gait stability': 2,
+        'Positioning on belt': 3,
+        'Limb coordination': 4,
+        'Limb-Body coordination': 5,
+        'Body coordination/positioning': 6,
+    },
+    'cluster_mapping': {
+        # Gait timing: cluster 1
+        'stride_duration': 1,
+        'stride_length|speed_correct:True': 1,
+        'cadence': 1,
+        'brake_prop_duration|type:brake': 1,
+        'brake_prop_duration|type:propulsion': 1,
+        'walking_speed|bodypart:Tail1, speed_correct:True': 1,
+        'swing_velocity|speed_correct:True': 1,
+
+        # Gait stability: cluster 2
+        'duty_factor': 2,
+        'average_support_val': 2,
+        'bos_stancestart|ref_or_contr:ref, y_or_euc:y': 2,
+        'bos_stancestart|ref_or_contr:ref, y_or_euc:euc': 2,
+        'bos_stancestart|ref_or_contr:contr, y_or_euc:y': 2,
+        'bos_stancestart|ref_or_contr:contr, y_or_euc:euc': 2,
+        'coo_euclidean': 2,
+
+        # Positioning on belt: cluster 3
+        'distance_to_transition|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 3,
+        'distance_to_transition|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 3,
+        'distance_from_midline|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 3,
+        'distance_from_midline|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 3,
+
+        # Limb coordination: cluster 4
+        'stance_phase|stance_limb:contra_front': 4,
+        'stance_phase|stance_limb:contra_hind': 4,
+        'stance_phase|stance_limb:ipsi_hind': 4,
+
+        # Limb-Body coordination: cluster 5
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:x': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:x': 5,
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:y': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:y': 5,
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:z': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:z': 5,
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:x': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:x': 5,
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:y': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:y': 5,
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:z': 5,
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:z': 5,
+
+        # Body coordination/positioning: cluster 6
+        'ptp_amplitude_stride|bodypart:Tail1': 6,
+        'ptp_amplitude_stride|bodypart:Back6': 6,
+        "body_length|bodyparts:['Back1', 'Back12'], step_phase:0, all_vals:False, full_stride:False, buffer_size:0": 6,
+        "body_length|bodyparts:['Back1', 'Back12'], step_phase:1, all_vals:False, full_stride:False, buffer_size:0": 6,
+        'back_height_mean': 6,
+        'tail_height_mean': 6,
+        'back_skew|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 6,
+        'back_skew|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 6,
+        'signed_angle|ToeKnuckle_ipsi_side_zref_swing_mean': 6,
+        'signed_angle|ToeKnuckle_contra_side_zref_swing_mean': 6,
+        'signed_angle|ToeAnkle_ipsi_side_zref_swing_mean': 6,
+        'signed_angle|ToeAnkle_contra_side_zref_swing_mean': 6,
+        'signed_angle|Back1Back12_side_zref_swing_mean': 6,
+        'signed_angle|Tail1Tail12_side_zref_swing_mean': 6,
+        'signed_angle|NoseBack1_side_zref_swing_mean': 6,
+        'signed_angle|Back1Back12_overhead_xref_swing_mean': 6,
+        'signed_angle|Tail1Tail12_overhead_xref_swing_mean': 6,
+        'signed_angle|NoseBack1_overhead_xref_swing_mean': 6,
+        'signed_angle|ToeKnuckle_ipsi_side_zref_swing_peak': 6,
+        'signed_angle|ToeKnuckle_contra_side_zref_swing_peak': 6,
+        'signed_angle|ToeAnkle_ipsi_side_zref_swing_peak': 6,
+        'signed_angle|ToeAnkle_contra_side_zref_swing_peak': 6,
+        'signed_angle|Back1Back12_side_zref_swing_peak': 6,
+        'signed_angle|Tail1Tail12_side_zref_swing_peak': 6,
+        'signed_angle|NoseBack1_side_zref_swing_peak': 6,
+        'signed_angle|Back1Back12_overhead_xref_swing_peak': 6,
+        'signed_angle|Tail1Tail12_overhead_xref_swing_peak': 6,
+        'signed_angle|NoseBack1_overhead_xref_swing_peak': 6
+    }
+}
+
+short_names = {
+        'stride_duration': 'Stride duration',
+        'stride_length|speed_correct:True': 'Stride length',
+        'cadence': 'Cadence',
+        'brake_prop_duration|type:brake': 'Brake duration',
+        'brake_prop_duration|type:propulsion': 'Propulsion duration',
+        'walking_speed|bodypart:Tail1, speed_correct:True': 'Walking speed',
+        'swing_velocity|speed_correct:True': 'Swing velocity',
+
+        # Gait stability: cluster 2
+        'duty_factor': 'Duty factor',
+        'average_support_val': 'Average support value',
+        'bos_stancestart|ref_or_contr:ref, y_or_euc:y': 'BOS (stepping limb stance) - y distance',
+        'bos_stancestart|ref_or_contr:ref, y_or_euc:euc': 'BOS (stepping limb stance) - euclidean distance',
+        'bos_stancestart|ref_or_contr:contr, y_or_euc:y': 'BOS (Contralateral limb stance) - y distance',
+        'bos_stancestart|ref_or_contr:contr, y_or_euc:euc': 'BOS (Contralateral limb stance) - euclidean distance',
+        'coo_euclidean': 'Center of oscillation - euclidean distance',
+
+        # Positioning on belt: cluster 3
+        'distance_to_transition|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 'Distance to transition - swing',
+        'distance_to_transition|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 'Distance to transition - stance',
+        'distance_from_midline|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 'Distance from midline - swing',
+        'distance_from_midline|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 'Distance from midline - stance',
+
+        # Limb coordination: cluster 4
+        'stance_phase|stance_limb:contra_front': 'Stance phase - contralateral front limb',
+        'stance_phase|stance_limb:contra_hind': 'Stance phase - contralateral hind limb',
+        'stance_phase|stance_limb:ipsi_hind': 'Stance phase - ipsilateral hind limb',
+
+        # Limb-Body coordination: cluster 5
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:x': 'Nose phase (forepaws) in x',
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:x': 'Tail phase (forepaws) in x',
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:y': 'Nose phase (forepaws) in y',
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:y': 'Tail phase (forepaws) in y',
+        'nose_tail_phase|bodypart:Nose, frontback:front, coord:z': 'Nose phase (forepaws) in z',
+        'nose_tail_phase|bodypart:Tail1, frontback:front, coord:z': 'Tail phase (forepaws) in z',
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:x':  'Nose phase (hindpaws) in x',
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:x': 'Tail phase (hindpaws) in x',
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:y': 'Nose phase (hindpaws) in y',
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:y': 'Tail phase (hindpaws) in y',
+        'nose_tail_phase|bodypart:Nose, frontback:hind, coord:z': 'Nose phase (hindpaws) in z',
+        'nose_tail_phase|bodypart:Tail1, frontback:hind, coord:z': 'Tail phase (hindpaws) in z',
+
+        # Body coordination/positioning: cluster 6
+        'ptp_amplitude_stride|bodypart:Tail1': 'Peak to peak amplitude - Tail1',
+        'ptp_amplitude_stride|bodypart:Back6': 'Peak to peak amplitude - Back6',
+        "body_length|bodyparts:['Back1', 'Back12'], step_phase:0, all_vals:False, full_stride:False, buffer_size:0": 'Body length - swing',
+        "body_length|bodyparts:['Back1', 'Back12'], step_phase:1, all_vals:False, full_stride:False, buffer_size:0": 'Body length - stance',
+        'back_height_mean': 'Back height mean',
+        'tail_height_mean': 'Tail height mean',
+        'back_skew|step_phase:0, all_vals:False, full_stride:False, buffer_size:0': 'Back skew - swing',
+        'back_skew|step_phase:1, all_vals:False, full_stride:False, buffer_size:0': 'Back skew - stance',
+        'signed_angle|ToeKnuckle_ipsi_side_zref_swing_mean': 'Ipsi Toe-Knuckle angle - sagittal (mean)',
+        'signed_angle|ToeKnuckle_contra_side_zref_swing_mean': 'Contra Toe-Knuckle angle - sagittal (mean)',
+        'signed_angle|ToeAnkle_ipsi_side_zref_swing_mean': 'Ipsi Toe-Ankle angle - sagittal (mean)',
+        'signed_angle|ToeAnkle_contra_side_zref_swing_mean': 'Contra Toe-Ankle angle - sagittal (mean)',
+        'signed_angle|Back1Back12_side_zref_swing_mean': 'Back angle - sagittal (mean)',
+        'signed_angle|Tail1Tail12_side_zref_swing_mean': 'Tail angle - sagittal (mean)',
+        'signed_angle|NoseBack1_side_zref_swing_mean': 'Head angle - sagittal (mean)',
+        'signed_angle|Back1Back12_overhead_xref_swing_mean': 'Back angle - axial (mean)',
+        'signed_angle|Tail1Tail12_overhead_xref_swing_mean': 'Tail angle - axial (mean)',
+        'signed_angle|NoseBack1_overhead_xref_swing_mean': 'Head angle - axial (mean)',
+        'signed_angle|ToeKnuckle_ipsi_side_zref_swing_peak': 'Ipsi Toe-Knuckle angle - sagittal (peak)',
+        'signed_angle|ToeKnuckle_contra_side_zref_swing_peak': 'Contra Toe-Knuckle angle - sagittal (peak)',
+        'signed_angle|ToeAnkle_ipsi_side_zref_swing_peak': 'Ipsi Toe-Ankle angle - sagittal (peak)',
+        'signed_angle|ToeAnkle_contra_side_zref_swing_peak': 'Contra Toe-Ankle angle - sagittal (peak)',
+        'signed_angle|Back1Back12_side_zref_swing_peak': 'Back angle - sagittal (peak)',
+        'signed_angle|Tail1Tail12_side_zref_swing_peak': 'Tail angle - sagittal (peak)',
+        'signed_angle|NoseBack1_side_zref_swing_peak': 'Head angle - sagittal (peak)',
+        'signed_angle|Back1Back12_overhead_xref_swing_peak': 'Back angle - axial (peak)',
+        'signed_angle|Tail1Tail12_overhead_xref_swing_peak': 'Tail angle - axial (peak)',
+        'signed_angle|NoseBack1_overhead_xref_swing_peak': 'Head angle - axial (peak)',
+}

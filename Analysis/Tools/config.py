@@ -33,31 +33,34 @@ instance_settings = [
         "day": None,
         "compare_condition": 'APAChar_HighLow',
     },
-    {
-        "condition": 'APAChar_HighLow',
-        "exp": 'Extended',
-        "day": None,
-        "compare_condition": 'APAChar_LowHigh',
-    }
+    # {
+    #     "condition": 'APAChar_HighLow',
+    #     "exp": 'Extended',
+    #     "day": None,
+    #     "compare_condition": 'APAChar_LowHigh',
+    # }
 ]
 
 # --------------------------- Global settings: -------------------------------
 global_settings = {
-    "stride_numbers": [-3,-2,-1],
-    "phases": ['APA2','Wash2'],
-    "script_version": 'SingleCondition', # todo if combine MultiCondition and SingleCondition this will determine which of those is run
+    "stride_numbers": [-3,-2,-1],#[-3,-2,-1],#[0]
+    "phases": ['APA2','Wash2'], #['APA2','Wash2'], #['APA1', 'APA2'],
+    "script_version": 'SingleCondition',
     "allmice": True,
     "method": 'rfecv',
     "cluster_method": "kmeans",
     "cluster_all_strides": True,
-    "select_features": True,
+    "select_features": False,
     "pool_mice": False,
-    "multi_strides": True,
+    "pca_CombineAllConditions": False,
+    "pca_CombineAllStrides": True,
+    "pcs_to_show": 12,
+    "pcs_to_use": 10,
+    #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": False,
-    "combine_stride_features": False,
+    "combine_stride_features": True,
     "plot_raw_features": False,
-    # less frequently changed settings:
     "n_iterations_selection": 100,
     "nFolds_selection": 5,
     "mouse_pool_thresh": 0.85,

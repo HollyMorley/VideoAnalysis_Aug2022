@@ -28,12 +28,14 @@ from Analysis.Tools.PCA import (compute_global_pca_for_phase)
 from Analysis.Tools import utils_feature_reduction as utils
 from Helpers.Config_23 import *
 from Analysis.Tools.config import (
-    base_save_dir_no_c, global_settings, condition_specific_settings, instance_settings
+    condition_specific_settings, instance_settings, global_settings
 )
 
 sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
+
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReduction\\Round23-9mice_ManualFeatRed_Perturbation_NoSelection')
 
 # -----------------------------------------------------
 # Initialization Helper
@@ -54,17 +56,42 @@ def initialize_experiment(condition, exp, day, compare_condition, settings_to_lo
     for stride in global_settings["stride_numbers"]:
         for mouse_id in condition_specific_settings[condition]['global_fs_mouse_ids']:
             # Load and preprocess data for each mouse.
-            filtered_data_df = utils.load_and_preprocess_data(mouse_id, stride, condition, exp, day, measures_list_feature_reduction)
+            filtered_data_df = utils.load_and_preprocess_data(mouse_id, stride, condition, exp, day, measures_list_manual_reduction)
             feature_data[(stride, mouse_id)] = filtered_data_df
         for mouse_id in condition_specific_settings[compare_condition]['global_fs_mouse_ids']:
-            filtered_data_comparison_df = utils.load_and_preprocess_data(mouse_id, stride, compare_condition, exp, day, measures_list_feature_reduction)
+            filtered_data_comparison_df = utils.load_and_preprocess_data(mouse_id, stride, compare_condition, exp, day, measures_list_manual_reduction)
             feature_data_compare[(stride, mouse_id)] = filtered_data_comparison_df
 
+    # Edit the feature data based on my manual feature reduction
     feature_data_df = pd.concat(feature_data, axis=0)
+    feature_data_df = process_features(feature_data_df)
+
     feature_data_compare = pd.concat(feature_data_compare, axis=0)
+    feature_data_compare = process_features(feature_data_compare)
 
     return feature_data_df, feature_data_compare, stride_data, stride_data_compare, base_save_dir, base_save_dir_condition
 
+
+def process_features(df):
+    # Replace back heights with their mean.
+    back_cols = [col for col in df.columns if col.startswith('back_height|')]
+    df['back_height_mean'] = df[back_cols].mean(axis=1)
+    df.drop(columns=back_cols, inplace=True)
+
+    # Replace tail heights with their mean.
+    tail_cols = [col for col in df.columns if col.startswith('tail_height|')]
+    df['tail_height_mean'] = df[tail_cols].mean(axis=1)
+    df.drop(columns=tail_cols, inplace=True)
+
+    # Replace double, triple, and quadruple support with an average support value.
+    double_name = [col for col in df.columns if col.startswith('double_support')]
+    triple_name = [col for col in df.columns if col.startswith('triple_support')]
+    quadruple_name = [col for col in df.columns if col.startswith('quadruple_support')]
+    average_support_val = (2 * df[double_name].values + 3 * df[triple_name].values + 4 * df[
+        quadruple_name].values) / 100
+    df['average_support_val'] = average_support_val
+    df.drop(columns=double_name + triple_name + quadruple_name, inplace=True)
+    return df
 
 # -----------------------------------------------------
 # Main Execution Function
@@ -88,8 +115,8 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
             - NB ****** NOT SCALED YET!!!! ******
         """
         print("Finding outliers...")
-        feature_data_notscaled = find_outliers(feature_data_notscaled, condition, exp, day, stride_data, phases, stride_numbers, base_save_dir_condition)
-        feature_data_compare_notscaled = find_outliers(feature_data_compare_notscaled, compare_condition, exp, day, stride_data_compare, phases, stride_numbers, base_save_dir_condition)
+        feature_data_notscaled = find_outliers(feature_data_notscaled, None, condition, compare_condition, exp, day, stride_data, None, phases, stride_numbers, base_save_dir_condition)
+        feature_data_compare_notscaled = find_outliers(feature_data_compare_notscaled, None, compare_condition, condition, exp, day, stride_data_compare, None, phases, stride_numbers, base_save_dir_condition)
 
         """
             # -------- Scale Data --------
@@ -123,8 +150,12 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
             used to plot feature clustering and a chart describing the content of each cluster.
         """
         print("Clustering features...")
-        cluster_mappings = cluster_features_main(feature_data, feature_data_compare, phases, stride_numbers, condition, compare_condition, stride_data, stride_data_compare, base_save_dir_condition, combine_conditions=False)
-
+        #cluster_mappings = cluster_features_main(feature_data, feature_data_compare, phases, stride_numbers, condition, compare_condition, stride_data, stride_data_compare, base_save_dir_condition, combine_conditions=False)
+        print("Clustering features...")
+        cluster_mappings = {}
+        for p1, p2 in itertools.combinations(phases,2):
+            for s in stride_numbers:
+                cluster_mappings[(p1, p2, s)] = manual_clusters['cluster_mapping']
         """
             # -------- Global Feature Selection + Global PCA --------
             (Main condition)
@@ -146,24 +177,25 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         """
         print("Processing mice...")
         results = process_mice_main(mouse_ids, phases, stride_numbers, condition, exp, day,
-                                        stride_data, base_save_dir_condition, feature_data,
-                                      global_fs_results, global_pca_results, global_stride_fs_results, cluster_mappings)
+                                    stride_data, base_save_dir_condition, feature_data,
+                                    global_fs_results, global_pca_results, global_stride_fs_results, cluster_mappings)
         (aggregated_predictions, aggregated_feature_weights, aggregated_raw_features, aggregated_raw_features_all,
          aggregated_cluster_loadings, multi_stride_data, even_ws, odd_ws,
          phase1_pc, phase2_pc, normalize_mean_pc, normalize_std_pc) = results
 
         results_compare = process_mice_main(mouse_ids, phases, stride_numbers, compare_condition, exp, day,
-                                        stride_data_compare, base_save_dir_condition, feature_data_compare,
-                                        global_fs_results, global_pca_results, global_stride_fs_results, cluster_mappings)
-        (aggregated_predictions_compare, aggregated_feature_weights_compare, aggregated_raw_features_compare, aggregated_raw_features_all_compare,
+                                            stride_data_compare, base_save_dir_condition, feature_data_compare,
+                                            global_fs_results, global_pca_results, global_stride_fs_results,
+                                            cluster_mappings)
+        (aggregated_predictions_compare, aggregated_feature_weights_compare, aggregated_raw_features_compare,
+         aggregated_raw_features_all_compare,
          aggregated_cluster_loadings_compare, multi_stride_data_compare, even_ws_compare, odd_ws_compare,
          phase1_pc_compare, phase2_pc_compare, normalize_mean_pc_compare, normalize_std_pc_compare) = results_compare
-
 
         # Save the aggregated data to a pickle file.
         print("Saving computed global data...")
         global_data = {
-            "cluster_mappings": cluster_mappings,
+           # "cluster_mappings": cluster_mappings,
             "global_pca_results": global_pca_results,
             "global_fs_results": global_fs_results,
             "global_stride_fs_results": global_stride_fs_results,
@@ -175,8 +207,8 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
             "aggregated_raw_features_compare": aggregated_raw_features_compare,
             "aggregated_raw_features_all": aggregated_raw_features_all,
             "aggregated_raw_features_all_compare": aggregated_raw_features_all_compare,
-            "aggregated_cluster_loadings": aggregated_cluster_loadings,
-            "aggregated_cluster_loadings_compare": aggregated_cluster_loadings_compare,
+            # "aggregated_cluster_loadings": aggregated_cluster_loadings,
+            # "aggregated_cluster_loadings_compare": aggregated_cluster_loadings_compare,
             "multi_stride_data": multi_stride_data,
             "multi_stride_data_compare": multi_stride_data_compare,
             "even_ws": even_ws,
@@ -211,8 +243,8 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     aggregated_save_dir = os.path.join(base_save_dir_condition, "Aggregated")
     os.makedirs(aggregated_save_dir, exist_ok=True)
 
-    # Plot aggregated cluster loadings.
-    utils.plot_cluster_loadings_lines(global_data["aggregated_cluster_loadings"], aggregated_save_dir)
+    # # Plot aggregated cluster loadings.
+    # utils.plot_cluster_loadings_lines(global_data["aggregated_cluster_loadings"], aggregated_save_dir)
 
     def unnormalize_top_features(df_p1, df_p2, norm_dict, mouse_ids, stride):
         df1, df2 = df_p1.copy(), df_p2.copy()
@@ -252,9 +284,6 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                 utils.plot_top_feature_phase_comparison_differences([real_p1, real_p2],
                                                                     base_save_dir, phase1, phase2, stride,
                                                                     condition_label=label)
-                back_data, back_orig = utils.get_back_data(raw_feats_all, norm_dict[(stride, mouse_ids[0])], phase1, phase2,
-                                                           stride)
-                utils.plot_back_phase_comparison(back_orig, base_save_dir, phase1, phase2, stride, condition_label=label)
             Top_Feats[(phase1, phase2, stride)] = top_feats
         return out, Top_Feats
 
@@ -266,40 +295,24 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                                      condition_specific_settings[condition]['global_fs_mouse_ids'],
                                      condition)
 
-    compare_dict, _ = build_condition_dict_and_plot(global_data["aggregated_predictions_compare"],
-                                        global_data["aggregated_feature_weights_compare"],
-                                        global_data["aggregated_raw_features_compare"],
-                                        global_data["aggregated_raw_features_all_compare"],
-                                        global_data["normalize_compare"],
-                                        condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
-                                        compare_condition)
 
-    compare_BaseCon_feats_dict, _ = build_condition_dict_and_plot(global_data["aggregated_predictions_compare"],
-                                        global_data["aggregated_feature_weights_compare"],
-                                        global_data["aggregated_raw_features_compare"],
-                                        global_data["aggregated_raw_features_all_compare"],
-                                        global_data["normalize_compare"],
-                                        condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
-                                        compare_condition,
-                                        top_feats_preset=top_feats)
-
-    for key, real_data in real_dict.items():
-        comp_data = compare_dict[key]
-        comp_BaseCon_Feat_data = compare_BaseCon_feats_dict[key]
-        utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
-                                                                           comp_data,
-                                                                           base_save_dir,
-                                                                           *key,
-                                                                           condition_label=condition,
-                                                                           compare_condition_label=compare_condition,
-                                                                           suffix='Sep Top Features')
-        utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
-                                                                           comp_BaseCon_Feat_data,
-                                                                           base_save_dir,
-                                                                           *key,
-                                                                           condition_label=condition,
-                                                                           compare_condition_label=compare_condition,
-                                                                           suffix='LowHigh Top Features')
+    # for key, real_data in real_dict.items():
+    #     comp_data = compare_dict[key]
+    #     comp_BaseCon_Feat_data = compare_BaseCon_feats_dict[key]
+    #     utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
+    #                                                                        comp_data,
+    #                                                                        base_save_dir,
+    #                                                                        *key,
+    #                                                                        condition_label=condition,
+    #                                                                        compare_condition_label=compare_condition,
+    #                                                                        suffix='Sep Top Features')
+    #     utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
+    #                                                                        comp_BaseCon_Feat_data,
+    #                                                                        base_save_dir,
+    #                                                                        *key,
+    #                                                                        condition_label=condition,
+    #                                                                        compare_condition_label=compare_condition,
+    #                                                                        suffix='LowHigh Top Features')
 
 
 
@@ -311,13 +324,12 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         # create a selected feature order based on cluster mapping
         fs_results = global_data["global_stride_fs_results"][(phase1, phase2)] if global_settings["combine_stride_features"] else global_data["global_fs_results"][(phase1, phase2, stride_number)]
         selected_features = fs_results
-        cluster_mapping = global_data["cluster_mappings"][(phase1, phase2, stride_number)]
-        selected_features_sorted = sorted(selected_features, key=lambda f: cluster_mapping.get(f))
-        feature_cluster_assignments = {feat: cluster_mapping.get(feat) for feat in selected_features_sorted}
+        # cluster_mapping = global_data["cluster_mappings"][(phase1, phase2, stride_number)]
+        # selected_features_sorted = sorted(selected_features, key=lambda f: cluster_mapping.get(f))
+        # feature_cluster_assignments = {feat: cluster_mapping.get(feat) for feat in selected_features_sorted}
 
         utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        utils.plot_aggregated_feature_weights_byFeature(global_data["aggregated_feature_weights"], selected_features_sorted, feature_cluster_assignments, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        #utils.plot_aggregated_feature_weights_byRun(aggregated_feature_weights, aggregated_raw_features, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
+        #utils.plot_aggregated_feature_weights_byFeature(global_data["aggregated_feature_weights"], selected_features_sorted, feature_cluster_assignments, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_aggregated_raw_features(global_data["aggregated_raw_features"], aggregated_save_dir, phase1, phase2, stride_number)
         utils.plot_regression_loadings_PC_space_across_mice(global_data["global_pca_results"], global_data["aggregated_feature_weights"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_even_odd_PCs_across_mice(global_data["even_ws"], global_data["odd_ws"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
@@ -350,135 +362,9 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                 utils.plot_multi_stride_predictions_difference(stride_dict, phase1, phase2, aggregated_save_dir, condition_label=condition, smooth=smooth, normalize=normalize)
         summary_curves_dict, summary_derivatives_dict, plateau_dict, learning_rate_dict,_ = utils.fit_exponential_to_prediction(stride_dict, aggregated_save_dir, phase1, phase2, condition, exp)
 
-
-    """
-    Fitting derivative curve to APA phase data
-    """
-    derivative_save_dir = os.path.join(base_save_dir, "Derivative")
-    derivative_save_dir_condition = os.path.join(base_save_dir_condition, "Derivative")
-    global_pca_derivative_results = {}
-    for phase1, phase2 in itertools.combinations(phases, 2):
-        for stride_number in stride_numbers:
-            y_reg_dict = summary_derivatives_dict[(phase1, phase2, stride_number)]['individual']
-            available_mice = y_reg_dict.keys()
-
-            allmice_data_selected = {}
-            allmice_data = {}
-            all_mice_data_broad = {}
-            for mouse_id in condition_specific_settings[condition]['global_fs_mouse_ids']:
-                # ----------------- Get data and features -----------------
-                scaled_data_df, selected_scaled_data_df, run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.select_runs_data(
-                    mouse_id, stride_number, feature_data, stride_data, 'APA1', 'APA2')
-                if mouse_id in available_mice:
-                    allmice_data_selected[mouse_id] = selected_scaled_data_df
-                    allmice_data[mouse_id] = scaled_data_df
-                all_mice_data_broad[mouse_id] = scaled_data_df
-
-            features = list(all_mice_data_broad[mouse_id].T.index) # todo maybe eventually select the features
-
-            # ---------------- Compute global PCA ---------------------
-            pca, loadings_df = compute_global_pca_for_phase(
-                feature_data, None,
-                condition_specific_settings[condition]['global_fs_mouse_ids'], None,
-                stride_number, 'APA1', 'APA2', stride_data, None, features, combine_conditions=False, n_components=global_settings["pcs_to_show"])
-            global_pca_derivative_results[('APA1', 'APA2', stride_number)] = (pca, loadings_df)
-
-            # Retrieve the stored cluster mapping for this (phase1, phase2, stride_number)
-            current_cluster_mapping = cluster_mappings.get((phase1, phase2, stride_number), {})
-
-            X_all = pd.concat(allmice_data_selected.values(), axis=1).T # todo check axis
-            Xdr_all = np.dot(loadings_df.T, X_all.T)
-            Xdr_all, normalize_mean_all, normalize_std_all = utils.normalize_Xdr(Xdr_all)
-
-            y_reg_zeroed = []
-            y_reg_dict_zeroed = {}
-            for m in available_mice:
-                expected_runs = expstuff['condition_exp_runs'][condition.split('_')[0]][exp]['APA']
-                available_runs = allmice_data_selected[m].T.index
-                run_mask = np.isin(expected_runs, available_runs)
-                # subtract mean
-                mean = np.mean(y_reg_dict[m])
-                y = y_reg_dict[m] - mean
-                y = y[run_mask]
-                y_reg_dict_zeroed[m] = [y, available_runs]
-                y_reg_zeroed.append(y)
-            y_reg_all = np.concatenate(y_reg_zeroed)
-
-            model = LinearRegression(fit_intercept=False)
-            model.fit(Xdr_all.T, y_reg_all)
-            w = model.coef_
-
-            y_pred = np.dot(w, Xdr_all)
-            # y_check_acc = y_pred.copy()
-            # y_check_acc[y_check_acc > 0] = 1
-            # y_check_acc[y_check_acc <= 0] = 0
-            # bal_acc = balanced_accuracy(y_reg_all.T, y_check_acc.T)
-
-            # predict for each mouse
-            predictions = {}
-            X_vals = {}
-            interpolated_curves = []
-
-            common_x = np.arange(0, 160, 1)
-
-            plt.figure(figsize=(10, 8))
-            for m in condition_specific_settings[condition]['global_fs_mouse_ids']:
-                try:
-                    all_trials_dr = np.dot(loadings_df.T, all_mice_data_broad[m].T)
-                    all_trials_dr = ((all_trials_dr.T - normalize_mean_all) / normalize_std_all).T
-                    run_pred_scaled = np.dot(w, all_trials_dr)
-
-                    kernel_size = 5
-                    padded_run_pred_scaled = np.pad(run_pred_scaled, pad_width=kernel_size, mode='reflect')
-                    smoothed_scaled_pred = medfilt(padded_run_pred_scaled, kernel_size=kernel_size)
-                    smoothed_scaled_pred = smoothed_scaled_pred[kernel_size:-kernel_size]
-
-                    x_vals = list(all_mice_data_broad[m].index)
-
-                    # Plot run prediction
-                    # utils.plot_run_prediction(all_mice_data_broad[m], run_pred_scaled, smoothed_scaled_pred,
-                    #                           save_path, mouse_id, phase1, phase2, stride_number,
-                    #                           scale_suffix="scaled", dataset_suffix=condition_name)
-                    predictions[m] = smoothed_scaled_pred
-                    X_vals[m] = x_vals
-
-                    max_abs = max(abs(smoothed_scaled_pred.min()), abs(smoothed_scaled_pred.max()))
-                    normalized_curve = smoothed_scaled_pred / max_abs if max_abs != 0 else smoothed_scaled_pred
-
-                    interp_curve = np.interp(common_x, x_vals, normalized_curve)
-                    interpolated_curves.append(interp_curve)
-
-                    plt.plot(common_x, interp_curve, label=f'Mouse {m}', alpha=0.3)
-
-                except:
-                    # skip if mouse has no data
-                    continue
-
-            all_curves_array = np.vstack(interpolated_curves)
-            mean_curve = np.mean(all_curves_array, axis=0)
-            plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
-
-            plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
-            plt.title(
-                f'Aggregated Scaled Run Predictions using derivative of APA curve, stride {stride_number}')
-            plt.xlabel('Run Number')
-            plt.ylabel('Normalized Prediction (Smoothed)')
-            plt.ylim(-1, 1)
-            plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
-            plt.grid(False)
-            plt.gca().yaxis.grid(True)
-            plt.tight_layout()
-
-            save_path_full = os.path.join(derivative_save_dir_condition,
-                                          f"Aggregated_Run_Predictions_derivativeAPAcurve_stride{stride_number}.png")
-            os.makedirs(derivative_save_dir_condition, exist_ok=True)
-            plt.savefig(save_path_full, dpi=300)
-            plt.close()
+    print("Done!")
 
 
-
-
-    print("Analysis complete.")
 
 # ----------------------------
 # Execute Main Function

@@ -24,7 +24,8 @@ def plot_pca(pca, pcs, labels, p1, p2, stride, stepping_limbs, run_numbers, mous
     """
     Create and save 2D and 3D PCA scatter plots.
     """
-    df_plot = pd.DataFrame(pcs, columns=[f'PC{i + 1}' for i in range(pca.n_components_)])
+    n_pc = pcs.shape[1]
+    df_plot = pd.DataFrame(pcs, columns=[f'PC{i + 1}' for i in range(n_pc)])
     df_plot['Condition'] = labels
     df_plot['SteppingLimb'] = stepping_limbs
     df_plot['Run'] = run_numbers
@@ -104,13 +105,15 @@ def plot_scree(pca, p1, p2, stride, condition, save_path):
     """
     Plot and save the scree plot.
     """
+    from Analysis.Tools.config import (global_settings)
     plt.figure(figsize=(12, 8))
     plt.plot(range(1, len(pca.explained_variance_ratio_) + 1),
              pca.explained_variance_ratio_, 'o-', linewidth=2, color='blue', label='Individual Explained Variance')
     cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
     plt.plot(range(1, len(cumulative_variance) + 1),
              cumulative_variance, 's--', linewidth=2, color='red', label='Cumulative Explained Variance')
-    plt.title('Scree Plot with Cumulative Explained Variance')
+    plt.title(f'Scree Plot with Cumulative Explained Variance\n{p1} vs {p2} - {condition} - {stride}\n'
+              f'Num chosen PCs: {global_settings["pcs_to_use"]}')
     plt.xlabel('Principal Component')
     plt.ylabel('Explained Variance Ratio')
     plt.xticks(range(1, len(pca.explained_variance_ratio_) + 1))
@@ -118,6 +121,7 @@ def plot_scree(pca, p1, p2, stride, condition, save_path):
     plt.legend(loc='best')
     plt.grid(True)
     plt.tight_layout()
+    os.makedirs(save_path, exist_ok=True)
     plt.savefig(os.path.join(save_path, f"Scree_Plot_{p1}_{p2}_{stride}_{condition}.png"), dpi=300)
     plt.close()
 
@@ -206,25 +210,30 @@ def plot_average_variance_explained_across_folds(fold_variances, p1, p2, s):
     plt.savefig(f"Average_PCA_CV_Scree_Plot_{p1}vs{p2}_{s}.png", dpi=300)
     plt.close()
 
-def compute_global_pca_for_phase(feature_data, global_mouse_ids, stride_number, phase1, phase2,
-                                 stride_data, selected_features,
-                                 n_components=10):
+def compute_global_pca_for_phase(feature_data, feature_data_compare, mouseIDs_condition, mouseIDs_compare, stride_number, phase1, phase2,
+                                 stride_data, stride_data_compare, selected_features, combine_conditions,
+                                 n_components):
     """
     Aggregates data from all mice in global_mouse_ids (using only runs for phase1 and phase2),
     restricts to the globally selected features, and computes PCA.
     """
     aggregated_data = []
-    for mouse_id in global_mouse_ids:
-        # scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
-        scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
-        # Get run masks for the two phases.
-        run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2)
-        # Select only runs corresponding to the phases.
-        selected_mask = mask_phase1 | mask_phase2
-        selected_data = scaled_data_df.loc[selected_mask]
-        # Restrict to the globally selected features.
-        reduced_data = selected_data[selected_features]
-        aggregated_data.append(reduced_data)
+    if combine_conditions == True:
+        data_mouse_pairs = [(feature_data, mouseIDs_condition, stride_data), (feature_data_compare, mouseIDs_compare, stride_data_compare)]
+    else:
+        data_mouse_pairs = [(feature_data, mouseIDs_condition, stride_data)]
+    for data, mouseIDs, stride_d in data_mouse_pairs:
+        for mouse_id in mouseIDs:
+            # scaled_data_df = utils.load_and_preprocess_data(mouse_id, stride_number, condition, exp, day)
+            scaled_data_df = data.loc(axis=0)[stride_number, mouse_id]
+            # Get run masks for the two phases.
+            run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_d, mouse_id, stride_number, phase1, phase2)
+            # Select only runs corresponding to the phases.
+            selected_mask = mask_phase1 | mask_phase2
+            selected_data = scaled_data_df.loc[selected_mask]
+            # Restrict to the globally selected features.
+            reduced_data = selected_data[selected_features]
+            aggregated_data.append(reduced_data)
     # Concatenate all runs (rows) across mice.
     global_data = pd.concat(aggregated_data)
     # Compute PCA on the aggregated data.
@@ -233,4 +242,36 @@ def compute_global_pca_for_phase(feature_data, global_mouse_ids, stride_number, 
         n_components = global_data.shape[1]
     pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
     return pca, loadings_df
+
+def compute_pca_allStrides(feature_data, feature_data_compare, mouseIDs_condition, mouseIDs_compare,
+                           stride_numbers, phase1, phase2,
+                           stride_data, stride_data_compare, selected_features, combine_conditions,
+                           n_components):
+    aggregated_data = []
+    if combine_conditions:
+        data_mouse_pairs = [(feature_data, mouseIDs_condition, stride_data),
+                            (feature_data_compare, mouseIDs_compare, stride_data_compare)]
+    else:
+        data_mouse_pairs = [(feature_data, mouseIDs_condition, stride_data)]
+
+    for data, mouseIDs, stride_d in data_mouse_pairs:
+        for stride_number in stride_numbers:
+            for mouse_id in mouseIDs:
+                scaled_data_df = data.loc(axis=0)[stride_number, mouse_id]
+                run_numbers, stepping_limbs, mask_phase1, mask_phase2 = utils.get_runs(scaled_data_df, stride_d,
+                                                                                       mouse_id, stride_number, phase1,
+                                                                                       phase2)
+                selected_mask = mask_phase1 | mask_phase2
+                selected_data = scaled_data_df.loc[selected_mask]
+                reduced_data = selected_data[selected_features]
+                aggregated_data.append(reduced_data)
+
+    global_data = pd.concat(aggregated_data)
+    if n_components > global_data.shape[1]:
+        n_components = global_data.shape[1]
+    pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
+    return pca, loadings_df
+
+
+
 

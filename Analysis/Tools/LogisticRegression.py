@@ -64,6 +64,33 @@ def find_unique_and_single_contributions(selected_scaled_data_df, loadings_df, n
 
     return single_all_dict, unique_all_dict
 
+def find_unique_and_single_contributions_pcs(pc_df, normalize_mean, normalize_std, y_reg, full_accuracy):
+    single_all = []
+    unique_all = []
+
+    # Iterate over each PC (treated as a feature)
+    for pc in pc_df.columns:
+        # Shuffle only the current PC while keeping the other PCs intact
+        single_shuffle = utils.shuffle_single(pc, pc_df.T)
+        unique_shuffle = utils.shuffle_unique(pc, pc_df.T)
+
+        # For PCs, we work directly with the scores (no loadings multiplication)
+        X_shuffled_single = ((single_shuffle.T - normalize_mean) / normalize_std)
+        X_shuffled_unique = ((unique_shuffle.T - normalize_mean) / normalize_std)
+
+        # Note: The regression expects data in shape (n_features, n_samples)
+        _, single_accuracy = compute_regression(X_shuffled_single.values.T, y_reg)
+        _, unique_accuracy = compute_regression(X_shuffled_unique.values.T, y_reg)
+        unique_contribution = full_accuracy - unique_accuracy
+
+        single_all.append(single_accuracy)
+        unique_all.append(unique_contribution)
+
+    single_all_dict = dict(zip(pc_df.columns, single_all))
+    unique_all_dict = dict(zip(pc_df.columns, unique_all))
+
+    return single_all_dict, unique_all_dict
+
     # shuffle_all = utils.shuffle_single(feature, selected_scaled_data_df)
     # shuffle_all = utils.shuffle_unique(feature, shuffle_all)
     # shuffle_all = np.dot(loadings_df.T, shuffle_all)
@@ -80,6 +107,7 @@ def find_full_shuffle_accuracy(selected_scaled_data_df, loadings_df, normalize_m
     shuffle_all = ((shuffle_all.T - normalize_mean) / normalize_std).T
     _, full_accuracy_shuffled = compute_regression(shuffle_all, y_reg)
     return full_accuracy_shuffled
+
 
 def fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2):
     # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
@@ -138,13 +166,40 @@ def regression_feature_contributions(loadings_df, reduced_feature_selected_data_
     # Plot unique and single feature contributions
     utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}_{condition}")
     utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path, title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}_{condition}")
+    return single_all_dict, unique_all_dict
 
-def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition, plot_pred=True, plot_weights=True):
+
+def regression_pc_contributions(pc_df, mouse_id, phase1, phase2, condition, stride_number, save_path,
+                                normalize_mean, normalize_std, y_reg, full_accuracy):
+    # Compute single and unique contributions for each PC
+    single_all_dict, unique_all_dict = find_unique_and_single_contributions_pcs(pc_df, normalize_mean,
+                                                                                normalize_std, y_reg, full_accuracy)
+
+    # # Compute full shuffled accuracy for the PCs
+    # full_shuffled_accuracy = find_full_shuffle_accuracy_pc(pc_df, normalize_mean, normalize_std, y_reg, full_accuracy)
+    # print(f"Full model shuffled accuracy for PCs: {full_shuffled_accuracy:.3f}")
+
+    # Plot the results (reuse your plotting utilities)
+    utils.plot_unique_delta_accuracy(unique_all_dict, mouse_id, save_path,
+                                     title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}_{condition}_PCs")
+    utils.plot_feature_accuracy(single_all_dict, mouse_id, save_path,
+                                title_suffix=f"{phase1}_vs_{phase2}_stride{stride_number}_{condition}_PCs")
+    return single_all_dict, unique_all_dict
+
+
+def run_regression(loadings_df, pcs_p1p2_df, reduced_feature_data_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2, mouse_id, phase1, phase2, stride_number, save_path, condition, plot_pred=True, plot_weights=True):
+    from Analysis.Tools.config import global_settings
     w, normalize_mean, normalize_std, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
-    # w, y_reg, full_accuracy = fit_regression_model(loadings_df, reduced_feature_selected_data_df, mask_phase1, mask_phase2)
+
+    # Trim the weights and normalization parameters to the number of PCs to use
+    w = np.array(w[0][:global_settings['pcs_to_use']]).reshape(1, -1)
+    normalize_mean = normalize_mean[:global_settings['pcs_to_use']]
+    normalize_std = normalize_std[:global_settings['pcs_to_use']]
+    loadings_df = loadings_df.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
 
     # Compute feature contributions
-    regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, condition, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
+    single_f, unique_f = regression_feature_contributions(loadings_df, reduced_feature_selected_data_df, mouse_id, phase1, phase2, condition, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
+    single_pc, unique_pc = regression_pc_contributions(pcs_p1p2_df, mouse_id, phase1, phase2, condition, stride_number, save_path, normalize_mean, normalize_std, y_reg, full_accuracy)
 
     # Compute feature-space weights for this mouse
     feature_weights = loadings_df.dot(w.T).squeeze()
@@ -156,7 +211,7 @@ def run_regression(loadings_df, reduced_feature_data_df, reduced_feature_selecte
     # Predict runs using the full model
     smoothed_scaled_pred, _ = predict_runs(loadings_df, reduced_feature_data_df, normalize_mean, normalize_std, w, save_path, mouse_id, phase1, phase2, stride_number, condition, plot_pred)
 
-    return smoothed_scaled_pred, feature_weights, w , normalize_mean, normalize_std
+    return smoothed_scaled_pred, feature_weights, w , normalize_mean, normalize_std, single_f, unique_f, single_pc, unique_pc
 
 # def predict_compare_condition(feature_data_compare, mouse_id, compare_condition, stride_number, phase1, phase2, selected_features, loadings_df, w, save_path):
 #     # Retrieve reduced feature data for the comparison condition

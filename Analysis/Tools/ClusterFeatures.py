@@ -9,7 +9,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-from curlyBrace import curlyBrace
+# from curlyBrace import curlyBrace
 from sklearn.metrics import mean_squared_error
 from sklearn.decomposition import FastICA
 from sklearn.model_selection import KFold
@@ -191,15 +191,34 @@ def cross_validate_pca_explained_variance(feature_matrix, n_components_range=ran
 #
 #     return cluster_mapping, feature_matrix, pca, optimal_n, avg_explained
 
-def find_feature_clusters(feature_data, mouseIDs, stride_number, condition, exp, day, stride_data, phase1, phase2, save_dir, method='kmeans'):
+def find_feature_clusters(feature_data, feature_data_compare, condition_mouseIDs, compare_condition_mice, stride_number, stride_data, stride_data_compare, phase1, phase2, save_dir, combine_conditions, method='kmeans'):
     if method == 'kmeans':
         # find k
-        optimal_k, avg_sil_scores = cross_validate_k_clusters_folds(feature_data, mouseIDs, stride_number, condition, exp, day, stride_data,
-                                                                    phase1, phase2)
+        optimal_k, avg_sil_scores = cross_validate_k_clusters_folds(feature_data,
+                                                                    feature_data_compare,
+                                                                    condition_mouseIDs,
+                                                                    compare_condition_mice,
+                                                                    stride_number,
+                                                                    stride_data,
+                                                                    stride_data_compare,
+                                                                    phase1,
+                                                                    phase2,
+                                                                    combine_conditions=combine_conditions)
     cluster_save_file = os.path.join(save_dir, f'feature_clusters_{phase1}_vs_{phase2}_stride{stride_number}.pkl')
     # cluster features
-    cluster_mapping, feature_matrix = cluster_features_run_space(feature_data, mouseIDs,stride_number, condition, exp, day, stride_data, phase1,
-                                                 phase2, n_clusters=optimal_k, save_file=cluster_save_file, method=method)
+    cluster_mapping, feature_matrix = cluster_features_run_space(feature_data,
+                                                                 feature_data_compare,
+                                                                 condition_mouseIDs,
+                                                                 compare_condition_mice,
+                                                                 stride_number,
+                                                                 stride_data,
+                                                                 stride_data_compare,
+                                                                 phase1,
+                                                                 phase2,
+                                                                 n_clusters=optimal_k,
+                                                                 save_file=cluster_save_file,
+                                                                 method=method,
+                                                                 combine_conditions=combine_conditions)
     return cluster_mapping, feature_matrix
 
 def get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data, phase1, phase2, smooth=False):
@@ -320,9 +339,10 @@ def get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, 
 #         print(f"k={k}, Average Inertia (CV): {inertia:.3f}")
 #     return avg_inertia
 
-def cross_validate_k_clusters_folds(feature_data, global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1,
-                                    phase2,
-                                    k_range=range(2, 11), n_splits=10, n_init=10):
+def cross_validate_k_clusters_folds(feature_data, feature_data_compare, condition_mice, compare_condition_mice, stride_number, stride_data, stride_data_compare, phase1,
+                                    phase2, combine_conditions,
+                                    k_range=range(2, 11), n_splits=10, n_init=10
+                                    ):
     """
     Build the global feature matrix and perform k-fold cross-validation to select the optimal number
     of clusters. In each fold, the clustering model is fit on the training subset of features and then
@@ -340,8 +360,17 @@ def cross_validate_k_clusters_folds(feature_data, global_fs_mouse_ids, stride_nu
       - avg_sil_scores: dict mapping each k to its average silhouette score.
     """
     # Build the global feature matrix (features as rows, runs as columns)
-    feature_matrix = get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data,
-                                               phase1, phase2)
+    feature_matrix_condition = get_global_feature_matrix(
+        feature_data, condition_mice, stride_number, stride_data, phase1, phase2)
+
+    if combine_conditions == True:
+        # Get feature matrix for the compare condition
+        feature_matrix_compare = get_global_feature_matrix(
+            feature_data_compare, compare_condition_mice, stride_number, stride_data_compare, phase1, phase2)
+        # Concatenate the two matrices along the rows (features)
+        feature_matrix = pd.concat([feature_matrix_condition, feature_matrix_compare], axis=1)
+    else:
+        feature_matrix = feature_matrix_condition
 
     # Prepare KFold cross-validation over features (rows of feature_matrix)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -428,8 +457,8 @@ def cross_validate_k_clusters_folds(feature_data, global_fs_mouse_ids, stride_nu
 #     return optimal_k, avg_sil_scores
 
 
-def cluster_features_run_space(feature_data, global_fs_mouse_ids, stride_number, condition, exp, day, stride_data, phase1, phase2,
-                               n_clusters, save_file, method):
+def cluster_features_run_space(feature_data, feature_data_compare, condition_mouseIDs, compare_condition_mouseIDs, stride_number, stride_data, stride_data_compare, phase1, phase2,
+                               n_clusters, save_file, method, combine_conditions):
     """
     Build the global runs-by-features matrix, transpose it so that rows are features,
     cluster the features using k-means with n_clusters, and save the mapping.
@@ -437,8 +466,21 @@ def cluster_features_run_space(feature_data, global_fs_mouse_ids, stride_number,
       cluster_mapping: dict mapping feature names to cluster labels.
     """
     os.makedirs(os.path.dirname(save_file), exist_ok=True)
-    feature_matrix = get_global_feature_matrix(feature_data, global_fs_mouse_ids, stride_number, stride_data,
-                                               phase1, phase2, smooth=True)
+    # Get feature matrices for both conditions:
+    feature_matrix_condition = get_global_feature_matrix(
+        feature_data, condition_mouseIDs, stride_number, stride_data,
+        phase1, phase2, smooth=True
+    )
+    if combine_conditions == True:
+        feature_matrix_compare = get_global_feature_matrix(
+            feature_data_compare, compare_condition_mouseIDs, stride_number, stride_data_compare,
+            phase1, phase2, smooth=True
+        )
+        # Concatenate the two matrices along the rows (features)
+        feature_matrix = pd.concat([feature_matrix_condition, feature_matrix_compare], axis=1)
+    else:
+        feature_matrix = feature_matrix_condition
+
     if method == 'kmeans':
         kmeans = KMeans(n_clusters=n_clusters, random_state=42)
         kmeans.fit(feature_matrix)
@@ -570,39 +612,39 @@ def plot_feature_clusters_chart(cluster_mapping, sorted_features, p1, p2, s, sav
     print(f"Saved feature clusters chart to {save_path}")
 
 
-def add_vertical_brace_curly(ax, y0, y1, x, label=None, k_r=0.1, int_line_num=2, fontdict=None, **kwargs):
-    """
-    Add a vertical curly brace using the curlyBrace package.
-    The brace is drawn at the given x coordinate.
-    """
-    fig = ax.figure
-    p1 = [x, y0]
-    p2 = [x, y1]
-    # Do not pass the label here.12
-    brace = curlyBrace(fig, ax, p1, p2, k_r=k_r, bool_auto=True, str_text='',
-                       int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
-    if label:
-        y_center = (y0 + y1) / 2.0
-        # Place the label to the left of the brace.
-        ax.text(x - 14, y_center, label,
-                ha="right", va="center", fontsize=12, fontweight="normal", color='black', clip_on=False)
-
-def add_horizontal_brace_curly(ax, x0, x1, y, label=None, k_r=0.1, int_line_num=2, fontdict=None, **kwargs):
-    """
-    Add a horizontal curly brace using the curlyBrace package.
-    The brace is drawn at the given y coordinate.
-    """
-    fig = ax.figure
-    # Swap p1 and p2 so that the brace opens toward the plot.
-    p1 = [x1, y]
-    p2 = [x0, y]
-    brace = curlyBrace(fig, ax, p1, p2, k_r=k_r, bool_auto=True, str_text='',
-                       int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
-    if label:
-        x_center = (x0 + x1) / 2.0
-        # Adjust the offset so the label appears above the brace.
-        ax.text(x_center, y - 12 , label,
-                ha="center", va="bottom", fontsize=12, fontweight="normal", color='black', clip_on=False)
+# def add_vertical_brace_curly(ax, y0, y1, x, label=None, k_r=0.1, int_line_num=2, fontdict=None, **kwargs):
+#     """
+#     Add a vertical curly brace using the curlyBrace package.
+#     The brace is drawn at the given x coordinate.
+#     """
+#     fig = ax.figure
+#     p1 = [x, y0]
+#     p2 = [x, y1]
+#     # Do not pass the label here.12
+#     brace = curlyBrace(fig, ax, p1, p2, k_r=k_r, bool_auto=True, str_text='',
+#                        int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
+#     if label:
+#         y_center = (y0 + y1) / 2.0
+#         # Place the label to the left of the brace.
+#         ax.text(x - 14, y_center, label,
+#                 ha="right", va="center", fontsize=12, fontweight="normal", color='black', clip_on=False)
+#
+# def add_horizontal_brace_curly(ax, x0, x1, y, label=None, k_r=0.1, int_line_num=2, fontdict=None, **kwargs):
+#     """
+#     Add a horizontal curly brace using the curlyBrace package.
+#     The brace is drawn at the given y coordinate.
+#     """
+#     fig = ax.figure
+#     # Swap p1 and p2 so that the brace opens toward the plot.
+#     p1 = [x1, y]
+#     p2 = [x0, y]
+#     brace = curlyBrace(fig, ax, p1, p2, k_r=k_r, bool_auto=True, str_text='',
+#                        int_line_num=int_line_num, fontdict=fontdict or {}, clip_on=False, color='black', **kwargs)
+#     if label:
+#         x_center = (x0 + x1) / 2.0
+#         # Adjust the offset so the label appears above the brace.
+#         ax.text(x_center, y - 12 , label,
+#                 ha="center", va="bottom", fontsize=12, fontweight="normal", color='black', clip_on=False)
 
 def plot_corr_matrix_sorted_by_cluster(data_df, sorted_features, cluster_mapping, save_dir, filename="corr_matrix_by_cluster.png"):
     """
@@ -635,8 +677,10 @@ def plot_corr_matrix_sorted_by_cluster(data_df, sorted_features, cluster_mapping
     # Create the heatmap without individual feature tick labels.
     plt.figure(figsize=(12, 10))
     ax = sns.heatmap(corr_sorted, annot=False, fmt=".2f", cmap="coolwarm",
-                     xticklabels=False, yticklabels=False)
+                     xticklabels=False, yticklabels=False, vmin=-1, vmax=1, center=0)
     ax.set_title("Correlation Matrix Sorted by Cluster", pad=60)
+    # ensure legend spans 0-1
+   # ax.collections[0].colorbar.set_ticks([0, 0.5, 1])
 
     # For each cluster, adjust boundaries by 0.5 (to align with cell edges).
     for cl, bounds in cluster_boundaries.items():
@@ -644,9 +688,80 @@ def plot_corr_matrix_sorted_by_cluster(data_df, sorted_features, cluster_mapping
         x0, x1 = bounds["start"] - 0.5, bounds["end"] + 0.5
         y0, y1 = bounds["start"] - 0.5, bounds["end"] + 0.5
         # Add a vertical curly brace along the left side.
-        add_vertical_brace_curly(ax, y0, y1, x=-0.5, label=f"Cluster {cl}", k_r=0.1)
+        utils.add_vertical_brace_curly(ax, y0, y1, x=-0.5, label=f"Cluster {cl}", k_r=0.1)
         # Add a horizontal curly brace along the top.
-        add_horizontal_brace_curly(ax, x0, x1, y=-0.5, label=f"Cluster {cl}", k_r=0.1)
+        utils.add_horizontal_brace_curly(ax, x0, x1, xoffset=14, y=-0.5, label=f"Cluster {cl}", k_r=0.1)
+
+    plt.subplots_adjust(top=0.92)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, filename), dpi=300)
+    plt.close()
+
+def plot_corr_matrix_sorted_manually(data_df, save_dir, filename="corr_matrix_by_manualcluster.png"):
+    """
+    Plot the correlation matrix of features (from data_df) sorted by their cluster assignment.
+    Instead of labeling every feature, this version adds curly-brace annotations (via curlyBrace)
+    outside the top and left edges to indicate the extent of each cluster.
+
+    Parameters:
+      data_df (pd.DataFrame): DataFrame with samples as rows and features as columns.
+      cluster_mapping (dict): Mapping from feature names to cluster IDs.
+      save_dir (str): Directory to save the plot.
+      filename (str): Name of the output plot file.
+    """
+    from Helpers.Config_23 import manual_clusters
+
+    cluster_names = {v: k for k, v in manual_clusters['cluster_values'].items()}
+
+    sorted_features = list(manual_clusters['cluster_mapping'].keys())
+
+    # Compute the correlation matrix (assuming features are columns)
+    corr = data_df.T.corr()
+
+    # Sort features by cluster assignment (defaulting to -1 if missing)
+    #sorted_features = sorted(corr.columns, key=lambda f: cluster_mapping.get(f, -1))
+    corr_sorted = corr.loc[sorted_features, sorted_features]
+
+    # Compute cluster boundaries based on sorted order.
+    cluster_boundaries = {}
+    for idx, feat in enumerate(sorted_features):
+        cl = manual_clusters['cluster_mapping'].get(feat, -1)
+        if cl not in cluster_boundaries:
+            cluster_boundaries[cl] = {"start": idx, "end": idx}
+        else:
+            cluster_boundaries[cl]["end"] = idx
+
+    # Create the heatmap without individual feature tick labels.
+    plt.figure(figsize=(12, 10))
+    ax = sns.heatmap(corr_sorted, annot=False, fmt=".2f", cmap="coolwarm",
+                     xticklabels=False, yticklabels=False, vmin=-1, vmax=1, center=0)
+    ax.set_title("Correlation Matrix Sorted by Cluster", pad=60)
+    # ensure legend spans 0-1
+   # ax.collections[0].colorbar.set_ticks([0, 0.5, 1])
+
+    # For each cluster, adjust boundaries by 0.5 (to align with cell edges).
+    for i, (cl, bounds) in enumerate(cluster_boundaries.items()):
+        # Define boundaries in data coordinates.
+        x0, x1 = bounds["start"], bounds["end"]
+        y0, y1 = bounds["start"], bounds["end"]
+
+        k_r = 0.1
+        span = abs(y1 - y0)
+        desired_depth = 0.1  # or any value that gives you the uniform look you want
+        k_r_adjusted = desired_depth / span if span != 0 else k_r
+
+        # Alternate the int_line_num value for every other cluster:
+        base_line_num = 2
+        int_line_num = base_line_num + 4 if i % 2 else base_line_num
+
+        fs = 6
+
+        # Add a vertical curly brace along the left side.
+        utils.add_vertical_brace_curly(ax, y0, y1, x=-0.5, xoffset=1, label=cluster_names.get(cl, f"Cluster {cl}"),
+                                       k_r=k_r_adjusted, int_line_num=int_line_num, fontsize=fs)
+        # Add a horizontal curly brace along the top.
+        utils.add_horizontal_brace_curly(ax, x0, x1, y=-0.5, label=cluster_names.get(cl, f"Cluster {cl}"),
+                                         k_r=k_r_adjusted*-1, int_line_num=int_line_num, fontsize=fs)
 
     plt.subplots_adjust(top=0.92)
     plt.tight_layout()

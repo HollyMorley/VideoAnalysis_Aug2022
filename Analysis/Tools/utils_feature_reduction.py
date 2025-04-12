@@ -900,7 +900,7 @@ def plot_weights_in_feature_space(feature_weights, save_path, mouse_id, phase1, 
     plt.close()
     print(f"Vertical feature-space weights plot saved to: {plot_file}")
 
-def get_top_features(contrib_dict, stride_features, phase1, phase2, stride_number, n_features, quartile):
+def get_top_features(contrib_dict, stride_features, phase1, phase2, stride_number, n_features, quartile, average):
     """
     Get the top n features (out of the specifically selected features for that stride) based on the mean of their weights across mice.
     :param weights_dict:
@@ -921,17 +921,19 @@ def get_top_features(contrib_dict, stride_features, phase1, phase2, stride_numbe
     contrib_df = contrib_df.loc[stride_features]
 
     # find mean of feature contribs
-    median_contribs = contrib_df.median(axis=1)
-    all_features = median_contribs
+    if average == 'mean':
+        average_contribs = contrib_df.mean(axis=1)
+    elif average == 'median':
+        average_contribs = contrib_df.median(axis=1)
 
     # find top quartile of features by absolute contribution, preserving original sign
-    threshold = median_contribs.abs().quantile(quartile)
-    top_features_quartile = median_contribs[median_contribs.abs() >= threshold]
+    threshold = average_contribs.abs().quantile(quartile)
+    top_features_quartile = average_contribs[average_contribs.abs() >= threshold]
 
     # find top n features of absolute contribution, preserving original sign
-    top_features_top10 = median_contribs.nlargest(n_features)
+    top_features_top10 = average_contribs.nlargest(n_features)
     #top_features_top10 = top_features_top10 * median_contribs.loc[top_features_top10.index].apply(np.sign)
-    return top_features_top10, top_features_quartile, all_features
+    return top_features_top10, top_features_quartile, average_contribs
 
 
 def select_top_quantile_features(feature_weights: pd.Series, quantile: float = 0.9):
@@ -1078,17 +1080,8 @@ def plot_top_feature_phase_comparison_connected_means(top_feature_data, base_sav
     mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
     mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
 
-    name_exclusions = ['buffer_size:0','all_vals:False','full_stride:False','step_phase:None']
-
     for f in top_features_phase1.columns:
-        # remove name exclusions
-        feature_name_bits = f.split(', ')
-        feature_name_to_keep = []
-        for name_bit in feature_name_bits:
-            if name_bit not in name_exclusions:
-                feature_name_to_keep.append(name_bit)
-        feature_name = ', '.join(feature_name_to_keep)
-
+        display_name = short_names.get(f, f)
         fig, ax = plt.subplots(figsize=(4, 6))
 
         feature_mean_p1 = mean_mouse_phase1[f].mean()
@@ -1137,7 +1130,7 @@ def plot_top_feature_phase_comparison_connected_means(top_feature_data, base_sav
         ax.set_xticks([1, 2])
         ax.set_xticklabels([phase1, phase2])
         ax.set_xlim(0.5, 2.5)
-        ax.set_ylabel(feature_name)
+        ax.set_ylabel(display_name)
         ax.set_title(f'Stride {stride_number}\nShuffling Test (mean), Err=90% CI')
         ax.grid(False)
         ax.spines['top'].set_visible(False)
@@ -1146,7 +1139,7 @@ def plot_top_feature_phase_comparison_connected_means(top_feature_data, base_sav
 
         save_dir = os.path.join(base_save_dir, f'top_feature_descriptives\\stride{stride_number}')
         os.makedirs(save_dir, exist_ok=True)
-        safe_feature_name = make_safe_feature_name(feature_name)
+        safe_feature_name = make_safe_feature_name(display_name)
         save_path = os.path.join(save_dir, f'{safe_feature_name}__{phase1}vs{phase2}_stride{stride_number}_{condition_label}_mean.png')
         fig.savefig(save_path, dpi=300)
         plt.close()
@@ -1326,15 +1319,16 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
     mean_mouse_phase1 = top_features_phase1.groupby(level='mouse').mean()
     mean_mouse_phase2 = top_features_phase2.groupby(level='mouse').mean()
 
-    name_exclusions = ['buffer_size:0', 'all_vals:False', 'full_stride:False', 'step_phase:None']
-
     fig, ax = plt.subplots(figsize=(10, 5))
 
     sorted_features = sorted(top_features_phase1.columns)
     len_features = len(sorted_features)
 
-    short_names = []
+    display_names = []
     for fidx, f in enumerate(sorted_features):
+        display_name = short_names.get(f, f)
+        display_names.append(display_name)
+
         # Calculate the difference between the two phases.
         feature_phase_diff = mean_mouse_phase2[f] - mean_mouse_phase1[f]
         # scale max abs
@@ -1350,19 +1344,11 @@ def plot_top_feature_phase_comparison_differences(top_feature_data, base_save_di
         ax.scatter([fidx], feature_phase_diff_mean, color='black')
         ax.errorbar([fidx], feature_phase_diff_mean, yerr=feature_phase_diff_sem*1.645, color='black', capsize=5)
 
-        name_bits = f.split(', ')
-        name_to_keep = []
-        for name_bit in name_bits:
-            if name_bit not in name_exclusions:
-                name_to_keep.append(name_bit)
-        name = ', '.join(name_to_keep)
-        short_names.append(name)
-
     ax.axhline(0, color='black', linestyle='--', alpha=0.2)
 
     # Set x-axis ticks to each feature and rotate labels
     ax.set_xticks(np.arange(len_features))
-    ax.set_xticklabels(short_names, rotation=45, ha='right')
+    ax.set_xticklabels(display_names, rotation=45, ha='right')
 
     # Adjust x-axis limits so that all labels are fully in frame.
     ax.set_xlim(-0.5, len_features - 0.5)
@@ -1693,6 +1679,10 @@ def plot_aggregated_feature_weights_byFeature(weights_dict, sorted_features, fea
         if p1 == phase1 and p2 == phase2 and s == stride_number
     }
 
+    display_names = []
+    for f in sorted_features:
+        display_names.append(short_names.get(f, f))
+
     if not filtered_weights:
         print(f"No weights found for {phase1} vs {phase2}.")
         return
@@ -1728,7 +1718,7 @@ def plot_aggregated_feature_weights_byFeature(weights_dict, sorted_features, fea
 
     # Set y-ticks to use feature names.
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(sorted_features)
+    ax.set_yticklabels(display_names)
     ax.set_xlabel('Weight Value')
     ax.set_ylabel('Feature')
     ax.set_title(
@@ -1770,7 +1760,7 @@ def plot_aggregated_feature_weights_byFeature(weights_dict, sorted_features, fea
     print(f"Aggregated feature weights plot saved to: {output_file}")
 
 
-def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, save_dir, phase1, phase2, stride_number, condition_label):
+def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, top_features, save_dir, phase1, phase2, stride_number, condition_label):
     # Filter weights for the current phase pair.
     filtered_weights = {
         mouse_id: (weights.feature_weights if hasattr(weights, "feature_weights") else weights)
@@ -1805,7 +1795,7 @@ def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, save_dir, 
                                 columns=weights.index)
 
         # Append this mouse's data for each feature.
-        for feature in df_mouse.columns:
+        for feature in top_features:
             col = df_mouse[feature]
             max_val = col.abs().max()
             # Only scale if the maximum absolute value is nonzero
@@ -1825,7 +1815,7 @@ def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, save_dir, 
         for mouse in df_feature.columns:
             trace = df_feature[mouse].values
             traces[mouse] = trace
-            plt.plot(df_feature.index, trace, label=f'Mouse {mouse}', alpha=0.6)
+            plt.plot(df_feature.index, trace, label=f'Mouse {mouse}', alpha=0.3, color='grey')
 
         # Create a DataFrame from the traces and compute the mean summary line.
         df_traces = pd.DataFrame(traces, index=df_feature.index)
@@ -1848,17 +1838,17 @@ def plot_aggregated_feature_weights_byRun(weights_dict, raw_features, save_dir, 
 
         # Plot the smoothed mean line.
         plt.plot(mean_line_interp.index, mean_line_smooth, label='Smoothed Mean', color='black', linewidth=2,
-                 linestyle='--')
+                 linestyle='-')
 
         plt.vlines(x=[9.5, 109.5], ymin=df_traces.min().min(), ymax=df_traces.max().max(), color='red', linestyle='--')
         plt.axhline(y=0, color='black', linestyle='--', alpha=0.5)
         plt.title(f'Feature: {feature} ({phase1} vs {phase2}, stride {stride_number})')
         plt.xlabel('Run Number')
-        plt.ylabel('Contribution')
+        plt.ylabel('Weight')
         plt.legend()
         plt.tight_layout()
         # Save the plot for the feature.
-        out_dir = os.path.join(save_dir, 'feature_contr')
+        out_dir = os.path.join(save_dir, 'feature_weights_by_run')
         os.makedirs(out_dir, exist_ok=True)
         safe_feature = make_safe_feature_name(feature)
         feature_filename = os.path.join(out_dir, f"{safe_feature}_{phase1}{phase2}_{stride_number}.png")
@@ -3602,6 +3592,55 @@ def plot_top_feature_pc_single_contributors(contributions, p1, p2, s, condition_
         save_path = os.path.join(save_dir,f'MeanSinglePCContributions__{p1}vs{p2}_stride{s}_{condition_label}.png')
         plt.savefig(save_path, dpi=300)
         plt.close()
+
+def plot_featureXruns_heatmap(all_feats, stride_numbers, p1, p2, base_save_dir):
+    #all_feats = global_data["aggregated_raw_features"]
+    for stride in stride_numbers:
+        feats = {key: df for key, df in all_feats.items() if key[-1] == stride}
+
+
+        # Create new keys using only the mouse_id (first element in each key tuple)
+        # This yields a list of keys (as strings)
+        flat_keys = [str(key[0]) for key in feats.keys()]
+
+        # Concatenate the dataframes vertically. Each piece will get a new index level from flat_keys.
+        combined_df = pd.concat(list(feats.values()), axis=0, keys=flat_keys, names=["mouseID", "Run"])
+        average_df = combined_df.groupby(axis=0, level='Run').median()
+
+        # Build an ordered list from your `short_names` dictionary:
+        ordered_features = [feat for feat in short_names.keys() if feat in average_df.columns]
+        # Find any features not in short_names:
+        remaining_features = [feat for feat in average_df.columns if feat not in ordered_features]
+        # Define the final order as those in short_names order followed by the remaining features.
+        final_order = ordered_features + remaining_features
+
+        # Reorder the DataFrame columns.
+        ordered_average_df = average_df[final_order]
+
+        # Now rename the columns using the dictionary: if a feature is in short_names, use its value;
+        # otherwise leave it unchanged.
+        renamed_columns = [short_names.get(feat, feat) for feat in final_order]
+        ordered_average_df.columns = renamed_columns
+
+        # --- PREPARE FOR PLOTTING ---
+        # Transpose the DataFrame so that rows are features and columns are runs.
+        heatmap_data = ordered_average_df.T
+
+        # smooth with medfilt
+        smooth = heatmap_data.apply(lambda  x: medfilt(x, kernel_size=3), axis=1)
+        # Convert the Series of NumPy arrays into a DataFrame:
+        smooth_df = pd.DataFrame(smooth.tolist(), index=heatmap_data.index, columns=heatmap_data.columns)
+
+        # Plot the heatmap
+        plt.figure(figsize=(20,20))
+        sns.heatmap(smooth_df, cmap='coolwarm', cbar=True)
+        plt.axvline(x=10, color='b', linestyle='--')
+        plt.axvline(x=110, color='b', linestyle='--')
+        plt.xlabel('Trial')
+        plt.ylabel('Feature')
+        plt.tight_layout()
+        plt.show()
+
 
 
 

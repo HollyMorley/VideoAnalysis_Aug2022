@@ -293,11 +293,11 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     def build_condition_dict_and_plot(preds, contributions, raw_feats, norm_dict, mouse_ids, label,top_feats_type, top_feats_preset=None):
         out = {}
         Top_Feats = {}
-        All_Feats = {}
+        Av_Contr = {}
         for (phase1, phase2, stride), _ in preds.items():
             if top_feats_preset is None:
                 top_feats_top10, top_feats_q, all_features = utils.get_top_features(contributions, global_data["global_fs_results"][(phase1, phase2, stride)],
-                                                   phase1, phase2, stride, n_features=10, quartile=0.9)
+                                                   phase1, phase2, stride, n_features=15, quartile=0.9, average='median')
                 top_feats = top_feats_top10 if top_feats_type == 'top10' else top_feats_q
             else:
                 top_feats = top_feats_preset[(phase1, phase2, stride)]
@@ -317,10 +317,10 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                                                                     base_save_dir, phase1, phase2, stride,
                                                                     condition_label=label)
             Top_Feats[(phase1, phase2, stride)] = top_feats
-            All_Feats[(phase1, phase2, stride)] = all_features
-        return out, Top_Feats, All_Feats
+            Av_Contr[(phase1, phase2, stride)] = av_contr
+        return out, Top_Feats, Av_Contr
 
-    real_dict, top_feats, all_feats = build_condition_dict_and_plot(global_data["aggregated_predictions"],
+    real_dict, top_feats, av_contr = build_condition_dict_and_plot(global_data["aggregated_predictions"],
                                      global_data["aggregated_contributions"],
                                      global_data["aggregated_raw_features"],
                                      global_data["normalize"],
@@ -328,95 +328,45 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
                                      condition,
                                      top_feats_type='top10')
 
-    # all_ordered_feats_names = all_feats['APA2', 'Wash2', -1].abs().sort_values(ascending=False).index
-    # ordered_feats = {}
-    # for key, val in all_feats.items():
-    #     ordered_feats[key] = val.reindex(all_ordered_feats_names)
-    # plt.figure()
-    # plt.plot(ordered_feats['APA2', 'Wash2', -1], c='darkblue')
-    # plt.plot(ordered_feats['APA2', 'Wash2', -2], c='blue')
-    # plt.plot(ordered_feats['APA2', 'Wash2', -3], c='lightblue')
-    # plt.xticks(ordered_feats['APA2', 'Wash2', -1].index, rotation=90, fontsize=8)
-    # plt.tight_layout()
-
-
-    utils.plot_common_across_strides_top_features(top_feats, real_dict, condition, base_save_dir)
-
-    # compare_dict, _ = build_condition_dict_and_plot(global_data["aggregated_predictions_compare"],
-    #                                     global_data["aggregated_feature_weights_compare"],
-    #                                     global_data["aggregated_raw_features_compare"],
-    #                                     global_data["aggregated_raw_features_all_compare"],
-    #                                     global_data["normalize_compare"],
-    #                                     condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
-    #                                     compare_condition)
-    #
-    # compare_BaseCon_feats_dict, _ = build_condition_dict_and_plot(global_data["aggregated_predictions_compare"],
-    #                                     global_data["aggregated_feature_weights_compare"],
-    #                                     global_data["aggregated_raw_features_compare"],
-    #                                     global_data["aggregated_raw_features_all_compare"],
-    #                                     global_data["normalize_compare"],
-    #                                     condition_specific_settings[compare_condition]['global_fs_mouse_ids'],
-    #                                     compare_condition,
-    #                                     top_feats_preset=top_feats)
-
-
-    # for key, real_data in real_dict.items():
-    #     comp_data = compare_dict[key]
-    #     comp_BaseCon_Feat_data = compare_BaseCon_feats_dict[key]
-    #     utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
-    #                                                                        comp_data,
-    #                                                                        base_save_dir,
-    #                                                                        *key,
-    #                                                                        condition_label=condition,
-    #                                                                        compare_condition_label=compare_condition,
-    #                                                                        suffix='Sep Top Features')
-    #     utils.plot_top_feature_phase_comparison_differences_BothConditions(real_data,
-    #                                                                        comp_BaseCon_Feat_data,
-    #                                                                        base_save_dir,
-    #                                                                        *key,
-    #                                                                        condition_label=condition,
-    #                                                                        compare_condition_label=compare_condition,
-    #                                                                        suffix='LowHigh Top Features')
-
-
+    #utils.plot_common_across_strides_top_features(top_feats, real_dict, condition, base_save_dir)
 
     # Single stride data plots
     for (phase1, phase2, stride_number), agg_data in global_data["aggregated_predictions"].items():
         # create a selected feature order based on cluster mapping
         fs_results = global_data["global_stride_fs_results"][(phase1, phase2)] if global_settings["combine_stride_features"] else global_data["global_fs_results"][(phase1, phase2, stride_number)]
-        selected_features = fs_results
+        top_features = top_feats[(phase1, phase2, stride_number)].keys()
         cluster_mapping = global_data["cluster_mappings"][(phase1, phase2, stride_number)]
-        selected_features_sorted = sorted(selected_features, key=lambda f: cluster_mapping.get(f))
-        feature_cluster_assignments = {feat: cluster_mapping.get(feat) for feat in selected_features_sorted}
+        selected_features_sorted = cluster_mapping.keys()
+        feature_cluster_assignments = cluster_mapping
 
         utils.plot_aggregated_run_predictions(agg_data, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_aggregated_feature_weights_byFeature(global_data["aggregated_feature_weights"], selected_features_sorted, feature_cluster_assignments, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        #utils.plot_aggregated_feature_weights_byRun(aggregated_feature_weights, aggregated_raw_features, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        utils.plot_aggregated_raw_features(global_data["aggregated_raw_features"], aggregated_save_dir, phase1, phase2, stride_number)
+        utils.plot_aggregated_feature_weights_byRun(global_data["aggregated_feature_weights"], global_data["aggregated_raw_features"], top_features, aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
+        #utils.plot_aggregated_raw_features(global_data["aggregated_raw_features"], aggregated_save_dir, phase1, phase2, stride_number)
         utils.plot_regression_loadings_PC_space_across_mice(global_data["global_pca_results"], global_data["aggregated_feature_weights"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_even_odd_PCs_across_mice(global_data["even_ws"], global_data["odd_ws"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
-        utils.rank_within_vs_between_differences(global_data["even_ws"], global_data["odd_ws"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
+        #utils.rank_within_vs_between_differences(global_data["even_ws"], global_data["odd_ws"], aggregated_save_dir, phase1, phase2, stride_number, condition_label=condition)
         utils.plot_top_feature_pc_single_contributors(global_data["aggregated_contributions"],phase1, phase2, stride_number, condition, aggregated_save_dir)
 
 
-        for p in [phase1, phase2]:
-            pc = global_data["phase1_pc"] if p == phase1 else global_data["phase2_pc"] # todo check this works with more phase combinations
-            # filter by (phase1, phase2, stride_number), keeping format of (mouse_id, phase1, phase2, stride_number)
-            pc = {k: v for k, v in pc.items() if k[1] == phase1 and k[2] == phase2 and k[3] == stride_number}
-
-            # get available mice from predictions
-            mice = []
-            for a in agg_data:
-                mice.append(a.mouse_id)
-            con = condition.split('_')[0]
-            phase_runs = expstuff['condition_exp_runs'][con][exp][p]
-            mouse_runs = {}
-            for m in mice:
-                mouse_x_vals = [pred.x_vals for pred in agg_data if pred.mouse_id == m][0]
-                runs_mask = np.isin(phase_runs, mouse_x_vals)
-                mouse_runs[m] = phase_runs[runs_mask]
-
-            utils.compare_within_between_variability(pc, mouse_runs, aggregated_save_dir, p, stride_data, phase1, phase2, stride_number, exp, condition_label=condition)
+        # for p in [phase1, phase2]:
+        #     pc = global_data["phase1_pc"] if p == phase1 else global_data["phase2_pc"] # todo check this works with more phase combinations
+        #     # filter by (phase1, phase2, stride_number), keeping format of (mouse_id, phase1, phase2, stride_number)
+        #     pc = {k: v for k, v in pc.items() if k[1] == phase1 and k[2] == phase2 and k[3] == stride_number}
+        #
+        #     # get available mice from predictions
+        #     mice = []
+        #     for a in agg_data:
+        #         mice.append(a.mouse_id)
+        #     con = condition.split('_')[0]
+        #     phase_runs = expstuff['condition_exp_runs'][con][exp][p]
+        #     mouse_runs = {}
+        #     for m in mice:
+        #         mouse_x_vals = [pred.x_vals for pred in agg_data if pred.mouse_id == m][0]
+        #         runs_mask = np.isin(phase_runs, mouse_x_vals)
+        #         mouse_runs[m] = phase_runs[runs_mask]
+        #
+        #     utils.compare_within_between_variability(pc, mouse_runs, aggregated_save_dir, p, stride_data, phase1, phase2, stride_number, exp, condition_label=condition)
 
     # Multi stride data plots
     for (phase1, phase2), stride_dict in global_data["multi_stride_data"].items():

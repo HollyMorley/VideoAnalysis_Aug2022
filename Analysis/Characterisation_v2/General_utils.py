@@ -86,7 +86,10 @@ def collect_stride_data(condition, exp, day, compare_condition):
 def set_up_save_dir(condition, exp, base_save_dir_no_c):
     pcs_total= global_settings['pcs_to_show']
     pcs_using = global_settings['pcs_to_use']
-    base_save_dir = base_save_dir_no_c + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
+    strides = str(global_settings['stride_numbers']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
+    phase_comp = str(global_settings['phases']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
+
+    base_save_dir = base_save_dir_no_c + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
     base_save_dir_condition = os.path.join(base_save_dir, f'{condition}_{exp}')
     return base_save_dir, base_save_dir_condition
 

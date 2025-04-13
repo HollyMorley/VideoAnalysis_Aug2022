@@ -54,7 +54,7 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                                 midx, p1, p2, s,
                                                                 condition, save_path)
                 (y_pred, smoothed_y_pred, feature_weights, w_PC, normalize_mean_pc, normalize_std_pc,
-                 acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise) = results
+                 acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise, delta_acc_PCwise) = results
 
                 # Skipping w/in vs b/wn mice comparison
 
@@ -73,7 +73,10 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                       cv_acc=cv_acc,
                                                       w_folds=w_folds,
                                                       y_preds_PCwise=y_preds_PCwise,
-                                                      cv_acc_PCwise=cv_acc_PCwise)
+                                                      cv_acc_PCwise=cv_acc_PCwise,
+                                                      shuffle_acc=cv_acc_shuffle_PCwise,
+                                                      delta_acc=delta_acc_PCwise,
+                                                      )
                 pca_predictions.append(pca_pred_class)
     return pca_predictions
 

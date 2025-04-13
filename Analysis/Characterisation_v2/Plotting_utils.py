@@ -85,5 +85,9 @@ def get_colors(type):
         color_1 = "#2FCAD0"
         color_2 = "#2F7AD0"
         colors = (color_1, color_2)
+    elif type == ['APA1','APA2']:
+        color_1 = "#91e3e6"
+        color_2 = "#2FCAD0"
+        colors = (color_1, color_2)
 
     return colors

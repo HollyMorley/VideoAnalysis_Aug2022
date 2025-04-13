@@ -17,6 +17,7 @@ from Analysis.Characterisation_v2 import SingleFeaturePred_utils as sfpu
 from Analysis.Characterisation_v2 import MultiFeaturePred_utils as mfpu
 from Analysis.Characterisation_v2.AnalysisTools import ClusterFeatures as cf
 from Analysis.Characterisation_v2.AnalysisTools import PCA as pca
+from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
 from Analysis.Characterisation_v2.Plotting import ClusterFeatures_plotting as cfp
 from Analysis.Characterisation_v2.Plotting import SingleFeaturePred_plotting as sfpp
 from Analysis.Characterisation_v2.Plotting import PCA_plotting as pcap
@@ -26,7 +27,7 @@ sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
 
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LowHigh-basic_2')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LowHigh')
 
 def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
          condition: str = 'LowHigh', exp: str = 'Extended', day=None, compare_condition: str = 'None',
@@ -214,7 +215,8 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     # Plot PCA predictions as heatmap
     regp.plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, stride_numbers,condition, MultiFeatPath)
 
-
+    for s in stride_numbers:
+        reg.calculate_PC_prediction_significances(pca_pred, s)
 
 
 

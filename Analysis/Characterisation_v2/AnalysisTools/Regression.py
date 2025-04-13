@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
 from scipy.signal import medfilt
 from sklearn.model_selection import StratifiedKFold
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, ttest_1samp
 
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2.Plotting import Regression_plotting as rp
@@ -33,6 +33,8 @@ def compute_regression(X, y, folds=10):
         acc_fold = balanced_accuracy(y[test_idx], y_pred.ravel())
         cv_acc.append(acc_fold)
         w_folds.append(w_fold)
+
+
     cv_acc = np.array(cv_acc)
     w_folds = np.array(w_folds)
 
@@ -49,7 +51,7 @@ def compute_regression(X, y, folds=10):
 
     return w, bal_acc, cv_acc, w_folds
 
-def compute_regression_pcwise_prediction(X, y, w, folds=10):
+def compute_regression_pcwise_prediction(X, y, w, folds=10, shuffles=100):
     w = w[0]
     n_samples = X.shape[1]
     kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
@@ -57,6 +59,7 @@ def compute_regression_pcwise_prediction(X, y, w, folds=10):
     num_pcs = X.shape[0]
 
     cv_acc = np.zeros((num_pcs, folds)) # pcs x folds
+    shuffle_cv_acc = np.zeros((num_pcs, folds, shuffles)) # pcs x folds
     y_preds = np.zeros((num_pcs, X.shape[1])) # pcs x runs
     for pc in range(num_pcs):
         wpc = np.zeros(len(w))
@@ -71,10 +74,26 @@ def compute_regression_pcwise_prediction(X, y, w, folds=10):
             bal_acc = balanced_accuracy(y[test_idx], y_pred.ravel()) # not sure why ravel
             cv_acc[pc, idx] = bal_acc
 
+            shuffle_accs = []
+            for it in np.arange(shuffles):
+                shuffle_x_test = np.random.permutation(X[:, test_idx].T).T
+                y_pred_shuffle = np.dot(wpc, shuffle_x_test)
+
+                y_pred_shuffle[y_pred_shuffle > 0] = 1
+                y_pred_shuffle[y_pred_shuffle < 0] = 0
+
+                bal_acc_shuffle = balanced_accuracy(y[test_idx], y_pred_shuffle.ravel())
+                shuffle_accs.append(bal_acc_shuffle)
+            # average_shuffle_acc = np.mean(shuffle_accs)
+            # shuffle_cv_acc[pc, idx] = average_shuffle_acc
+            shuffle_cv_acc[pc, idx, :] = np.array(shuffle_accs)
+
         y_pred = np.dot(wpc, X)
         y_preds[pc, :] = y_pred
 
-    return cv_acc, y_preds
+    # delta_cv_acc = cv_acc - shuffle_cv_acc
+
+    return cv_acc, y_preds, shuffle_cv_acc #, delta_cv_acc
 
 def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
                        pcs: np.ndarray,
@@ -88,8 +107,9 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
                        save_path: str):
 
     # Fit regression model on PCA data
-    w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise = fit_regression_model(loadings, selected_feature_data,
-                                                                                  mask_p1, mask_p2)
+    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2)
+    (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, cv_acc_PCwise,
+     y_preds_PCwise, cv_acc_shuffle_PCwise) = results
 
     # Trim the weights and normalization parameters to the number of PCs to use
     w = np.array(w[0][:global_settings['pcs_to_use']]).reshape(1, -1)
@@ -110,7 +130,7 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     smoothed_y_pred, y_pred = predict_runs(loadings, feature_data, normalize_mean, normalize_std, w, #todo check dtypes are correct
                                            save_path, mouse_id, p1, p2, s, condition)
 
-    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise
+    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise
 
 
 def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame,
@@ -128,11 +148,11 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
 
     # Run logistic regression on the full model
     w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
-    cv_acc_PCwise, y_preds_PCwise = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+    cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise = compute_regression_pcwise_prediction(Xdr, y_reg, w)
     # w, full_accuracy, cv_acc = compute_regression(Xdr, y_reg)
     print(f"Full model accuracy: {bal_acc:.3f}")
 
-    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise
+    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise
 
 def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_mean: float, normalize_std: float,
                  w: np.ndarray, save_path: str, mouse_id: str, p1: str, p2:str, s: int, condition_name: str):
@@ -156,8 +176,38 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred, run_pred_scaled
 
-def calculate_PC_prediction_significance(cv_acc_PCwise, stride, chance_level=0.5):
-    accuracies = [accs for accs in cv_acc_PCwise if accs.stride == stride ]
-    t_stat, p_value = wilcoxon(accuracies, chance_level)
-    return t_stat, p_value
+def calculate_PC_prediction_significances(pca_pred, stride, chance_level=0.5, p_value=0.05):
+    mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride ]
+
+    mice_delta_sig = []
+    for mouse_pred in mouse_stride_preds:
+        mouse = mouse_pred.mouse_id
+        fold_accuracies = mouse_pred.cv_acc_PCwise
+        fold_deltas = mouse_pred.delta_acc
+        pc_delta_sig = np.zeros((fold_deltas.shape[0],))
+        for pc in np.arange(fold_deltas.shape[0]):
+            pc_deltas = fold_deltas[pc]
+            pc_accs = fold_accuracies[pc]
+
+            # compare delta to chance level
+            delta_stat, delta_p = ttest_1samp(pc_deltas, 0)
+            pc_delta_sig[pc] = delta_p
+        mice_delta_sig.append(pc_delta_sig)
+    mice_delta_sig = np.array(mice_delta_sig)
+
+    PC_sigs_across_mice = mice_delta_sig.T
+
+    PC_sig_incidence = np.zeros((PC_sigs_across_mice.shape[0],))
+    for pc in np.arange(PC_sigs_across_mice.shape[0]):
+        # find how many mice have significant delta
+        pc_sig = PC_sigs_across_mice[pc]
+        num_sig = np.sum(pc_sig < p_value)
+        PC_sig_incidence[pc] = num_sig
+
+
+
+
+
+
+
 

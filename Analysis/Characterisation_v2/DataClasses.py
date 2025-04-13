@@ -62,7 +62,8 @@ class PCAPredictionData:
     y_preds_PCwise: np.ndarray
     cv_acc_PCwise: np.ndarray
     shuffle_acc: np.ndarray
-    delta_acc: np.ndarray
+    mean_acc_PCwise: np.ndarray
+    mean_acc_shuffle_PCwise: np.ndarray
 
 @dataclass
 class FeatureWeights:

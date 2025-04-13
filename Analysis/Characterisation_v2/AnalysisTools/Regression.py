@@ -11,7 +11,7 @@ from Analysis.Characterisation_v2.Plotting import Regression_plotting as rp
 from Analysis.Tools.config import condition_specific_settings, global_settings
 
 def compute_regression(X, y, folds=10):
-    model = LogisticRegression(penalty='none', fit_intercept=False)
+    model = LogisticRegression(penalty='l1', fit_intercept=False, solver='liblinear', C=0.1)
 
     # cross-validate
     n_samples = X.shape[1]
@@ -21,7 +21,7 @@ def compute_regression(X, y, folds=10):
     for train_idx, test_idx in kf.split(np.arange(n_samples), y):
         ### start loop through pcs
         # Create a new model instance for each fold
-        model_fold = LogisticRegression(penalty='none', fit_intercept=False)
+        model_fold = LogisticRegression(penalty='l1', fit_intercept=False, solver='liblinear', C=0.1)
         # Train using the training columns
         model_fold.fit(X[:, train_idx].T, y[train_idx])
 
@@ -109,7 +109,7 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     # Fit regression model on PCA data
     results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2)
     (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, cv_acc_PCwise,
-     y_preds_PCwise, cv_acc_shuffle_PCwise) = results
+     y_preds_PCwise, cv_acc_shuffle_PCwise, mean_cv_acc_PCwise, mean_cv_acc_shuffle_PCwise) = results
 
     # Trim the weights and normalization parameters to the number of PCs to use
     w = np.array(w[0][:global_settings['pcs_to_use']]).reshape(1, -1)
@@ -130,7 +130,7 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     smoothed_y_pred, y_pred = predict_runs(loadings, feature_data, normalize_mean, normalize_std, w, #todo check dtypes are correct
                                            save_path, mouse_id, p1, p2, s, condition)
 
-    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise
+    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise, mean_cv_acc_PCwise, mean_cv_acc_shuffle_PCwise
 
 
 def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame,
@@ -149,10 +149,14 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     # Run logistic regression on the full model
     w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
     cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+
+    mean_cv_acc_PCwise = np.mean(cv_acc_PCwise, axis=1)
+    mean_cv_acc_shuffle_PCwise = np.mean(cv_acc_shuffle_PCwise, axis=1)
+
     # w, full_accuracy, cv_acc = compute_regression(Xdr, y_reg)
     print(f"Full model accuracy: {bal_acc:.3f}")
 
-    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise
+    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, cv_acc_PCwise, y_preds_PCwise, cv_acc_shuffle_PCwise, mean_cv_acc_PCwise, mean_cv_acc_shuffle_PCwise
 
 def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_mean: float, normalize_std: float,
                  w: np.ndarray, save_path: str, mouse_id: str, p1: str, p2:str, s: int, condition_name: str):
@@ -176,33 +180,36 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred, run_pred_scaled
 
-def calculate_PC_prediction_significances(pca_pred, stride, chance_level=0.5, p_value=0.05):
+def calculate_PC_prediction_significances(pca_pred, stride):
     mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride ]
 
-    mice_delta_sig = []
+    accuracies_x_pcs = []
+    accuracies_pcs_x_shuffle = []
     for mouse_pred in mouse_stride_preds:
-        mouse = mouse_pred.mouse_id
-        fold_accuracies = mouse_pred.cv_acc_PCwise
-        fold_deltas = mouse_pred.delta_acc
-        pc_delta_sig = np.zeros((fold_deltas.shape[0],))
-        for pc in np.arange(fold_deltas.shape[0]):
-            pc_deltas = fold_deltas[pc]
-            pc_accs = fold_accuracies[pc]
+        accuracies_x_pcs.append(mouse_pred.mean_acc_PCwise)
+        accuracies_pcs_x_shuffle.append(mouse_pred.mean_acc_shuffle_PCwise)
+    accuracies_x_pcs = np.array(accuracies_x_pcs) # mice x pcs
+    accuracies_shuffle_x_pcs = np.array(accuracies_pcs_x_shuffle) # mice x pcs x shuffle
 
-            # compare delta to chance level
-            delta_stat, delta_p = ttest_1samp(pc_deltas, 0)
-            pc_delta_sig[pc] = delta_p
-        mice_delta_sig.append(pc_delta_sig)
-    mice_delta_sig = np.array(mice_delta_sig)
+    mean_accuracies_x_pcs = np.mean(accuracies_x_pcs, axis=0) # pcs
+    mean_accuracies_pcs_x_shuffle = np.mean(accuracies_shuffle_x_pcs, axis=0) # pcs x shuffle
 
-    PC_sigs_across_mice = mice_delta_sig.T
+    pc_significances = np.zeros((mean_accuracies_x_pcs.shape[0]))
+    for pc in np.arange(mean_accuracies_x_pcs.shape[0]):
+        pc_acc = mean_accuracies_x_pcs[pc]
+        pc_acc_shuffle = mean_accuracies_pcs_x_shuffle[pc]
+        p_val = (np.sum(pc_acc_shuffle >= pc_acc) + 1) / (pc_acc_shuffle.shape[0] + 1)
+        pc_significances[pc] = p_val
 
-    PC_sig_incidence = np.zeros((PC_sigs_across_mice.shape[0],))
-    for pc in np.arange(PC_sigs_across_mice.shape[0]):
-        # find how many mice have significant delta
-        pc_sig = PC_sigs_across_mice[pc]
-        num_sig = np.sum(pc_sig < p_value)
-        PC_sig_incidence[pc] = num_sig
+    return pc_significances
+
+
+
+
+
+
+
+
 
 
 

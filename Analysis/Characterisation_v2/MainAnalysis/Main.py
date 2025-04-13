@@ -216,7 +216,12 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     regp.plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, stride_numbers,condition, MultiFeatPath)
 
     for s in stride_numbers:
-        reg.calculate_PC_prediction_significances(pca_pred, s)
+        PC_sig = reg.calculate_PC_prediction_significances(pca_pred, s)
+        print(f"Stride {s} PC significances: {PC_sig}")
+
+    # --------------- Plot run predicitions ---------------
+    for s in stride_numbers:
+        regp.plot_aggregated_run_predictions(pca_pred, MultiFeatPath, phases[0], phases[1], s, condition)
 
 
 

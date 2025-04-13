@@ -198,8 +198,69 @@ def plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, 
         plt.savefig(os.path.join(save_path, f"PCAXRuns_Heatmap__RunPrediction_{p1}_{p2}_{s}_{condition}.png"), dpi=300)
         plt.close()
 
+def plot_aggregated_run_predictions(run_pred, save_dir, p1, p2, s, condition, normalization_method='maxabs'):
+    plt.figure(figsize=(10, 8))
 
+    # Collect common x-axis values.
+    all_x_vals = []
+    for data in run_pred:
+        all_x_vals.extend(data.x_vals)
+    global_min_x = min(all_x_vals)
+    global_max_x = max(all_x_vals)
+    common_npoints = max(len(data.x_vals) for data in run_pred)
+    common_x = np.linspace(global_min_x, global_max_x, common_npoints)
 
+    plt.axvspan(9.5, 109.5, color='lightblue', alpha=0.2)
+
+    interpolated_curves = []
+    for data in run_pred:
+        mouse_id = data.mouse_id
+        x_vals = data.x_vals
+        smoothed_pred = data.y_pred_smoothed
+
+        # Normalize the curve.
+        if normalization_method == 'zscore':
+            mean_val = np.mean(smoothed_pred)
+            std_val = np.std(smoothed_pred)
+            normalized_curve = (smoothed_pred - mean_val) / std_val if std_val != 0 else smoothed_pred
+        elif normalization_method == 'maxabs':
+            max_abs = max(abs(smoothed_pred.min()), abs(smoothed_pred.max()))
+            normalized_curve = smoothed_pred / max_abs if max_abs != 0 else smoothed_pred
+        else:
+            normalized_curve = smoothed_pred
+
+        interp_curve = np.interp(common_x, x_vals, normalized_curve)
+        interpolated_curves.append(interp_curve)
+
+        plt.plot(common_x, interp_curve, label=f'Mouse {mouse_id}', alpha=0.3, color='grey')
+
+    all_curves_array = np.vstack(interpolated_curves)
+    mean_curve = np.mean(all_curves_array, axis=0)
+    plt.plot(common_x, mean_curve, color='black', linewidth=2, label='Mean Curve')
+
+    # plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
+    plt.axhline(0, color='black', linestyle='--', alpha=0.5)
+    plt.title(
+        f'Aggregated {normalization_method.upper()} Scaled Run Predictions for {p1} vs {p2}, stride {s}\n{condition}')
+    plt.xlabel('Run Number')
+    plt.ylabel('Normalized Prediction (Smoothed)')
+    if normalization_method == 'maxabs':
+        plt.ylim(-1, 1)
+    # plt.legend(loc='upper right')
+    plt.grid(False)
+    # plt.gca().yaxis.grid(True)
+    plt.tight_layout()
+
+    save_path_full = os.path.join(save_dir,
+                                  f"Aggregated_{normalization_method.upper()}_Run_Predictions_{p1}_vs_{p2}_stride{s}_{condition}.png")
+    plt.savefig(save_path_full, dpi=300)
+    plt.close()
+
+def plot_multi_stride_predictions(stride_dict, p1, p2, condition, save_dir, smooth: bool = False,
+                                  smooth_window: int = 21,
+                                  normalize: bool = False):
+    plt.figure(figsize=(10, 8))
+    mean_curves = {}  # Stores: stride_number -> (common_x, mean_curve)
 
 
 

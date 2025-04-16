@@ -55,14 +55,14 @@ def compute_pca_allStrides(feature_data, mouseIDs_condition, stride_data, p1, p2
     pca, pcs, loadings_df = perform_pca(global_data, n_components=n_components)
     return pca, pcs, loadings_df
 
-def perform_pca(scaled_data_df, n_components):
+def perform_pca(scaled_data_df, n_components=5):
     """
     Perform PCA on the standardized data.
     """
     pca = PCA(n_components=n_components)
     pca.fit(scaled_data_df)
     pcs = pca.transform(scaled_data_df)
-    loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
+    loadings = pca.components_.T #* np.sqrt(pca.explained_variance_)
     loadings_df = pd.DataFrame(loadings, index=scaled_data_df.columns,
                                columns=[f'PC{i + 1}' for i in range(n_components)])
     return pca, pcs, loadings_df

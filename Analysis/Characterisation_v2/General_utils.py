@@ -4,6 +4,8 @@ import inspect
 from typing import Optional, List, Dict, Tuple
 import itertools
 import datetime
+from collections import defaultdict
+import matplotlib.pyplot as plt
 
 from Analysis.Tools.config import (
     global_settings, condition_specific_settings, instance_settings
@@ -62,6 +64,11 @@ def process_features(df):
         quadruple_name].values) / 100
     df['average_support_val'] = average_support_val
     df.drop(columns=double_name + triple_name + quadruple_name, inplace=True)
+
+    distance_sw_name = 'distance_from_midline|step_phase:0, all_vals:False, full_stride:False, buffer_size:0'
+    distance_st_name = 'distance_from_midline|step_phase:1, all_vals:False, full_stride:False, buffer_size:0'
+    df.loc(axis=1)[distance_st_name, distance_sw_name] = df.loc(axis=1)[distance_st_name, distance_sw_name].abs()
+
     return df
 
 def load_stride_data(stride_data_path):
@@ -296,3 +303,166 @@ def create_mouse_save_directory(base_dir, mouse_id, stride_number, phase1, phase
     os.makedirs(save_path, exist_ok=True)
 
     return save_path
+
+
+def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
+    from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
+    import numpy as np
+    import pandas as pd
+    import os
+    import matplotlib.pyplot as plt
+    from collections import defaultdict
+
+    all_pc_sigs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
+    all_mean_accs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
+    all_uniformities = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
+    all_pcs_of_interest = defaultdict(list)
+    all_pcs_of_interest_criteria = []  # list to collect per-stride DataFrames
+
+    for s in stride_numbers:
+        PC_sigs, mean_accs, mouse_uniform = reg.calculate_PC_prediction_significances(pca_pred, s, mice_thresh=2)
+        all_pc_sigs[s] = PC_sigs
+        all_mean_accs[s] = mean_accs
+        all_uniformities[s] = mouse_uniform
+
+        of_interest = np.logical_and.reduce((mean_accs > 0.6, PC_sigs < 0.05, mouse_uniform))
+        pcs_of_interest = np.where(of_interest)[0]
+        print(f"Stride {s}: PCs of interest: {pcs_of_interest}")
+        all_pcs_of_interest[s] = pcs_of_interest
+
+        # Create a DataFrame for the current stride with the measures as its row index.
+        pcs_of_interest_criteria_df = pd.DataFrame(
+            [PC_sigs, mean_accs, mouse_uniform],
+            index=['PC_sigs', 'mean_accs', 'uniformity'],
+            columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
+        )
+        pcs_of_interest_criteria_df.columns.name = 'PCs'
+        all_pcs_of_interest_criteria.append(pcs_of_interest_criteria_df)
+
+    # Combine all criteria DataFrames into one MultiIndex DataFrame:
+    # The multi-index will have 'stride' (from the keys) and 'measure' (the index of each small df)
+    criteria_multi_df = pd.concat(all_pcs_of_interest_criteria, keys=stride_numbers, names=['stride', 'measure'])
+
+    rows = []
+    for stride, pc_array in all_pcs_of_interest.items():
+        if len(pc_array) == 0:
+            rows.append((stride, np.nan))
+        else:
+            for pc in pc_array:
+                rows.append((stride, pc))
+    all_pcs_of_interest_df = pd.DataFrame(rows, columns=['stride', 'pc_of_interest'])
+    all_pcs_of_interest_df.set_index(['stride'], inplace=True)
+
+    # Save the CSV files.
+    all_pcs_of_interest_df.to_csv(os.path.join(savedir, 'pcs_of_interest.csv'))
+    criteria_multi_df.to_csv(os.path.join(savedir, 'pcs_of_interest_criteria.csv'))
+
+    # For each stride, create a table figure with formatted values and bold the rows for PCs of interest.
+    for s in stride_numbers:
+        # Extract the criteria for the current stride and transpose: rows are PC numbers, columns are measures.
+        stride_criteria = criteria_multi_df.loc(axis=0)[s].T
+
+        # Define a helper function to format values: two decimals for floats; others converted to string.
+        def format_val(val):
+            if isinstance(val, (float, np.floating)):
+                if val >= .01:
+                    return f"{val:.2f}"
+                else:
+                    return f"<.01"
+            else:
+                return str(val)
+
+        formatted_df = stride_criteria.applymap(format_val)
+        formatted_df.columns = ['pval','acc', 'uniformity']
+
+        # Create the figure and table.
+        fig, ax = plt.subplots(figsize=(3, 4))
+        ax.axis('tight')
+        ax.axis('off')
+
+        tbl = ax.table(
+            cellText=formatted_df.values.tolist(),
+            colLabels=formatted_df.columns,
+            rowLabels=formatted_df.index,
+            loc='center'
+        )
+
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(7)
+        tbl.scale(1.2, 1.2)
+
+        # Bold the rows where the PC is in pcs_of_interest for this stride.
+        # Note: our table rows are labeled with PCs as 1-indexed (since columns were defined with np.arange(...) + 1).
+        pcs_interest = [pc + 1 for pc in all_pcs_of_interest[s]]
+        # Loop over table cells. Data and row label cells have row index >= 0.
+        for (row, col), cell in tbl.get_celld().items():
+            if row >= 0:
+                # The row label is available in the cell at (row, -1). Compare it to pcs_interest.
+                try:
+                    label_cell = tbl[(row, -1)]
+                    label_text = label_cell.get_text().get_text()
+                    # Convert label to integer if possible.
+                    try:
+                        label_val = int(label_text)
+                    except ValueError:
+                        label_val = None
+                except KeyError:
+                    label_val = None
+
+                if label_val in pcs_interest:
+                    cell.get_text().set_fontweight('bold')
+
+        plt.subplots_adjust(left=0.3, right=0.7)
+
+        # Save the figure as an SVG file.
+        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.svg'), format='svg')
+        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.png'), format='png')
+        plt.close(fig)
+
+    return all_pcs_of_interest_df, criteria_multi_df
+
+def compute_residuals(group, s, savedir):
+    plot_dir = os.path.join(savedir, 'Speed')
+    os.makedirs(plot_dir, exist_ok=True)
+
+    speeds = group.loc(axis=1)['walking_speed|bodypart:Tail1, speed_correct:True']
+    res = pd.DataFrame(index=group.index, columns=group.columns)
+    for col in group.columns:
+        safe_name = short_names.get(col, col)
+
+        # Get the x values from the speed column and y values from the current feature.
+        x = speeds.values
+        y = group[col].values
+
+        # Compute the linear regression parameters.
+        m, c = np.polyfit(x, y, 1)
+        predicted = m * x + c
+
+        # Store the residuals (difference between actual and predicted values).
+        res[col] = y - predicted
+
+        # Sort x (and corresponding predicted values) for a smooth line plot.
+        sort_idx = np.argsort(x)
+        x_sorted = x[sort_idx]
+        pred_sorted = predicted[sort_idx]
+
+        # Create the plot for the current feature.
+        plt.figure(figsize=(4, 3))
+        plt.scatter(x, y, label='Data points', s=10)
+        plt.plot(x_sorted, pred_sorted, color='red', label='Fitted regression line')
+        plt.xlabel('Speed', fontsize=7)
+        plt.ylabel(col, fontsize=7)
+        plt.title(f"{safe_name}\n{s}",fontsize=7)
+        plt.tick_params(axis='both', which='both', labelsize=7)
+        # plt.legend()
+        plt.subplots_adjust(left=0.2, right=0.9, top=0.85, bottom=0.2)
+
+        plt.savefig(os.path.join(plot_dir, f'Speed_regression_{safe_name}_{s}.png'), format='png')
+        plt.savefig(os.path.join(plot_dir, f'Speed_regression_{safe_name}_{s}.svg'), format='svg')
+        plt.close()
+
+    res.drop(columns=['walking_speed|bodypart:Tail1, speed_correct:True'], inplace=True)
+
+    return res
+
+

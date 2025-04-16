@@ -1,5 +1,5 @@
 from curlyBrace import curlyBrace
-
+import numpy as np
 import matplotlib.colors as mcolors
 
 def add_vertical_brace_curly(ax, y0, y1, x, xoffset, label=None, k_r=0.1, int_line_num=2, fontdict=None, rot_label=0, **kwargs):
@@ -80,14 +80,136 @@ def darken_color(hex_color, factor=0.7):
     dark_rgb = tuple([x * factor for x in rgb])
     return mcolors.to_hex(dark_rgb)
 
-def get_colors(type):
-    if type == ['APA2','Wash2']:
-        color_1 = "#2FCAD0"
-        color_2 = "#2F7AD0"
-        colors = (color_1, color_2)
-    elif type == ['APA1','APA2']:
-        color_1 = "#91e3e6"
-        color_2 = "#2FCAD0"
-        colors = (color_1, color_2)
+# def get_colors(type):
+#     if type == ['APA2','Wash2']:
+#         color_1 = "#B11C73" #2FCAD0"
+#         color_2 = "#589061"  # "#218EDC" #2F7AD0"
+#         colors = (color_1, color_2)
+#     elif type == ['APA1','APA2']:
+#         color_1 = "#91e3e6"
+#         color_2 = "#B11C73"
+#         colors = (color_1, color_2)
+#
+#     return colors
 
-    return colors
+def get_color_phase(phase):
+    if phase == 'APA1':
+        color = "#D87799"
+    elif phase == 'APA2':
+        color = "#B11C73" #2FCAD0"
+    elif phase == 'Wash1':
+        color = "#95CCD8"
+    elif phase == 'Wash2':
+        color = "#3E9BDD"  # "#218EDC" #2F7AD0"
+    else:
+        raise ValueError(f"Unknown phase: {phase}")
+    return color
+
+def get_color_speedpair(speed):
+    if speed == 'LowHigh':
+        color = "#288733"
+    elif speed == 'LowMid':
+        color = "#95BD53"
+    elif speed == 'HighLow':
+        color = "#C44094" #2FCAD0"
+    else:
+        raise ValueError(f"Unknown speed: {speed}")
+    return color
+
+def get_ls_stride(s):
+    if s == -1:
+        ls = "-"
+    elif s == -2:
+        ls = "--"
+    elif s == -3:
+        ls = ":"
+    elif s == 0:
+        ls = "-"
+    return ls
+
+def get_line_style_mice(m):
+    if m == '1035243':
+        ls = 'solid'
+    elif m == '1035244':
+        ls = 'dotted'
+    elif m == '1035245':
+        ls = 'dashed'
+    elif m == '1035246':
+        ls = 'dashdot'
+    elif m == '1035250':
+        ls = (5, (10, 3)) # long dash with offset
+    elif m == '1035297':
+        ls = (0, (5, 10)) # loosely dashed
+    elif m == '1035299':
+        ls = (0, (3, 1, 1, 1, 1, 1)) # densely dashdotdotted
+    elif m == '1035301':
+        ls = (0, (1, 1)) # densely dotted
+    else:
+        raise ValueError(f"Unknown mouse ID: {m}")
+    return ls
+
+def get_marker_style_mice(m):
+    if m == '1035243':
+        marker = 'o'
+    elif m == '1035244':
+        marker = '^'
+    elif m == '1035245':
+        marker = 's'
+    elif m == '1035246':
+        marker = 'D'
+    elif m == '1035250':
+        marker = '<'
+    elif m == '1035297':
+        marker = 'P'
+    elif m == '1035299':
+        marker = '>'
+    elif m == '1035301':
+        marker = 'v'
+    else:
+        raise ValueError(f"Unknown mouse ID: {m}")
+    return marker
+
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
+
+
+def create_custom_colormap(lower_color, middle_color, upper_color, scaling=1.0, N=256):
+    """
+    Create a custom colormap using three specified colors, with a scaling parameter controlling
+    the rate at which the colors change from the middle color to the extremes.
+
+    Parameters:
+    - lower_color: list or array-like, RGB values (normalized to 0-1) for the lower extreme.
+    - middle_color: list or array-like, RGB values (normalized to 0-1) for the center.
+    - upper_color: list or array-like, RGB values (normalized to 0-1) for the upper extreme.
+    - scaling: float, controls the transition speed. Values > 1 produce a faster change from
+               the middle to the extreme, while values < 1 yield a slower transition.
+    - N: int, number of discrete color levels (default is 256).
+
+    Returns:
+    - cmap: a matplotlib ListedColormap instance.
+    """
+    colors = []
+
+    for i in range(N):
+        t = i / (N - 1)
+
+        if t < 0.5:
+            # For lower segment: calculate distance from the middle.
+            u = (0.5 - t) / 0.5  # u=1 at t=0, u=0 at t=0.5.
+            factor = 1 - (1 - u) ** scaling
+            # Blend from middle_color (at u=0) down to lower_color (at u=1).
+            color = np.array(middle_color) + factor * (np.array(lower_color) - np.array(middle_color))
+        else:
+            # For upper segment: calculate distance from the middle.
+            u = (t - 0.5) / 0.5  # u=0 at t=0.5, u=1 at t=1.
+            factor = 1 - (1 - u) ** scaling
+            # Blend from middle_color (at u=0) up to upper_color (at u=1).
+            color = np.array(middle_color) + factor * (np.array(upper_color) - np.array(middle_color))
+
+        colors.append(color)
+
+    return mcolors.ListedColormap(colors)
+
+

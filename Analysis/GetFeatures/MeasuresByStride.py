@@ -623,6 +623,9 @@ class CalculateMeasuresByStride():
 
     def nose_tail_phase(self, bodypart, frontback, coord):
         """
+        This function is essentially measuring the timing offset—often called the "phase"—between the movement of a
+        body part (like the nose or tail) and how the two front or two hind paws move during a stride.
+
         Calculate the phase (delay) at which the stridewise trajectory of the specified body part
         (e.g. 'nose' or 'tail') maximally correlates with the reference trajectory defined as the difference
         between the forward positions of the right and left paws. This is computed separately for front

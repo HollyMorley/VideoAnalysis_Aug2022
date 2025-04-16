@@ -27,9 +27,10 @@ sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
 
-base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LowHigh')
+base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LH2_8m')
+# base_save_dir_no_c = r"H:\Characterisation\\LH2_8m"
 
-def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
+def main(stride_numbers: List[int], phases: List[str],
          condition: str = 'LowHigh', exp: str = 'Extended', day=None, compare_condition: str = 'None',
          settings_to_log: dict = None):
 
@@ -45,8 +46,10 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
     preprocessed_data_file_path = os.path.join(base_save_dir, f"preprocessed_data_{condition}.pkl")
     SingleFeatPath = os.path.join(base_save_dir_condition, 'SingleFeaturePredictions')
     MultiFeatPath = os.path.join(base_save_dir_condition, 'MultiFeaturePredictions')
+    ResidualFeatPath = os.path.join(MultiFeatPath, 'Residuals')
     os.makedirs(SingleFeatPath, exist_ok=True)
     os.makedirs(MultiFeatPath, exist_ok=True)
+    os.makedirs(ResidualFeatPath, exist_ok=True)
 
     print(f"Base save directory: {base_save_dir_condition}")
     # Skipping outlier removal
@@ -103,7 +106,18 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
             for s in stride_numbers:
                 cluster_mappings[(p1, p2, s)] = manual_clusters['cluster_mapping']
 
-        # save everything so far to file
+        """
+            # -------- Find residuals --------
+            Residual between every feature (excluding walking speed) and walking speed
+        """
+        if not os.path.exists(os.path.join(ResidualFeatPath, "ResidualData.h5")):
+            residual_data = reg.find_residuals(feature_data, stride_numbers, phases, ResidualFeatPath)
+        else:
+            residual_data = pd.read_hdf(os.path.join(ResidualFeatPath, "ResidualData.h5"))
+
+        """
+            # -------- Save everything so far --------
+        """
         with open(preprocessed_data_file_path, 'wb') as f:
             pickle.dump({
                 'feature_names': feature_names,
@@ -190,13 +204,11 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
 
         # Plot how each feature loads onto the PCA components
         pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
-        pcap.plot_top_features_per_PC(pca_all, feature_data, phases, stride_numbers, MultiFeatPath,
-                                      n_top_features=5)
+        pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8)
 
         # Save PCA results
         with open(os.path.join(MultiFeatPath, filename_pca), 'wb') as f:
             pickle.dump(pca_all, f)
-
 
     """
     -------------------- PCA/Multi Feature Predictions ----------------------
@@ -212,17 +224,22 @@ def main(mouse_ids: List[str], stride_numbers: List[int], phases: List[str],
         with open(os.path.join(MultiFeatPath, filename_pca_pred), 'wb') as f:
             pickle.dump(pca_pred, f)
 
-    # Plot PCA predictions as heatmap
-    regp.plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, stride_numbers,condition, MultiFeatPath)
+        # Plot PCA predictions as heatmap
+        regp.plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, stride_numbers,condition, MultiFeatPath, cbar_scaling=0.7)
 
-    for s in stride_numbers:
-        PC_sig = reg.calculate_PC_prediction_significances(pca_pred, s)
-        print(f"Stride {s} PC significances: {PC_sig}")
+    pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath)
+
+
 
     # --------------- Plot run predicitions ---------------
+    stride_mean_preds = defaultdict(list)
     for s in stride_numbers:
-        regp.plot_aggregated_run_predictions(pca_pred, MultiFeatPath, phases[0], phases[1], s, condition)
+        stride_pred_mean = regp.plot_aggregated_run_predictions(pca_pred, MultiFeatPath, phases[0], phases[1], s, condition, smooth_kernel=3)
+        stride_mean_preds[s] = stride_pred_mean
+        regp.plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred, s, phases[0], phases[1], condition, MultiFeatPath)
 
+
+    regp.plot_multi_stride_predictions(stride_mean_preds, phases[0], phases[1], condition, MultiFeatPath, mean_smooth_window=21)
 
 
 
@@ -248,7 +265,6 @@ if __name__ == "__main__":
     # Run each instance.
     for inst in instance_settings:
         main(
-            global_settings["mouse_ids"],
             global_settings["stride_numbers"],
             global_settings["phases"],
             condition=inst["condition"],

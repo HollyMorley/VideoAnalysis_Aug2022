@@ -397,14 +397,16 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Extended
-    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs() # todo redo these with all analyses!!!!
-    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs()
-    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended',  analyses=["behaviour", "single", "multi"]).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["single"]).get_dirs() # todo redo these with all analyses!!!!
 
-    # Repeats
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs() # todo redo these with all analyses!!!!
+    # GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended',  analyses=["behaviour", "single", "multi"]).get_dirs()
+    #
+    # # Repeats
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day1').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day2').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
 
 if __name__ == '__main__':
     main()

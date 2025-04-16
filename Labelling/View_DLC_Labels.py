@@ -8,10 +8,16 @@ import os
 import mplcursors
 from matplotlib import cm
 from matplotlib.backend_tools import ToolZoom, ToolPan
+from matplotlib.transforms import Bbox
+
 
 # Load video and deeplabcut coordinates
-video_path = r"H:\Dual-belt_APAs\videos\Round_3\HM_20230317_APACharExt_FAA-1035243_None_side_1.avi"
-coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\Day2\HM_20230317_APACharExt_FAA-1035243_None_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
+video_path = r"H:\Dual-belt_APAs\videos\Round_3\HM_20230316_APACharExt_FAA-1035246_LR_overhead_1.avi"
+coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230316\HM_20230316_APACharExt_FAA-1035246_LR_overhead_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5")
+    #(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230316\HM_20230316_APACharExt_FAA-1035246_LR_front_1DLC_resnet50_DLC_DualBeltAug3shuffle1_1000000.h5")
+    #(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round3\20230316\HM_20230316_APACharExt_FAA-1035246_LR_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
+
+
 # video_path = r"H:\Dual-belt_APAs\videos\Round_3\20230306\HM_20230306_APACharRepeat_FAA-1035244_L_side_1.avi"
 # coord_path = (r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_AnalysedFiles\Round2\20230306\HM_20230306_APACharRepeat_FAA-1035244_L_side_1DLC_resnet50_DLC_DualBeltAug2shuffle1_1200000.h5")
 print(f"Video path: {video_path}")
@@ -26,6 +32,8 @@ if not os.path.exists(coord_path):
     print(f"Error: Coordinate file does not exist at path: {coord_path}")
     exit(1)
 
+saved_frames_dir = r"H:\Dual-belt_APAs\Plots\Jan25\Characterisation\Tracking"
+cam_name = video_path.split("\\")[-1].split(".")[0].split("_")[-2]
 
 extracted_frames_dir = "extracted_frames"
 if not os.path.exists(extracted_frames_dir):
@@ -75,7 +83,7 @@ color_map = {bodypart: cmap(i) for i, bodypart in enumerate(bodyparts)}
 
 
 # Initial scatter point size
-scatter_size = 50
+scatter_size = 12
 
 def plot_frame(frame_idx):
     global current_frame, scatter_points
@@ -127,22 +135,31 @@ def plot_frame(frame_idx):
             y = frame_coords[f'{bodypart}_y'].values[0]
             color = color_map[bodypart]  # Get the color for this bodypart
 
+            exclusion_labels = [
+                'StartPlatL', 'StartPlatR', 'TransitionL', 'TransitionR', 'StepL', 'StepR', 'Door'
+            ]
+            # check if bodypart is in exclusion_labels
+            if any(exclusion in bodypart for exclusion in exclusion_labels):
+                continue
+
             if likelihood > pcutoff:
                 scatter = ax.scatter(
                     x, y,
                     s=scatter_size,
-                    color=color,
-                    edgecolors='k',
-                    marker='o'
+                    color='red',#color,
+                    edgecolors='red', #'k',
+                    marker='o',
+                    linewidth=0
                 )
             else:
                 scatter = ax.scatter(
                     x, y,
                     s=scatter_size,
-                    color=color,
+                    color='red',#color,
                     edgecolors='k',
                     marker='x',
-                    alpha=0.2
+                    alpha=0.2,
+                    linewidth=0
                 )
 
             scatter_points.append((bodypart, scatter))
@@ -215,6 +232,26 @@ def extract_frame():
 
     print(f"Saved: {csv_filename} and {h5_filename}")
 
+def save_frame_with_coords():
+    # Redraw the canvas to update positions
+    fig.canvas.draw()
+
+    # Get the figure size in inches
+    fig_width, fig_height = fig.get_size_inches()
+
+    # Get the axes position as a fraction of the figure and convert to inches.
+    pos = ax.get_position()
+    bbox_inches = Bbox.from_bounds(pos.x0 * fig_width,
+                                   pos.y0 * fig_height,
+                                   pos.width * fig_width,
+                                   pos.height * fig_height)
+
+    # Build the file path – using the same directory as extracted_frames_dir and naming with the current frame index
+    save_filename = os.path.join(saved_frames_dir, f"frame_{current_frame}_{cam_name}.svg")
+    # Save the entire figure but crop to the bounding box (so only the main axis is saved)
+    fig.savefig(save_filename, bbox_inches=bbox_inches)
+    print(f"Saved frame with coords to {save_filename}")
+
 
 # Create Matplotlib figure and axes
 fig, ax = plt.subplots()
@@ -256,6 +293,10 @@ btn_home.on_clicked(home)
 ax_extract = plt.axes([0.44, 0.05, 0.12, 0.04])  # Position the button appropriately
 btn_extract = MplButton(ax_extract, 'Extract Frame')
 btn_extract.on_clicked(lambda event: extract_frame())
+
+ax_save = plt.axes([0.56, 0.05, 0.12, 0.04])  # adjust position as needed
+btn_save = MplButton(ax_save, 'Save frame with coords')
+btn_save.on_clicked(lambda event: save_frame_with_coords())
 
 
 # Show the initial frame

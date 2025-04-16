@@ -56,6 +56,7 @@ global_settings = {
     "pca_CombineAllStrides": True,
     "pcs_to_show": 60,
     "pcs_to_use": 12,
+    "pcs_to_plot": 8,
     #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": True,
@@ -73,7 +74,7 @@ global_settings = {
 condition_specific_settings = {
     'APAChar_LowHigh': {
         'c': 1,
-        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246', '1035250', '1035297', '1035298', '1035299', '1035301'], # and 298 again same day # removed 297 again 5/3/25 # just added back in 297 and 298 03/03/2025 # excluding 249 + 302 as missing data in APA2 and Wash2
+        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246', '1035250', '1035297', '1035299', '1035301'], # and 298 again same day # removed 297 again 5/3/25 # just added back in 297 and 298 03/03/2025 # excluding 249 + 302 as missing data in APA2 and Wash2
     },
     'APAChar_HighLow': {
         'c': 0.5,

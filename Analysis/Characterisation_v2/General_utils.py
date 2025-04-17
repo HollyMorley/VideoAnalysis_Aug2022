@@ -26,7 +26,11 @@ def initialize_experiment(condition, exp, day, compare_condition, settings_to_lo
     # collect feature data from each mouse and stride
     feature_data = {}
     feature_data_compare = {}
-    for stride in global_settings["stride_numbers"]:
+    if global_settings['stride_numbers'] == [0]:
+        strides_to_get = [-1, 0]
+    else:
+        strides_to_get = global_settings["stride_numbers"]
+    for stride in strides_to_get:
         for mouse_id in condition_specific_settings[condition]['global_fs_mouse_ids']:
             # Load and preprocess data for each mouse.
             filtered_data_df = load_and_preprocess_data(mouse_id, stride, condition, exp, day, measures_list_manual_reduction)
@@ -96,7 +100,10 @@ def set_up_save_dir(condition, exp, base_save_dir_no_c):
     strides = str(global_settings['stride_numbers']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
     phase_comp = str(global_settings['phases']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
 
-    base_save_dir = base_save_dir_no_c + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
+    if global_settings['residuals']:
+        base_save_dir = base_save_dir_no_c + '_res' + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
+    else:
+        base_save_dir = base_save_dir_no_c + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
     base_save_dir_condition = os.path.join(base_save_dir, f'{condition}_{exp}')
     return base_save_dir, base_save_dir_condition
 

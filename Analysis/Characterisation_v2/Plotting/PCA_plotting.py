@@ -131,25 +131,30 @@ def plot_pca(pca, pcs, labels, p1, p2, stride, stepping_limbs, run_numbers, mous
         plt.close()
 
 
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import ListedColormap
+
 def pca_plot_feature_loadings(pca_data, phases, save_path, fs=7):
     if len(pca_data) == 1 and pca_data[0].phase[0] == phases[0] and pca_data[0].phase[1] == phases[1]:
         pca_loadings = pca_data[0].pca_loadings.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
     else:
         raise ValueError("Not expecting more PCA data than for APA2 and Wash2 now!")
 
-    display_names = []
-    for f in pca_loadings.index:
-        display_names.append(short_names.get(f,f))
+    # build display names
+    display_names = [short_names.get(f, f) for f in pca_loadings.index]
 
-        # --- build heatmap DataFrame: rows=PCs, columns=features ---
+    # build heatmap DataFrame: rows=PCs, columns=features
     heatmap_df = pca_loadings.copy()
-    heatmap_df.index = pca_loadings.index  # idx = original feature keys
+    heatmap_df.index = pca_loadings.index  # original feature keys
     heatmap_df.columns = [f"PC{idx + 1}" for idx in range(heatmap_df.shape[1])]
     heatmap_df.columns.name = "Principal Component"
-    heatmap_df.index = display_names  # pretty feature labels
-    heatmap_df = heatmap_df.T  # now rows=PCs, cols=features
+    heatmap_df.index = display_names     # pretty feature labels
+    heatmap_df = heatmap_df.T            # now rows=PCs, cols=features
 
-    # --- plot ---
+    # --- Raw loadings plot ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.heatmap(
         heatmap_df,
@@ -159,46 +164,49 @@ def pca_plot_feature_loadings(pca_data, phases, save_path, fs=7):
         yticklabels=True,
         ax=ax
     )
-
-    # --- formatting ---
+    ax.set_title(f'PCA Feature Loadings: {phases[0]} vs {phases[1]}', fontsize=fs)
     ax.set_xlabel('Features', fontsize=fs)
     ax.set_ylabel('Principal Component', fontsize=fs)
-    ax.set_title(f'PCA Feature Loadings: {phases[0]} vs {phases[1]}', fontsize=fs)
     ax.tick_params(axis='x', rotation=90, labelsize=fs)
     ax.tick_params(axis='y', labelsize=fs)
     plt.tight_layout()
-
-    # --- save ---
     for ext in ('png', 'svg'):
-        fn = f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_heatmap.{ext}'
+        fn = f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_raw.{ext}'
         fig.savefig(os.path.join(save_path, fn), dpi=300)
-
     plt.close(fig)
 
-    # for pc in pca_loadings.columns:
-    #     fig, ax = plt.subplots(figsize=(6, 10))
-    #     single_pc_loadings = pca_loadings.loc(axis=1)[pc]
-    #     ax.plot(single_pc_loadings.values, single_pc_loadings.index, label=pc, marker='o', markersize=2)
-    #     ax.axvline(0, color='gray', linewidth=1, linestyle='--', alpha=0.4)
-    #     ax.set_yticks(np.arange(len(display_names)))
-    #     ax.set_yticklabels(display_names, fontsize=fs)
-    #     ax.set_xlim(-0.5,0.5)
-    #     ax.set_xticks(np.arange(-0.5, 0.6, 0.25))
-    #     ax.set_xticklabels(np.arange(-0.5, 0.6, 0.25), fontsize=fs)
-    #     ax.set_xlabel('Loadings', fontsize=fs)
-    #     ax.set_title(pc, fontsize=fs)
-    #     ax.grid(False)
-    #     ax.spines['top'].set_visible(False)
-    #     ax.spines['right'].set_visible(False)
-    #     ax.spines['left'].set_visible(False)
-    #
-    #     ax.invert_yaxis()
-    #
-    #     plt.subplots_adjust(left=0.5, right=0.9, top=0.95, bottom=0.05)
-    #
-    #     plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.png'), dpi=300)
-    #     plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.svg'), dpi=300)
-    #     plt.close()
+    # prepare a colormap corresponding to the positive half of the original coolwarm
+    full_cmap = plt.cm.get_cmap('coolwarm', 256)
+    half = np.linspace(0.5, 1.0, 128)
+    pos_cmap = ListedColormap(full_cmap(half))
+
+    # compute maximum absolute loading for scaling
+    max_abs = heatmap_df.abs().values.max()
+
+    # --- Absolute loadings plot ---
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.heatmap(
+        heatmap_df.abs(),
+        cmap=pos_cmap,
+        vmin=0,
+        vmax=max_abs,
+        cbar_kws={'label': 'Absolute Loading'},
+        xticklabels=True,
+        yticklabels=True,
+        ax=ax
+    )
+    ax.set_title(f'PCA Absolute Feature Loadings: {phases[0]} vs {phases[1]}', fontsize=fs)
+    ax.set_xlabel('Features', fontsize=fs)
+    ax.set_ylabel('Principal Component', fontsize=fs)
+    ax.tick_params(axis='x', rotation=90, labelsize=fs)
+    ax.tick_params(axis='y', labelsize=fs)
+    plt.tight_layout()
+    for ext in ('png', 'svg'):
+        fn = f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_absolute.{ext}'
+        fig.savefig(os.path.join(save_path, fn), dpi=300)
+    plt.close(fig)
+
+
 
 def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, phases, stride_numbers, condition, save_path, n_top_features=5, fs=7):
     """
@@ -225,8 +233,8 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
             mask_p1, mask_p2 = gu.get_mask_p1_p2(top_feats_data, phases[0], phases[1])
             feats_p1 = top_feats_data.loc(axis=0)[mask_p1]
             feats_p2 = top_feats_data.loc(axis=0)[mask_p2]
-            feats_raw_p1 = feats_raw.loc(axis=0)[mask_p1]
-            feats_raw_p2 = feats_raw.loc(axis=0)[mask_p2]
+            # feats_raw_p1 = feats_raw.loc(axis=0)[mask_p1]
+            # feats_raw_p2 = feats_raw.loc(axis=0)[mask_p2]
 
             plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s,
                                        top_feats_display_names, save_path, fs=fs)

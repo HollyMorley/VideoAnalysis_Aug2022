@@ -12,6 +12,8 @@ from Analysis.Tools.config import condition_specific_settings
 def run_single_feature_regressions(phases, stride_numbers, condition, feature_names, feature_data, stride_data,
                                    save_path, filename):
     print("Running single feature predictions...")
+    # find how many nans in feature data
+    nans = np.isnan(feature_data.values)
     single_feature_predictions = []
     for p1, p2 in itertools.combinations(phases, 2):
         for s in stride_numbers:

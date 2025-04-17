@@ -61,7 +61,7 @@ def compute_regression(X, y, folds=5):
 
     return w, bal_acc, cv_acc, w_folds
 
-def compute_regression_pcwise_prediction(X, y, w, folds=10, shuffles=100):
+def compute_regression_pcwise_prediction(X, y, w, folds=10, shuffles=1000):
     w = w[0]
     n_samples = X.shape[1]
    # kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
@@ -127,7 +127,12 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
                        condition: str,
                        save_path: str):
 
-    # Fit regression model on PCA data
+    # # Fit regression model on PCA data
+    # if global_settings['stride_numbers'] == [0]:
+    #     print('Picking out every other run for stride 0')
+    #     selected_feature_data = selected_feature_data[::2]
+    #     mask_p1 = mask_p1[::2]
+    #     mask_p2 = mask_p2[::2]
     results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2)
     (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc) = results
 

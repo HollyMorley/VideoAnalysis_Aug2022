@@ -45,7 +45,7 @@ instance_settings = [
 global_settings = {
     "stride_numbers": [-3,-2,-1],#[-3,-2,-1],#[0]
     "phases": ['APA2','Wash2'], #['APA2','Wash2'], #['APA1', 'APA2'],
-    "residuals": False,
+    "residuals": True,
     "script_version": 'SingleCondition',
     "allmice": True,
     "method": 'rfecv',

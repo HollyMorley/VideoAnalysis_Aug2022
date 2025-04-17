@@ -2,9 +2,10 @@ import os
 import itertools
 import random
 import pickle
-
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.signal
 import seaborn as sns
 import pandas as pd
 from typing import List
@@ -13,6 +14,7 @@ from collections import defaultdict
 from Helpers.Config_23 import *
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
 from Analysis.Characterisation_v2 import General_utils as gu
+from Analysis.Characterisation_v2 import Plotting_utils as pu
 from Analysis.Characterisation_v2 import SingleFeaturePred_utils as sfpu
 from Analysis.Characterisation_v2 import MultiFeaturePred_utils as mfpu
 from Analysis.Characterisation_v2.AnalysisTools import ClusterFeatures as cf
@@ -58,6 +60,7 @@ def main(stride_numbers: List[int], phases: List[str],
         os.makedirs(MultiResidualFeatPath, exist_ok=True)
 
     print(f"Base save directory: {base_save_dir_condition}")
+
     # Skipping outlier removal
     if not os.path.exists(preprocessed_data_file_path):
         """
@@ -90,6 +93,24 @@ def main(stride_numbers: List[int], phases: List[str],
             norm_df = pd.DataFrame([normalize_mean, normalize_std], columns=feature_names, index=['mean', 'std'])
             Normalize_compare[(stride, mouse_id)] = norm_df
 
+        if stride_numbers == [0]:
+            datas= []
+            for data in [feature_data, feature_data_compare]:
+                a = data.loc(axis=0)[0]
+                b = data.loc(axis=0)[-1]
+
+                # find intersection of indexs
+                a = a.loc[a.index.intersection(b.index)]
+                b = b.loc[b.index.intersection(a.index)]
+
+                # 2) compute the difference
+                diff = a - b
+
+                # 3) stick “Stride=0” back on top
+                data = pd.concat({0: diff},names=['Stride'] + diff.index.names)
+                datas.append(data)
+            feature_data, feature_data_compare = datas
+
         # Get average feature values for each feature in each stride (across mice)
         feature_data_average = feature_data.groupby(level=['Stride', 'Run']).median()
         feature_data_compare_average = feature_data_compare.groupby(level=['Stride', 'Run']).median()
@@ -111,16 +132,6 @@ def main(stride_numbers: List[int], phases: List[str],
                                              f'CorrMatrix_manualclustering_{p1}-{p2}_all')
             for s in stride_numbers:
                 cluster_mappings[(p1, p2, s)] = manual_clusters['cluster_mapping']
-
-        """
-            # -------- Find residuals --------
-            Residual between every feature (excluding walking speed) and walking speed
-        """
-        if residuals:
-            if not os.path.exists(os.path.join(ResidualFeatPath, "ResidualData.h5")):
-                residual_data = reg.find_residuals(feature_data, stride_numbers, phases, ResidualFeatPath)
-            else:
-                residual_data = pd.read_hdf(os.path.join(ResidualFeatPath, "ResidualData.h5"))
 
         """
             # -------- Save everything so far --------
@@ -151,8 +162,19 @@ def main(stride_numbers: List[int], phases: List[str],
             Normalize = data['Normalize']
             Normalize_compare = data['Normalize_compare']
             cluster_mappings = data['cluster_mappings']
+
+    """
+        # -------- Find residuals --------
+        Residual between every feature (excluding walking speed) and walking speed
+    """
+    if stride_numbers != [0]:
         if residuals:
-            residual_data = pd.read_hdf(os.path.join(ResidualFeatPath, "ResidualData.h5"))
+            if not os.path.exists(os.path.join(ResidualFeatPath, "ResidualData.h5")):
+                residual_data = reg.find_residuals(feature_data, stride_numbers, phases, ResidualFeatPath)
+            else:
+                residual_data = pd.read_hdf(os.path.join(ResidualFeatPath, "ResidualData.h5"))
+    else:
+        residuals = False
 
     """
     ------------------ Single feature predictions ------------------
@@ -266,26 +288,6 @@ def main(stride_numbers: List[int], phases: List[str],
         with open(os.path.join(MultiFeatPath, filename_pca), 'wb') as f:
             pickle.dump(pca_all, f)
 
-    # todo am not doing a separate PCA as then i cannot compare. But now am adding walking speed back into residual data so it is the same size
-    # # ----- PCA for residual features too -----
-    # if residuals:
-    #     residual_filename_pca = 'residual_' + filename_pca
-    #     if os.path.exists(os.path.join(MultiResidualFeatPath, residual_filename_pca)):
-    #         print("Loading PCA from file...")
-    #         with open(os.path.join(MultiResidualFeatPath, residual_filename_pca), 'rb') as f:
-    #             pca_all_residual = pickle.load(f)
-    #     else:
-    #         print("Running PCA on residuals...")
-    #         pca_all_residual = pca.pca_main(residual_data, stride_data, phases, stride_numbers, condition, MultiResidualFeatPath)
-    #
-    #         # Plot how each feature loads onto the PCA components
-    #         pcap.pca_plot_feature_loadings(pca_all_residual, phases, MultiResidualFeatPath)
-    #         pcap.plot_top_features_per_PC(pca_all_residual, residual_data, residual_data, phases, stride_numbers, condition, MultiResidualFeatPath, n_top_features=8)
-    #
-    #         # Save PCA results
-    #         with open(os.path.join(MultiResidualFeatPath, residual_filename_pca), 'wb') as f:
-    #             pickle.dump(pca_all_residual, f)
-
     """
     -------------------- PCA/Multi Feature Predictions ----------------------
     """
@@ -350,6 +352,64 @@ def main(stride_numbers: List[int], phases: List[str],
     regp.plot_multi_stride_predictions(stride_mean_preds, phases[0], phases[1], condition, MultiFeatPath, mean_smooth_window=21)
     if residuals:
         regp.plot_multi_stride_predictions(residual_stride_mean_preds, phases[0], phases[1], condition, MultiResidualFeatPath, mean_smooth_window=21)
+
+    def gradient_colors(start_hex, end_hex, n):
+        start_rgb = mcolors.to_rgb(start_hex)
+        end_rgb = mcolors.to_rgb(end_hex)
+        return [
+            mcolors.to_hex(
+                [start_rgb[i] + (end_rgb[i] - start_rgb[i]) * frac
+                 for i in range(3)]
+            )
+            for frac in np.linspace(0, 1, n)
+        ]
+
+    data = feature_data.loc(axis=0)[-1]
+    common_x = np.arange(0, 160)
+    pca_obj = pca_all[0].pca
+
+    pcs_all_mice = np.zeros((len(condition_specific_settings[condition]['global_fs_mouse_ids']),160, 3))
+    for midx, m in enumerate(condition_specific_settings[condition]['global_fs_mouse_ids']):
+        mdata = data.loc(axis=0)[m]
+        pcs = pca_obj.transform(mdata)
+        pcs = pcs[:, [0,2,6]]
+        pcs_interp = np.zeros((160, pcs.shape[1]))
+        for pc in range(pcs.shape[1]):
+            pcs_interp[:, pc] = np.interp(common_x, mdata.index, pcs[:, pc])
+        pcs_all_mice[midx, :, :] = pcs_interp
+    pcs_mean = np.mean(pcs_all_mice, axis=0)
+    pcs_mean = pcs_mean[10:, :]
+    # smooth across runs
+    import scipy
+    pcs_mean = scipy.signal.savgol_filter(pcs_mean,window_length=10, polyorder=2, axis=0)
+    # pcs_mean_df = pd.DataFrame(index=common_x, data=pcs_mean, columns=['PC1', 'PC3', 'PC7'])
+    # pcs_mean_df = pcs_mean_df.iloc(axis=0)[10:]
+
+    # get colours for each run
+    apa1_grad = gradient_colors('#AAAAAA', pu.get_color_phase('APA2'), 50)
+    apa2_grad = gradient_colors(pu.get_color_phase('APA2'), pu.get_color_phase('APA2'), 50)
+    wash1_grad = gradient_colors('#AAAAAA', pu.get_color_phase('Wash2'), 25)
+    wash2_grad = gradient_colors(pu.get_color_phase('Wash2'), pu.get_color_phase('Wash2'), 25)
+    clrs = np.concatenate((apa1_grad, apa2_grad, wash1_grad, wash2_grad), axis=0)
+
+    # plot 3d plot of pcs
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    pcs_mean_exSm = scipy.signal.savgol_filter(pcs_mean,window_length=20, polyorder=2, axis=0)
+    for run in range(0, 149):
+        # ax.scatter(pcs_mean[run,0], pcs_mean[run, 1], pcs_mean[run, 2], c=clrs[run], marker='o', s=10, alpha=0.5)
+        # ax.plot([pcs_mean[run, 0], pcs_mean[run+1, 0]], [pcs_mean[run, 1], pcs_mean[run+1, 1]], [pcs_mean[run, 2], pcs_mean[run+1, 2]], c=clrs[run], alpha=0.5)
+        ax.plot([pcs_mean_exSm[run, 0], pcs_mean_exSm[run+1, 0]], [pcs_mean_exSm[run, 1], pcs_mean_exSm[run+1, 1]], [pcs_mean_exSm[run, 2], pcs_mean_exSm[run+1, 2]], c=clrs[run], alpha=0.2)
+    # ax.scatter(pcs_mean[:, 0], pcs_mean[:, 1], pcs_mean[:, 2], c='b', marker='o')
+
+    ax.set_xlabel('PC1')
+    ax.set_ylabel('PC3')
+    ax.set_zlabel('PC7')
+
+
+
+
+
 
 
 

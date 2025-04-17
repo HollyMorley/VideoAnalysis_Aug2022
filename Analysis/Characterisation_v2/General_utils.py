@@ -307,11 +307,6 @@ def create_mouse_save_directory(base_dir, mouse_id, stride_number, phase1, phase
 
 def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
     from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
-    import numpy as np
-    import pandas as pd
-    import os
-    import matplotlib.pyplot as plt
-    from collections import defaultdict
 
     all_pc_sigs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
     all_mean_accs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
@@ -325,8 +320,8 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
         all_mean_accs[s] = mean_accs
         all_uniformities[s] = mouse_uniform
 
-        of_interest = np.logical_and.reduce((mean_accs > 0.6, PC_sigs < 0.05, mouse_uniform))
-        pcs_of_interest = np.where(of_interest)[0]
+        of_interest = np.logical_and.reduce((mean_accs >= 0.6, PC_sigs <= 0.05, mouse_uniform))
+        pcs_of_interest = np.where(of_interest)[0] + 1  # Convert to 1-indexed
         print(f"Stride {s}: PCs of interest: {pcs_of_interest}")
         all_pcs_of_interest[s] = pcs_of_interest
 
@@ -461,7 +456,7 @@ def compute_residuals(group, s, savedir):
         plt.savefig(os.path.join(plot_dir, f'Speed_regression_{safe_name}_{s}.svg'), format='svg')
         plt.close()
 
-    res.drop(columns=['walking_speed|bodypart:Tail1, speed_correct:True'], inplace=True)
+    #res.drop(columns=['walking_speed|bodypart:Tail1, speed_correct:True'], inplace=True)
 
     return res
 

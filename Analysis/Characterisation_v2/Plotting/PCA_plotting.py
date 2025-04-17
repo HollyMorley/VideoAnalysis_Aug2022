@@ -12,26 +12,36 @@ from Analysis.Tools.config import (global_settings, condition_specific_settings,
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2 import Plotting_utils as pu
 
-def plot_scree(pca, p1, p2, stride, condition, save_path):
+def plot_scree(pca, p1, p2, stride, condition, save_path, fs=7):
     """
     Plot and save the scree plot.
     """
     from Analysis.Tools.config import (global_settings)
-    plt.figure(figsize=(12, 8))
-    plt.plot(range(1, len(pca.explained_variance_ratio_) + 1),
-             pca.explained_variance_ratio_, 'o-', linewidth=2, color='blue', label='Individual Explained Variance')
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.plot(range(1, len(pca.explained_variance_ratio_) + 1),
+             pca.explained_variance_ratio_, 'o-', markersize=2, linewidth=1, color='blue', label='Individual Explained Variance')
     cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
-    plt.plot(range(1, len(cumulative_variance) + 1),
-             cumulative_variance, 's--', linewidth=2, color='red', label='Cumulative Explained Variance')
-    plt.title(f'Scree Plot with Cumulative Explained Variance\n{p1} vs {p2} - {condition} - {stride}\n'
-              f'Num chosen PCs: {global_settings["pcs_to_use"]}')
-    plt.xlabel('Principal Component')
-    plt.ylabel('Explained Variance Ratio')
-    plt.xticks(range(1, len(pca.explained_variance_ratio_) + 1))
-    plt.ylim(0, 1.05)
-    plt.legend(loc='best')
-    plt.grid(False)
-    plt.tight_layout()
+    ax.plot(range(1, len(cumulative_variance) + 1),
+             cumulative_variance, 's--', markersize=2, linewidth=1, color='red', label='Cumulative Explained Variance')
+    ax.set_title(stride, fontsize=fs)
+    ax.set_xlabel('Principal Component', fontsize=fs)
+    ax.set_ylabel('Explained Variance Ratio', fontsize=fs)
+    # xtick range with every 10th label
+    ax.set_xlim(0, len(pca.explained_variance_ratio_) + 1)
+    ax.set_xticks(np.arange(0, len(pca.explained_variance_ratio_) + 1, 10))
+    ax.set_xticklabels(np.arange(0, len(pca.explained_variance_ratio_) + 1, 10), fontsize=fs)
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.2))
+    ax.tick_params(axis='x', which='major', bottom=True, top=False, length=2, width=1)
+    ax.tick_params(axis='x', which='minor', bottom=True, top=False, length=1, width=1)
+    ax.set_ylim(-0.01, 1.01)
+    ax.set_yticks(np.arange(0, 1.1, 0.25))
+    ax.set_yticklabels(np.arange(0, 1.1, 0.25), fontsize=fs)
+    ax.legend(loc='best')
+    ax.grid(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.15)
+
     os.makedirs(save_path, exist_ok=True)
     plt.savefig(os.path.join(save_path, f"Scree_Plot_{p1}_{p2}_{stride}_{condition}.png"), dpi=300)
     plt.savefig(os.path.join(save_path, f"Scree_Plot_{p1}_{p2}_{stride}_{condition}.svg"), dpi=300)
@@ -131,30 +141,64 @@ def pca_plot_feature_loadings(pca_data, phases, save_path, fs=7):
     for f in pca_loadings.index:
         display_names.append(short_names.get(f,f))
 
-    for pc in pca_loadings.columns:
-        fig, ax = plt.subplots(figsize=(6, 10))
-        single_pc_loadings = pca_loadings.loc(axis=1)[pc]
-        ax.plot(single_pc_loadings.values, single_pc_loadings.index, label=pc, marker='o', markersize=2)
-        ax.axvline(0, color='gray', linewidth=1, linestyle='--', alpha=0.4)
-        ax.set_yticks(np.arange(len(display_names)))
-        ax.set_yticklabels(display_names, fontsize=fs)
-        ax.set_xlim(-0.5,0.5)
-        ax.set_xticks(np.arange(-0.5, 0.6, 0.25))
-        ax.set_xticklabels(np.arange(-0.5, 0.6, 0.25), fontsize=fs)
-        ax.set_xlabel('Loadings', fontsize=fs)
-        ax.set_title(pc, fontsize=fs)
-        ax.grid(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
+        # --- build heatmap DataFrame: rows=PCs, columns=features ---
+    heatmap_df = pca_loadings.copy()
+    heatmap_df.index = pca_loadings.index  # idx = original feature keys
+    heatmap_df.columns = [f"PC{idx + 1}" for idx in range(heatmap_df.shape[1])]
+    heatmap_df.columns.name = "Principal Component"
+    heatmap_df.index = display_names  # pretty feature labels
+    heatmap_df = heatmap_df.T  # now rows=PCs, cols=features
 
-        ax.invert_yaxis()
+    # --- plot ---
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.heatmap(
+        heatmap_df,
+        cmap='coolwarm',
+        cbar_kws={'label': 'Loading'},
+        xticklabels=True,
+        yticklabels=True,
+        ax=ax
+    )
 
-        plt.subplots_adjust(left=0.5, right=0.9, top=0.95, bottom=0.05)
+    # --- formatting ---
+    ax.set_xlabel('Features', fontsize=fs)
+    ax.set_ylabel('Principal Component', fontsize=fs)
+    ax.set_title(f'PCA Feature Loadings: {phases[0]} vs {phases[1]}', fontsize=fs)
+    ax.tick_params(axis='x', rotation=90, labelsize=fs)
+    ax.tick_params(axis='y', labelsize=fs)
+    plt.tight_layout()
 
-        plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.png'), dpi=300)
-        plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.svg'), dpi=300)
-        plt.close()
+    # --- save ---
+    for ext in ('png', 'svg'):
+        fn = f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_heatmap.{ext}'
+        fig.savefig(os.path.join(save_path, fn), dpi=300)
+
+    plt.close(fig)
+
+    # for pc in pca_loadings.columns:
+    #     fig, ax = plt.subplots(figsize=(6, 10))
+    #     single_pc_loadings = pca_loadings.loc(axis=1)[pc]
+    #     ax.plot(single_pc_loadings.values, single_pc_loadings.index, label=pc, marker='o', markersize=2)
+    #     ax.axvline(0, color='gray', linewidth=1, linestyle='--', alpha=0.4)
+    #     ax.set_yticks(np.arange(len(display_names)))
+    #     ax.set_yticklabels(display_names, fontsize=fs)
+    #     ax.set_xlim(-0.5,0.5)
+    #     ax.set_xticks(np.arange(-0.5, 0.6, 0.25))
+    #     ax.set_xticklabels(np.arange(-0.5, 0.6, 0.25), fontsize=fs)
+    #     ax.set_xlabel('Loadings', fontsize=fs)
+    #     ax.set_title(pc, fontsize=fs)
+    #     ax.grid(False)
+    #     ax.spines['top'].set_visible(False)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['left'].set_visible(False)
+    #
+    #     ax.invert_yaxis()
+    #
+    #     plt.subplots_adjust(left=0.5, right=0.9, top=0.95, bottom=0.05)
+    #
+    #     plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.png'), dpi=300)
+    #     plt.savefig(os.path.join(save_path, f'PCA_feature_Loadings_{phases[0]}vs{phases[1]}_{pc}.svg'), dpi=300)
+    #     plt.close()
 
 def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, phases, stride_numbers, condition, save_path, n_top_features=5, fs=7):
     """

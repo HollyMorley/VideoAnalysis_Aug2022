@@ -29,7 +29,7 @@ def plot_featureXruns_heatmap(phases, stride_numbers, feature_names, data, data_
             filename = f"FeatureXruns_heatmap_RunPrediction"
 
             heatmap_runpred_or_rawfeat(p1, p2, s, feature_names, display_feat_names,
-                                        heatmap_data, save_path, filename, cbar_lim=1)
+                                        heatmap_data, save_path, filename, cbar_lim=1, cbar_label='Prediction')
         elif data_name == 'RawFeats':
             stride_raw_feats = data.loc(axis=0)[s]
             assert stride_raw_feats.columns.tolist() == feature_names, "Feature names do not match!"
@@ -38,12 +38,12 @@ def plot_featureXruns_heatmap(phases, stride_numbers, feature_names, data, data_
             filename = f"FeatureXruns_heatmap_RawFeats"
 
             heatmap_runpred_or_rawfeat(p1, p2, s, feature_names, display_feat_names,
-                                      heatmap_data, save_path, filename, cbar_lim=1.25)
+                                      heatmap_data, save_path, filename, cbar_lim=1.25, cbar_label='Raw Feature Value')
 
 
 
 
-def heatmap_runpred_or_rawfeat(p1, p2, s, feat_names, display_feat_names, heatmap_data, save_path, filename, cbar_lim):
+def heatmap_runpred_or_rawfeat(p1, p2, s, feat_names, display_feat_names, heatmap_data, save_path, filename, cbar_lim, cbar_label):
         # smooth with medfilt
         smooth = heatmap_data.apply(lambda x: medfilt(x, kernel_size=3), axis=1)
         # Convert the Series of NumPy arrays into a DataFrame:
@@ -51,7 +51,7 @@ def heatmap_runpred_or_rawfeat(p1, p2, s, feat_names, display_feat_names, heatma
 
         fig, ax = plt.subplots(figsize=(12, 8))
         h = sns.heatmap(smooth_df, cmap='coolwarm', cbar=True, yticklabels=display_feat_names,
-                        vmin=-1*cbar_lim, vmax=cbar_lim, cbar_kws={'label': 'Prediction', 'orientation': 'vertical',
+                        vmin=-1*cbar_lim, vmax=cbar_lim, cbar_kws={'label': cbar_label, 'orientation': 'vertical',
                                                    'shrink': 0.8})
 
         # Change x-axis tick labels

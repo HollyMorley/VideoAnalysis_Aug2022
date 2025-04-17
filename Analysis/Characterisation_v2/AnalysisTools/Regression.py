@@ -12,6 +12,8 @@ from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2.Plotting import Regression_plotting as rp
 from Analysis.Tools.config import condition_specific_settings, global_settings
 
+np.random.seed(42)
+
 def compute_regression(X, y, folds=5):
     model = LogisticRegression(penalty='l2', fit_intercept=False, solver='liblinear', C=0.5)
 
@@ -236,10 +238,10 @@ def find_residuals(feature_data, stride_numbers, phases, savedir):
     for s in stride_numbers:
         print(f"Stride {s} - finding residuals for {phases[0]} and {phases[1]}")
         stride_features = feature_data.loc(axis=0)[s]
-        mask_p1, mask_p2 = gu.get_mask_p1_p2(stride_features, phases[0], phases[1])
-        phase_stride_features = pd.concat(
-            [stride_features[mask_p1], stride_features[mask_p2]])
-        residuals = phase_stride_features.groupby(level='MouseID').apply(gu.compute_residuals, s, savedir)
+        # mask_p1, mask_p2 = gu.get_mask_p1_p2(stride_features, phases[0], phases[1])
+        # phase_stride_features = pd.concat(
+        #     [stride_features[mask_p1], stride_features[mask_p2]])
+        residuals = stride_features.groupby(level='MouseID').apply(gu.compute_residuals, s, savedir)
         all_residuals.append(residuals)
     all_residuals_df =  pd.concat(all_residuals, keys=stride_numbers, names=['Stride'])
 

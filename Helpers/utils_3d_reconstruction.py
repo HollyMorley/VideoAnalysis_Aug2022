@@ -431,7 +431,7 @@ class BeltPoints:
         ax.set_xlabel("x (mm)")
         ax.set_ylabel("y (mm)")
         ax.set_zlabel("z (mm)")
-        ax.axis("equal")
+        #ax.axis("equal")
 
         return fig, ax
 

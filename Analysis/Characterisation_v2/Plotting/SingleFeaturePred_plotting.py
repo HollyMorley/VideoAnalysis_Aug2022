@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 import seaborn as sns
 import itertools
 import numpy as np

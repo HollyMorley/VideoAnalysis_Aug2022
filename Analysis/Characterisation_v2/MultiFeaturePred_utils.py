@@ -11,7 +11,8 @@ from Analysis.Characterisation_v2.Plotting import PCA_plotting as pcap
 from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
 
 
-def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_data, stride_data, save_dir):
+def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_data, stride_data, save_dir,
+                        select_pcs=None, select_pc_type=None):
     pca_predictions = []
     for p1, p2 in itertools.combinations(phases, 2):
 
@@ -21,6 +22,9 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
             pca = pca_data[0].pca
             #pcs = pca_data[0].pcs
             pca_loadings = pca_data[0].pca_loadings
+
+        if select_pcs is not None:
+            pca_loadings = pca_loadings.loc(axis=1)[select_pcs]
 
         for s in stride_numbers:
             print(f"Running single feature predictions for {p1}-{p2} on stride {s}...")
@@ -38,6 +42,12 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                 pcs_p2 = pcs[mask_p2]
                 pcs_p1p2 = np.vstack([pcs_p1, pcs_p2])
 
+                if select_pcs is not None:
+                    select_PCs_as_numbers = [int(pc[-1]) - 1 for pc in select_pcs]
+                    pcs_p1 = pcs_p1[:, select_PCs_as_numbers]
+                    pcs_p2 = pcs_p2[:, select_PCs_as_numbers]
+                    pcs_p1p2 = pcs_p1p2[:, select_PCs_as_numbers]
+
                 labels_phase1 = np.array([p1] * pcs_p1.shape[0])
                 labels_phase2 = np.array([p2] * pcs_p2.shape[0])
                 labels = np.concatenate([labels_phase1, labels_phase2])
@@ -52,7 +62,8 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                                 featsxruns_phaseruns,
                                                                 mask_p1, mask_p2,
                                                                 midx, p1, p2, s,
-                                                                condition, save_path)
+                                                                condition, save_path,
+                                                                select_pc_type)
                 (y_pred, smoothed_y_pred, feature_weights, w_PC, normalize_mean_pc, normalize_std_pc,
                  acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc) = results
 

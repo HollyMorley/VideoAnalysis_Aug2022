@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 import matplotlib.patches as mpatches
 import seaborn as sns
 from scipy.ndimage import median_filter
@@ -259,8 +260,8 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
 
 
 def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s, top_feats_display_names, save_path, fs=7):
-    feats_permouse_medians_p1 = feats_p1.groupby(level=0).median()
-    feats_permouse_medians_p2 = feats_p2.groupby(level=0).median()
+    feats_permouse_medians_p1 = feats_p1.groupby(level=0).mean()
+    feats_permouse_medians_p2 = feats_p2.groupby(level=0).mean()
 
     # Prepare data lists for the boxplots
     data_p1 = [feats_permouse_medians_p1[feat].values for feat in top_feats_pc]

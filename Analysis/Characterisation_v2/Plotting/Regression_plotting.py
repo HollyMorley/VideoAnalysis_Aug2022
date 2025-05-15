@@ -3,11 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 #from scipy.signal import medfilt
 from scipy.ndimage import median_filter
+import scipy.signal
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as mcolors
 from matplotlib import ticker
@@ -414,6 +416,70 @@ def plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred, s, p1, p2, 
     fig.savefig(os.path.join(save_dir, f"Normalized_PC_regression_weights_{p1}_{p2}_stride{s}_{condition}.png"), dpi=300)
     fig.savefig(os.path.join(save_dir, f"Normalized_PC_regression_weights_{p1}_{p2}_stride{s}_{condition}.svg"), dpi=300)
     plt.close()
+
+def plot_top3_pcs_run_projections(feature_data, pca_all, stride, condition, save_dir, fs=7):
+    data = feature_data.loc(axis=0)[stride]
+    common_x = np.arange(0, 160)
+    pca_obj = pca_all[0].pca
+
+    pcs_all_mice = np.zeros((len(condition_specific_settings[condition]['global_fs_mouse_ids']), 160, 3))
+    for midx, m in enumerate(condition_specific_settings[condition]['global_fs_mouse_ids']):
+        mdata = data.loc(axis=0)[m]
+        pcs = pca_obj.transform(mdata)
+        pcs = pcs[:, [0, 2, 6]]
+        pcs_interp = np.zeros((160, pcs.shape[1]))
+        for pc in range(pcs.shape[1]):
+            pcs_interp[:, pc] = np.interp(common_x, mdata.index, pcs[:, pc])
+        pcs_all_mice[midx, :, :] = pcs_interp
+    pcs_mean = np.mean(pcs_all_mice, axis=0)
+    pcs_mean = pcs_mean[10:, :]
+    # smooth across runs
+    import scipy
+    pcs_mean = scipy.signal.savgol_filter(pcs_mean, window_length=10, polyorder=2, axis=0)
+    # pcs_mean_df = pd.DataFrame(index=common_x, data=pcs_mean, columns=['PC1', 'PC3', 'PC7'])
+    # pcs_mean_df = pcs_mean_df.iloc(axis=0)[10:]
+
+    # get colours for each run
+    apa1_grad = pu.gradient_colors('#AAAAAA', pu.get_color_phase('APA2'), 50)
+    apa2_grad = pu.gradient_colors(pu.get_color_phase('APA2'), pu.get_color_phase('APA2'), 50)
+    wash1_grad = pu.gradient_colors('#AAAAAA', pu.get_color_phase('Wash2'), 25)
+    wash2_grad = pu.gradient_colors(pu.get_color_phase('Wash2'), pu.get_color_phase('Wash2'), 25)
+    clrs = np.concatenate((apa1_grad, apa2_grad, wash1_grad, wash2_grad), axis=0)
+
+    # plot 3d plot of pcs
+    fig = plt.figure(figsize=(4, 4))
+    ax = fig.add_subplot(111, projection='3d')
+    pcs_mean_exSm = scipy.signal.savgol_filter(pcs_mean, window_length=20, polyorder=2, axis=0)
+    for run in range(0, 149):
+        # ax.scatter(pcs_mean[run,0], pcs_mean[run, 1], pcs_mean[run, 2], c=clrs[run], marker='o', s=10, alpha=0.5)
+        # ax.plot([pcs_mean[run, 0], pcs_mean[run+1, 0]], [pcs_mean[run, 1], pcs_mean[run+1, 1]], [pcs_mean[run, 2], pcs_mean[run+1, 2]], c=clrs[run], alpha=0.5)
+        ax.plot([pcs_mean_exSm[run, 0], pcs_mean_exSm[run + 1, 0]], [pcs_mean_exSm[run, 1], pcs_mean_exSm[run + 1, 1]],
+                [pcs_mean_exSm[run, 2], pcs_mean_exSm[run + 1, 2]], c=clrs[run], alpha=0.8)
+    # ax.scatter(pcs_mean[:, 0], pcs_mean[:, 1], pcs_mean[:, 2], c='b', marker='o')
+
+    ax.set_xlabel('PC1', fontsize=7)
+    ax.set_ylabel('PC3', fontsize=7)
+    ax.set_zlabel('PC7', fontsize=7)
+    # set tick fontsize to 7
+    ax.tick_params(axis='both', which='major', labelsize=7)
+
+    ax.set_facecolor('none')  # no pane fill
+    fig.patch.set_facecolor('white')  # or 'none' if you want transparency
+    ax.grid(False)  # no grid lines
+    # turn off the built‑in spines/ticks
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+
+    ax.view_init(elev=25, azim=32)
+
+    plt.subplots_adjust(left=0.25, right=0.95, top=0.99, bottom=0.1)
+
+    plt.savefig(os.path.join(save_dir, f"Top3PCs_3D_projection_{stride}_{condition}.png"), dpi=300)
+    plt.savefig(os.path.join(save_dir, f"Top3PCs_3D_projection_{stride}_{condition}.svg"), dpi=300)
+    plt.close()
+
+
 
 
 

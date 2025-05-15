@@ -136,14 +136,20 @@ def get_line_style_mice(m):
         ls = 'dashed'
     elif m == '1035246':
         ls = 'dashdot'
+    elif m == '1035249':
+        ls = (0, (1, 10)) # loosely dotted
     elif m == '1035250':
         ls = (5, (10, 3)) # long dash with offset
     elif m == '1035297':
         ls = (0, (5, 10)) # loosely dashed
+    elif m == '1035298':
+        ls = (0, (1, 1, 1, 1, 1, 1)) # densely dotted
     elif m == '1035299':
         ls = (0, (3, 1, 1, 1, 1, 1)) # densely dashdotdotted
     elif m == '1035301':
         ls = (0, (1, 1)) # densely dotted
+    elif m == '1035302':
+        ls = (0, (1, 1, 1, 1)) # densely dashdotted
     else:
         raise ValueError(f"Unknown mouse ID: {m}")
     return ls
@@ -157,14 +163,20 @@ def get_marker_style_mice(m):
         marker = 's'
     elif m == '1035246':
         marker = 'D'
+    elif m == '1035249':
+        marker = 'x'
     elif m == '1035250':
         marker = '<'
     elif m == '1035297':
         marker = 'P'
+    elif m == '1035298':
+        marker = 'h'
     elif m == '1035299':
         marker = '>'
     elif m == '1035301':
         marker = 'v'
+    elif m == '1035302':
+        marker = '1'
     else:
         raise ValueError(f"Unknown mouse ID: {m}")
     return marker
@@ -211,5 +223,16 @@ def create_custom_colormap(lower_color, middle_color, upper_color, scaling=1.0, 
         colors.append(color)
 
     return mcolors.ListedColormap(colors)
+
+def gradient_colors(start_hex, end_hex, n):
+    start_rgb = mcolors.to_rgb(start_hex)
+    end_rgb = mcolors.to_rgb(end_hex)
+    return [
+        mcolors.to_hex(
+            [start_rgb[i] + (end_rgb[i] - start_rgb[i]) * frac
+             for i in range(3)]
+        )
+        for frac in np.linspace(0, 1, n)
+    ]
 
 

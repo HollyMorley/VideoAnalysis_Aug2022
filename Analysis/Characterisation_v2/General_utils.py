@@ -95,6 +95,9 @@ def collect_stride_data(condition, exp, day, compare_condition):
     return stride_data, stride_data_compare
 
 def set_up_save_dir(condition, exp, base_save_dir_no_c):
+    if global_settings["use_LH_models"]:
+        base_save_dir_no_c += '_LHmodels'
+
     pcs_total= global_settings['pcs_to_show']
     pcs_using = global_settings['pcs_to_use']
     strides = str(global_settings['stride_numbers']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
@@ -368,9 +371,9 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
         def format_val(val):
             if isinstance(val, (float, np.floating)):
                 if val >= .01:
-                    return f"{val:.2f}"
+                    return f"{val:.3f}"
                 else:
-                    return f"<.01"
+                    return f"<.001"
             else:
                 return str(val)
 
@@ -395,7 +398,7 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
 
         # Bold the rows where the PC is in pcs_of_interest for this stride.
         # Note: our table rows are labeled with PCs as 1-indexed (since columns were defined with np.arange(...) + 1).
-        pcs_interest = [pc + 1 for pc in all_pcs_of_interest[s]]
+        pcs_interest = [pc for pc in all_pcs_of_interest[s]]
         # Loop over table cells. Data and row label cells have row index >= 0.
         for (row, col), cell in tbl.get_celld().items():
             if row >= 0:

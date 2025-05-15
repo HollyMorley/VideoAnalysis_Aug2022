@@ -45,11 +45,12 @@ for phase in ['APA1', 'APA2', 'Wash1', 'Wash2', 'APA']:
     else:
         raise ValueError(f"Unknown phase: {phase}")
 
+    desired_diameter = 3  # points
+
     low_vals = []
     high_vals = []
-    plt.figure(figsize=(.5, .5))
-    plt.ylabel('Disturbance Prediction')
-    plt.xticks([1, 2], ['Low', 'High'])
+    fig, ax = plt.subplots(figsize=(2, 2))
+    #ax.xticks([1, 2], ['Low', 'High'])
     for midx, mouseID in enumerate(apa_mouse_ids):
 
         # Find the top and bottom third of the APA predictions
@@ -87,7 +88,7 @@ for phase in ['APA1', 'APA2', 'Wash1', 'Wash2', 'APA']:
         low_vals.append(bottom_mean)
         high_vals.append(top_mean)
 
-        plt.plot([1,2], [bottom_mean, top_mean], marker='o', color='black', alpha=0.3)
+        plt.plot([1,2], [bottom_mean, top_mean], marker='o', markersize=desired_diameter, color='black', alpha=0.3)
 
         # jitter = 0.05
         # # top (High)
@@ -101,10 +102,13 @@ for phase in ['APA1', 'APA2', 'Wash1', 'Wash2', 'APA']:
 
 
     # — then, immediately after the end of that midx‐loop (but before plt.show()) —
-    jitter = .01
+    s = desired_diameter ** 2  # ≈ 25
+    # or for literal circle area:
+    s = np.pi * (desired_diameter / 2) ** 2  # ≈ 19.6
+    jitter = .02
     low_vals = np.array(low_vals)
     high_vals = np.array(high_vals)
-    plt.scatter(np.random.normal(3, jitter, size=len(low_vals)), [low_vals-high_vals])
+    ax.scatter(np.random.normal(3, jitter, size=len(low_vals)), [low_vals-high_vals], s=s)
     # parts = plt.violinplot(
     #     [low_vals, high_vals],
     #     positions=[1, 2],
@@ -113,12 +117,24 @@ for phase in ['APA1', 'APA2', 'Wash1', 'Wash2', 'APA']:
     # )
     # for pc in parts['bodies']:
     #     pc.set_alpha(0.3)
-    plt.title(phase, fontsize=7)
-    plt.xlabel('APA prediction strength', fontsize=7)
-    plt.ylabel('Disturbance prediction', fontsize=7)
-    plt.xticks([1, 2], ['Low', 'High'])
+    ax.set_title(phase, fontsize=7)
+    ax.set_xlabel('APA prediction strength', fontsize=7)
+    ax.set_ylabel('Disturbance prediction', fontsize=7)
+    ax.set_xticks([1, 2])
+    ax.set_xticklabels(['Low', 'High'], fontsize=7)
+    # set y tick font size to 7
+    ax.set_ylim(-0.5, 2)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels([0, 1], fontsize=7)
+    #plt.xticks([1, 2], ['Low', 'High'])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(False)
 
-    plt.savefig(os.path.join(savedir, f"Disturbance_Prediction_{phase}.png"), dpi=300)
+    fig.subplots_adjust(left=0.2, right=0.8, top=0.9, bottom=0.2)
+
+    fig.savefig(os.path.join(savedir, f"Disturbance_Prediction_{phase}.png"), dpi=300)
+    fig.savefig(os.path.join(savedir, f"Disturbance_Prediction_{phase}.svg"), dpi=300)
     plt.close()
 
 

@@ -17,37 +17,37 @@ from Helpers.Config_23 import *
 ###############################################################################
 videos_info = [
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230405\HM_20230405_APACharExt_FAA-1035302_LR_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230405\HM_20230405_APACharExt_FAA-1035302_LR_front_1.avi", # LowHigh?
         'name': "20230405_302",
         'extracted_frames': [],
         'labels': {}  # frame_number -> (x, y)
     },
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230408\HM_20230408_APACharExt_FAA-1035243_None_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230408\HM_20230408_APACharExt_FAA-1035243_None_front_1.avi", # LowMid
         'name': "20230408_243",
         'extracted_frames': [],
         'labels': {}
     },
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230408\HM_20230408_APACharExt_FAA-1035246_LR_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230408\HM_20230408_APACharExt_FAA-1035246_LR_front_1.avi", # LowMid
         'name': "20230408_246",
         'extracted_frames': [],
         'labels': {}
     },
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230409\HM_20230409_APACharExt_FAA-1035244_L_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230409\HM_20230409_APACharExt_FAA-1035244_L_front_1.avi", # LowMid
         'name': "20230409_244",
         'extracted_frames': [],
         'labels': {}
     },
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230409\HM_20230409_APACharExt_FAA-1035250_LR_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230409\HM_20230409_APACharExt_FAA-1035250_LR_front_1.avi", # LowMid
         'name': "20230409_250",
         'extracted_frames': [],
         'labels': {}
     },
     {
-        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230411\HM_20230411_APAPer_FAA-1035244_L_front_1.avi",
+        'path': r"X:\hmorley\Dual-belt_APAs\videos\Round_3\20230411\HM_20230411_APAPer_FAA-1035244_L_front_1.avi", # PerceptionTest
         'name': "20230411_244",
         'extracted_frames': [],
         'labels': {}
@@ -66,22 +66,30 @@ class VideoLabelerApp(tk.Tk):
         self.title("Tkinter Video Extract+Label")
         self.geometry("1200x800")
 
+        # Initialize expected instance variables
+        self.current_pil_image = None
+        self.tk_img = None
+        self.last_scale = 1.0
+        self.last_xoffset = 0
+        self.last_yoffset = 0
+        self.dragging = False
+        self.drag_frame = None
+        self.drag_offset = (0, 0)
+        self.label_extracted_idx = 0
+
         # Current state
         self.current_video_idx = 0
         self.cap = None
         self.total_frames = 0
-
-        # track label mode
         self.extract_mode = True
 
-        # read any existing extracted frames / labels from CSV
+        # Load existing data
         self.load_extracted_csv()
         self.load_labels_csv()
 
-        # create UI
+        # UI
         self.create_widgets()
-        self.load_video(0)  # load the first video
-
+        self.load_video(0)
 
     def load_extracted_csv(self):
         """Load previously extracted frames from CSV if it exists."""

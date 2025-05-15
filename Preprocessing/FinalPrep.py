@@ -70,14 +70,36 @@ class PrepareSingleConditionFiles():
             days = []
             mouse_data = {}
             days_offset = 0
-            frame_offset = 0  # initialize cumulative frame offset
+            frame_offset = 0
+
+            existing_days = {}
             for f in mouse_files:
                 match = re.search(r'Day(\d+)', f)
                 if match:
-                    day_num = int(match.group(1)) - 1  # assuming days start at 1, adjust to 0-based
-                else:
-                    raise ValueError(f"Day number not found in file: {f}")
+                    day_num = int(match.group(1)) - 1
+                    existing_days[day_num] = f
 
+            max_day = max(existing_days.keys())
+
+            for day_num in range(max_day + 1):
+
+                if day_num not in existing_days:
+                    print(f"Day {day_num} not found for mouse {mouse}.")
+                    # account for the non standard trial per day
+                    if mouse == '1035302' and self.speed == 'HighLow':
+                        if day_num == 0:
+                            days_offset += 20
+                        elif day_num == 1:
+                            days_offset += 50
+                        elif day_num == 2:
+                            days_offset += 50
+                    else:
+                        days_offset += 40
+
+                    frame_offset += 1000  # or whatever typical spacing you use
+                    continue
+
+                f = existing_days[day_num]
                 df = pd.read_hdf(f, key='real_world_coords_runs')
                 # Exclude prep runs and adjust Run index using days_offset
                 df = self.remove_prep_runs(df, prep_runs, days_offset)
@@ -315,7 +337,7 @@ def main():
     # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3').get_dirs()
 
     # Extended
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended').get_dirs()
+    # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended').get_dirs()
     GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended').get_dirs()
     GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended').get_dirs()
 

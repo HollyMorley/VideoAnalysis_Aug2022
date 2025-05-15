@@ -593,6 +593,7 @@ class GetSingleExpData:
 
         # Detect camera shifts
         calibration_labels = ['StartPlatR', 'TransitionL', 'StartPlatL', 'TransitionR']  # Use your calibration labels
+        print('Detecting camera movement...')
         segments = self.detect_camera_movement(calibration_labels)
 
         if len(segments) > 1:
@@ -619,6 +620,8 @@ class GetSingleExpData:
             cameras_extrinsics = calib_obj.estimate_cams_pose()
             cameras_intrinsics = calib_obj.cameras_intrinsics
 
+            # calib_obj.plot_cam_pose(cameras_extrinsics)
+
             # Create optimize instance and perform optimization
             optimise = OptimizeCalibration.optimize(calibration_coords, cameras_extrinsics, cameras_intrinsics, base_path_name, self)
             new_calibration_data = optimise.optimise_calibration(debugging=True)
@@ -626,6 +629,8 @@ class GetSingleExpData:
             self.extrinsics = new_calibration_data['extrinsics']
             self.intrinsics = new_calibration_data['intrinsics']
             self.belt_coords_CCS = new_calibration_data['belt points CCS']
+
+            #calib_obj.plot_cam_pose(self.extrinsics)
 
             # Get real-world data for this segment
             results = self.get_realworld_coords(segment_indices)
@@ -1420,17 +1425,46 @@ class GetALLRuns:
             utils.Utils().checkFilenamesMouseID(
                 files)  # before proceeding, check that mouse names are correctly labeled
 
+        manual_file_name = os.path.join(paths['filtereddata_folder'], 'bad_frontcam_labels.csv')
+        manual_labels = pd.read_csv(manual_file_name)
+        manual_labels_vidnames = manual_labels.loc(axis=1)['video_name'].values
+        manual_labels_by_video = {
+            vid: df.sort_values('frame_number').reset_index(drop=True)
+            for vid, df in manual_labels.groupby('video_name')
+        }
+
         for j in range(0, len(files['Side'])):  # all csv files from each cam are same length so use side for all
             match = re.search(r'FAA-(\d+)', files['Side'][j])
             mouseID = match.group(1)
             pattern = "*%s*_mapped3D.h5" % mouseID
             dir = os.path.dirname(files['Side'][j])
+            date = os.path.basename(files['Side'][j]).split('_')[1]
 
             if not glob.glob(os.path.join(dir, pattern)) or self.overwrite:
                 try:
                     print(f"###############################################################"
                           f"\nMapping data for {mouseID}...\n###############################################################")
                     getdata = GetSingleExpData(files['Side'][j], files['Front'][j], files['Overhead'][j])
+
+                    # check if data needs it, if so overwrite the front TransitionL labels with manual labels
+                    vid_name = date + '_' + mouseID[-3:]
+                    if vid_name in manual_labels_vidnames:
+                        print(f"Overwriting front camera labels for {vid_name} with manual labels...")
+                        df_view = getdata.DataframeCoors['front']
+                        manual_df = manual_labels_by_video[vid_name]
+
+                        # Build a full-length Series of frame-index-mapped manual data
+                        manual_df = manual_df[['frame_number', 'x', 'y']].copy()
+                        manual_df = manual_df.set_index('frame_number').sort_index()
+
+                        # Reindex to all frames in df_view and forward-fill
+                        reindexed_manual = manual_df.reindex(df_view.index, method='ffill').fillna(method='bfill')
+
+                        # Apply filled values to the front view's TransitionL
+                        df_view.loc[:, ('TransitionL', 'x')] = reindexed_manual['x'].values
+                        df_view.loc[:, ('TransitionL', 'y')] = reindexed_manual['y'].values
+                        df_view.loc[:, ('TransitionL', 'likelihood')] = pcutoff
+
                     getdata.map()
                 except Exception as e:
                     print(f"Error processing {mouseID}: {e}")
@@ -1506,9 +1540,9 @@ def main():
     # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp', day='Day3',
     #                       overwrite=False).get_dirs()
     print("Analysing Repeats...")
-    GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',
-                          overwrite=False).get_dirs()
-    print("Analysing Extended: LowHigh...")
+    # GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Repeats', exp_wash='Exp',
+    #                       overwrite=True).get_dirs()
+    # print("Analysing Extended: LowHigh...")
     GetDirsFromConditions(exp='APAChar', speed='LowHigh', repeat_extend='Extended', overwrite=False).get_dirs()
     print("Analysing Extended: LowMid...")
     GetDirsFromConditions(exp='APAChar', speed='LowMid', repeat_extend='Extended', overwrite=False).get_dirs()

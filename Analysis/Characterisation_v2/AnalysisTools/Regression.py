@@ -7,6 +7,7 @@ from sklearn.model_selection import StratifiedKFold
 from scipy.stats import wilcoxon, ttest_1samp
 import matplotlib.pyplot as plt
 import os
+import pickle
 
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2.Plotting import Regression_plotting as rp
@@ -125,7 +126,9 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
                        mouse_id: str,
                        p1: str, p2: str, s: int,
                        condition: str,
-                       save_path: str):
+                       save_path: str,
+                       select_pc_type: str = None,
+                       ) -> tuple:
 
     # # Fit regression model on PCA data
     # if global_settings['stride_numbers'] == [0]:
@@ -133,7 +136,7 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     #     selected_feature_data = selected_feature_data[::2]
     #     mask_p1 = mask_p1[::2]
     #     mask_p2 = mask_p2[::2]
-    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2)
+    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2, mouse_id, s, select_pc_type)
     (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc) = results
 
     # Trim the weights and normalization parameters to the number of PCs to use
@@ -159,8 +162,8 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
 
 
 def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame,
-                         mask_p1: np.ndarray, mask_p2: np.ndarray):
-    # trim loadings
+                         mask_p1: np.ndarray, mask_p2: np.ndarray, mouse_id: str, s: int, select_pc_type: str = None):
+    # trim pc loadings
     loadings = loadings.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
     # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
     Xdr = np.dot(loadings.T, selected_feature_data)
@@ -172,8 +175,41 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     y_reg = np.concatenate([np.ones(np.sum(mask_p1)), np.zeros(np.sum(mask_p2))])
 
     # Run logistic regression on the full model
-    w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
-    pc_acc, y_preds, null_acc = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+    if not global_settings["use_LH_models"]:
+        w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
+        pc_acc, y_preds, null_acc = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+    else:
+        # load the regression from the LowHigh model
+        multipath = r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions"
+        if select_pc_type is None:
+            LH_reg_path = os.path.join(multipath, r"pca_predictions_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_APAChar_LowHigh.pkl"
+        elif select_pc_type == "Top3":
+            top3_path = os.path.join(multipath, "TopPCs")
+            LH_reg_path = os.path.join(top3_path, r"pca_predictions_top3_APAChar_LowHigh.pkl")   #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_top3_APAChar_LowHigh.pkl"
+        elif select_pc_type == "Bottom9":
+            bottom9_path = os.path.join(multipath, "Bottom9PCs")
+            LH_reg_path = os.path.join(bottom9_path, r"pca_predictions_bottom9_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_bottom9_APAChar_LowHigh.pkl"
+        elif select_pc_type == "Bottom3":
+            bottom3_path = os.path.join(multipath, "Bottom3PCs")
+            LH_reg_path = os.path.join(bottom3_path, r"pca_predictions_bottom3_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_bottom3_APAChar_LowHigh.pkl"
+        else:
+            raise ValueError(f"Unknown select_pc_type: {select_pc_type}")
+
+        with open(LH_reg_path, 'rb') as f:
+            pca_pred = pickle.load(f)
+        pred = [p for p in pca_pred if p.mouse_id == mouse_id and p.stride == s and p.phase == (global_settings['phases'][0], global_settings['phases'][1])]
+        if len(pred) == 0:
+            raise ValueError(f"No LH prediction found for mouse {mouse_id} with stride {s} and phase {global_settings['phases'][0]}-{global_settings['phases'][1]}")
+        elif len(pred) > 1:
+            raise ValueError(f"Multiple LH predictions found for mouse {mouse_id} with stride {s} and phase {global_settings['phases'][0]}-{global_settings['phases'][1]}")
+        pred = pred[0]
+        w = pred.pc_weights
+        bal_acc = pred.accuracy
+        cv_acc = pred.cv_acc
+        w_folds = pred.w_folds
+        pc_acc = pred.pc_acc
+        y_preds = pred.y_preds_PCwise
+        null_acc = pred.null_acc
 
     # mean_cv_acc_PCwise = np.mean(cv_acc_PCwise, axis=1)
     # mean_cv_acc_shuffle_PCwise = np.mean(cv_acc_shuffle_PCwise, axis=1)
@@ -253,6 +289,24 @@ def find_residuals(feature_data, stride_numbers, phases, savedir):
     # save
     all_residuals_df.to_hdf(os.path.join(savedir, "ResidualData.h5"), key="residuals", mode="w")
     return all_residuals_df
+
+def find_model_cv_accuracy(predicition_data, stride, phases, save_dir):
+    mice_cv_accs = [pred.cv_acc for pred in predicition_data if pred.stride == stride and pred.phase == (phases[0], phases[1])]
+    mice_names = [pred.mouse_id for pred in predicition_data if pred.stride == stride and pred.phase == (phases[0], phases[1])]
+    mice_mean_cv_acc = np.zeros(len(mice_cv_accs))
+    for m in range(len(mice_cv_accs)):
+        mice_mean_cv_acc[m] = np.mean(mice_cv_accs[m])
+    # mean_cv_acc = np.mean(mice_mean_cv_acc)
+
+    mice_cv_accs_df = pd.DataFrame(mice_mean_cv_acc, index=mice_names, columns=["MeanCVAcc"])
+
+    # save mean_cv_acc into csv
+    save_path = os.path.join(save_dir, f"MiceCVAccs_{phases[0]}_{phases[1]}_stride{stride}.csv")
+    mice_cv_accs_df.to_csv(save_path)
+    return mice_cv_accs_df
+
+
+
 
 
 

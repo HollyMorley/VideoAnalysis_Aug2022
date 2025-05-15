@@ -28,10 +28,10 @@ base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReducti
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
     {
-        "condition": 'APAChar_LowHigh',
+        "condition": 'APAChar_HighLow',
         "exp": 'Extended',
         "day": None,
-        "compare_condition": 'APAChar_HighLow',
+        "compare_condition": 'APAChar_LowHigh',
     },
     # {
     #     "condition": 'APAChar_HighLow',
@@ -58,6 +58,7 @@ global_settings = {
     "pcs_to_show": 60,
     "pcs_to_use": 12,
     "pcs_to_plot": 8,
+    "use_LH_models": True,
     #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": True,
@@ -79,6 +80,10 @@ condition_specific_settings = {
     },
     'APAChar_HighLow': {
         'c': 0.5,
-        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246','1035250','1035301', '1035302'],
+        'global_fs_mouse_ids': ['1035243', '1035244', '1035245', '1035246','1035250','1035301'], # removed 302 as not in LH
+    },
+    'APAChar_LowMid': {
+        'c': 1,
+        'global_fs_mouse_ids': ['1035243', '1035245', '1035246', '1035297', '1035299','1035301'], # 250, 249, 244 # removed 298 and 302 as not in LH
     },
 }

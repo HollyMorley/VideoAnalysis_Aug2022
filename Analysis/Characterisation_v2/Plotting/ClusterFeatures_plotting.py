@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 import seaborn as sns
 
 from Analysis.Characterisation_v2 import Plotting_utils as pu

@@ -397,7 +397,9 @@ class GetConditionFiles(BaseConditionFiles):
 
 def main():
     # Extended
-    GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["single"]).get_dirs() # todo redo these with all analyses!!!!
+    #GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["single"]).get_dirs() # todo redo these with all analyses!!!!
+    GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', analyses=["single"]).get_dirs()
+    GetConditionFiles(exp='APAChar', speed='HighLow', repeat_extend='Extended',  analyses=["single"]).get_dirs()
 
     # GetConditionFiles(exp='APAChar', speed='LowHigh', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs() # todo redo these with all analyses!!!!
     # GetConditionFiles(exp='APAChar', speed='LowMid', repeat_extend='Extended', analyses=["behaviour", "single", "multi"]).get_dirs()

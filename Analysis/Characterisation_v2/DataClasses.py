@@ -73,4 +73,18 @@ class FeatureWeights:
     mouse_id: str
     feature_weights: pd.DataFrame
 
+@dataclass
+class LDAPredictionData:
+    phase: str
+    stride: int
+    mouse_id: str
+    x_vals: np.ndarray
+    y_pred: np.ndarray
+    weights: np.ndarray
+    accuracy: float
+    cv_acc: np.ndarray
+    w_folds: np.ndarray
+    pc_acc: np.ndarray
+    null_acc: np.ndarray
+
 

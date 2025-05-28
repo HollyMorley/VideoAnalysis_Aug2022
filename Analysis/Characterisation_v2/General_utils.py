@@ -95,8 +95,13 @@ def collect_stride_data(condition, exp, day, compare_condition):
     return stride_data, stride_data_compare
 
 def set_up_save_dir(condition, exp, base_save_dir_no_c):
-    if global_settings["use_LH_models"]:
+    if global_settings["use_LH_pcs"] and global_settings["use_LH_reg_model"]:
         base_save_dir_no_c += '_LHmodels'
+    elif global_settings["use_LH_pcs"]:
+        base_save_dir_no_c += '_LHpcsonly'
+
+    if global_settings['normalise_to_LH_wash']:
+        base_save_dir_no_c += '_LhWnrm'
 
     pcs_total= global_settings['pcs_to_show']
     pcs_using = global_settings['pcs_to_use']
@@ -104,9 +109,9 @@ def set_up_save_dir(condition, exp, base_save_dir_no_c):
     phase_comp = str(global_settings['phases']).replace(' ', '').replace(',','').replace('[','').replace("'", "").replace(']','')
 
     if global_settings['residuals']:
-        base_save_dir = base_save_dir_no_c + '_res' + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
+        base_save_dir = base_save_dir_no_c + '_res' + f'_{strides}_{phase_comp}' #+ f'-PCStot={pcs_total}-PCSuse={pcs_using}'
     else:
-        base_save_dir = base_save_dir_no_c + f'_{strides}_{phase_comp}' + f'-PCStot={pcs_total}-PCSuse={pcs_using}'
+        base_save_dir = base_save_dir_no_c + f'_{strides}_{phase_comp}' #+ f'-PCStot={pcs_total}-PCSuse={pcs_using}'
     base_save_dir_condition = os.path.join(base_save_dir, f'{condition}_{exp}')
     return base_save_dir, base_save_dir_condition
 

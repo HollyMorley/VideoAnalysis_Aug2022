@@ -175,7 +175,7 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     y_reg = np.concatenate([np.ones(np.sum(mask_p1)), np.zeros(np.sum(mask_p2))])
 
     # Run logistic regression on the full model
-    if not global_settings["use_LH_models"]:
+    if not global_settings["use_LH_reg_model"]:
         w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
         pc_acc, y_preds, null_acc = compute_regression_pcwise_prediction(Xdr, y_reg, w)
     else:
@@ -184,8 +184,11 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
         if select_pc_type is None:
             LH_reg_path = os.path.join(multipath, r"pca_predictions_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_APAChar_LowHigh.pkl"
         elif select_pc_type == "Top3":
-            top3_path = os.path.join(multipath, "TopPCs")
+            top3_path = os.path.join(multipath, "Top3PCs")
             LH_reg_path = os.path.join(top3_path, r"pca_predictions_top3_APAChar_LowHigh.pkl")   #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_top3_APAChar_LowHigh.pkl"
+        elif select_pc_type == "TopAnyLen":
+            topanylen_path = os.path.join(multipath, "TopAnyPCs")
+            LH_reg_path = os.path.join(topanylen_path, r"pca_predictions_top_anylen_APAChar_LowHigh.pkl")
         elif select_pc_type == "Bottom9":
             bottom9_path = os.path.join(multipath, "Bottom9PCs")
             LH_reg_path = os.path.join(bottom9_path, r"pca_predictions_bottom9_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_bottom9_APAChar_LowHigh.pkl"

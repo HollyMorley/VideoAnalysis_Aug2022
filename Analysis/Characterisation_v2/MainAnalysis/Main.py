@@ -47,6 +47,7 @@ def main(stride_numbers: List[int], phases: List[str],
     # Paths
     global_data_path = os.path.join(base_save_dir, f"global_data_{condition}.pkl")
     preprocessed_data_file_path = os.path.join(base_save_dir, f"preprocessed_data_{condition}.pkl")
+    LH_preprocessed_data_file_path = os.path.join(r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\preprocessed_data_APAChar_LowHigh.pkl")
     SingleFeatPath = os.path.join(base_save_dir_condition, 'SingleFeaturePredictions')
     MultiFeatPath = os.path.join(base_save_dir_condition, 'MultiFeaturePredictions')
     LH_MultiFeatPath = r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions"
@@ -73,6 +74,54 @@ def main(stride_numbers: List[int], phases: List[str],
 
     # Skipping outlier removal
     if not os.path.exists(preprocessed_data_file_path):
+
+        """
+                   # -------- Normalize to LH wash per mouse (if applicable) --------
+               """
+        if inst["condition"] == "APAChar_HighLow":
+            idx = pd.IndexSlice
+
+            if global_settings["normalise_to_LH_wash"]:
+                print("Normalizing to LH wash...")
+
+                # load LH data
+                with open(LH_preprocessed_data_file_path, 'rb') as f:
+                    data = pickle.load(f)
+                    feature_data_LH = data['feature_data']
+
+                # per mouse and stride, find mean of wash2 and subtract this from current phase
+                higher_level_index = feature_data_notscaled.index.droplevel('Run').drop_duplicates()
+                means_LH = pd.DataFrame(index=higher_level_index, columns=feature_data_notscaled.columns)
+                means_current = pd.DataFrame(index=higher_level_index, columns=feature_data_notscaled.columns)
+
+                for (stride, mouse_id), data in means_current.groupby(level=[0, 1]):
+                    # find wash2 runs
+                    runs = expstuff["condition_exp_runs"]["APAChar"][exp]["Wash2"]
+                    # get mean of wash2 runs
+                    wash2_LH_means = feature_data_LH.loc[idx[stride, mouse_id, runs], :].mean()
+                    wash2_current_means = feature_data_notscaled.loc[idx[stride, mouse_id, runs], :].mean()
+
+                    means_LH.loc[idx[stride, mouse_id], :] = wash2_LH_means
+                    means_current.loc[idx[stride, mouse_id], :] = wash2_current_means
+
+                # subtract each mouse's wash2 mean from all other runs
+                for (stride, mouse_id), data in means_current.groupby(level=[0, 1]):
+                    # get mean of wash2 runs
+                    wash2_LH_means = means_LH.loc[idx[stride, mouse_id], :].values
+                    wash2_current_means = means_current.loc[idx[stride, mouse_id], :].values
+                    wash2_diff = wash2_current_means - wash2_LH_means
+
+                    # subtract from all other runs
+                    feature_data_notscaled.loc[idx[stride, mouse_id, :], :] = feature_data_notscaled.loc[idx[stride, mouse_id, :], :] - wash2_diff
+
+            feature_data_notscaled = feature_data_notscaled.astype(float)
+
+        else:
+            wash2_diff = None
+            if global_settings["normalise_to_LH_wash"]:
+                print("NOT normalizing to LH wash as this is LH!")
+                pass
+
         """
             # -------- Scale Data --------
             (Both conditions)
@@ -84,7 +133,7 @@ def main(stride_numbers: List[int], phases: List[str],
         feature_data_compare = feature_data_compare_notscaled.copy()
         feature_data_compare.index.names = ['Stride', 'MouseID', 'Run']
         Normalize = {}
-        idx = pd.IndexSlice
+
 
         feature_names = list(short_names.keys())
         # reorder feature_data by feature_names
@@ -103,27 +152,28 @@ def main(stride_numbers: List[int], phases: List[str],
             norm_df = pd.DataFrame([normalize_mean, normalize_std], columns=feature_names, index=['mean', 'std'])
             Normalize_compare[(stride, mouse_id)] = norm_df
 
-        if stride_numbers == [0]:
-            datas= []
-            for data in [feature_data, feature_data_compare]:
-                a = data.loc(axis=0)[0]
-                b = data.loc(axis=0)[-1]
-
-                # find intersection of indexs
-                a = a.loc[a.index.intersection(b.index)]
-                b = b.loc[b.index.intersection(a.index)]
-
-                # 2) compute the difference
-                diff = a - b
-
-                # 3) stick “Stride=0” back on top
-                data = pd.concat({0: diff},names=['Stride'] + diff.index.names)
-                datas.append(data)
-            feature_data, feature_data_compare = datas
+        # if stride_numbers == [0]:
+        #     datas= []
+        #     for data in [feature_data, feature_data_compare]:
+        #         a = data.loc(axis=0)[0]
+        #         b = data.loc(axis=0)[-1]
+        #
+        #         # find intersection of indexs
+        #         a = a.loc[a.index.intersection(b.index)]
+        #         b = b.loc[b.index.intersection(a.index)]
+        #
+        #         # 2) compute the difference
+        #         diff = a - b
+        #
+        #         # 3) stick “Stride=0” back on top
+        #         data = pd.concat({0: diff},names=['Stride'] + diff.index.names)
+        #         datas.append(data)
+        #     feature_data, feature_data_compare = datas
 
         # Get average feature values for each feature in each stride (across mice)
         feature_data_average = feature_data.groupby(level=['Stride', 'Run']).median()
         feature_data_compare_average = feature_data_compare.groupby(level=['Stride', 'Run']).median()
+
 
         """
             # -------- Feature Clusters --------
@@ -157,7 +207,8 @@ def main(stride_numbers: List[int], phases: List[str],
                 'stride_data_compare': stride_data_compare,
                 'Normalize': Normalize,
                 'Normalize_compare': Normalize_compare,
-                'cluster_mappings': cluster_mappings
+                'cluster_mappings': cluster_mappings,
+                'wash_diff': wash2_diff
             }, f)
     else:
         with open(preprocessed_data_file_path, 'rb') as f:
@@ -172,6 +223,7 @@ def main(stride_numbers: List[int], phases: List[str],
             Normalize = data['Normalize']
             Normalize_compare = data['Normalize_compare']
             cluster_mappings = data['cluster_mappings']
+            wash2_diff = data['wash_diff']
 
     """
         # -------- Find residuals --------
@@ -281,7 +333,7 @@ def main(stride_numbers: List[int], phases: List[str],
     """
     ------------------------- PCA ----------------------
     """
-    if global_settings["use_LH_models"]:
+    if global_settings["use_LH_pcs"]:
         filename_pca = f'pca_APAChar_LowHigh.pkl'
         filepath_pca = os.path.join(LH_MultiFeatPath, filename_pca)
     else:
@@ -293,8 +345,8 @@ def main(stride_numbers: List[int], phases: List[str],
         with open(filepath_pca, 'rb') as f:
             pca_all = pickle.load(f)
     else:
-        if global_settings["use_LH_models"]:
-            raise ValueError(f"Cannot find the LowHigh PCA file, which is required when 'use_LH_models' is set.\n"
+        if global_settings["use_LH_pcs"]:
+            raise ValueError(f"Cannot find the LowHigh PCA file, which is required when 'use_LH_pcs' is set.\n"
                              "PCA filepath is:\n{filepath_pca}\n")
         else:
             print("Running PCA...")
@@ -392,7 +444,7 @@ def main(stride_numbers: List[int], phases: List[str],
         with open(os.path.join(MultiTopPCsPath, filename_top3_pca_pred), 'wb') as f:
             pickle.dump(pca_pred_top3, f)
 
-    # ----------- Now predict Wash with only the remaining PCs ---------
+    # ----------- Now predict APA with only the remaining PCs ---------
     filename_bottom9_pca_pred = f'pca_predictions_bottom9_{condition}.pkl'
     if os.path.exists(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred)):
         print("Loading bottom 9 PCA predictions from file...")

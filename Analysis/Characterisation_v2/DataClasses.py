@@ -80,6 +80,7 @@ class LDAPredictionData:
     mouse_id: str
     x_vals: np.ndarray
     y_pred: np.ndarray
+    y_preds_pcs: np.ndarray
     weights: np.ndarray
     accuracy: float
     cv_acc: np.ndarray

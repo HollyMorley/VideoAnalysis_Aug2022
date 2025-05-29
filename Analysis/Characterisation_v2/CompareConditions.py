@@ -19,7 +19,7 @@ Run LDA on LH vs HL pca.
 Remember using LH pcs for HL too.
 """
 # 'wash_normalised' or 'raw'
-method = 'wash_normalised'
+method = 'raw'
 
 # import LowHigh data
 with open(r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\preprocessed_data_APAChar_LowHigh.pkl", 'rb') as f:
@@ -45,7 +45,8 @@ accuracies = pd.DataFrame(index=index, columns=['accuracy', 'cv_accuracy'])
 weights = pd.DataFrame(index=index, columns=['PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'PC6', 'PC7', 'PC8', 'PC9', 'PC10', 'PC11', 'PC12'])
 runs_to_get = len(expstuff['condition_exp_runs']['APAChar']['Extended']['Wash2']) * 2 if method == 'raw' else len(expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']) * 2
 run_scores = pd.DataFrame(index=index, columns=np.arange(runs_to_get))
-lda_predictions = []
+lda_apa_predictions = []
+lda_wash_predictions = []
 for s in global_settings['stride_numbers']:
     for midx in condition_specific_settings['APAChar_HighLow']['global_fs_mouse_ids']:
         LH_pcs = pca.transform(LH_feature_data.loc(axis=0)[s, midx])
@@ -78,10 +79,10 @@ for s in global_settings['stride_numbers']:
             labels = np.array([0] * LH_pcs_p1_trim.shape[0] + [1] * HL_pcs_p1_trim.shape[0])
 
             results = LDA.compute_lda(pcs, labels, folds=5)
-            lda_weights, accuracy, w_folds, cv_acc = results
+            y_pred, lda_weights, accuracy, w_folds, cv_acc, intercept = results
 
-            results_pcwise = LDA.compute_lda_pcwise(pcs, labels, lda_weights, shuffles=1000)
-            pc_acc, null_acc, y_preds = results_pcwise
+            results_pcwise = LDA.compute_lda_pcwise(pcs, labels, lda_weights, intercept, shuffles=1000)
+            pc_acc, null_acc, y_preds_pcs = results_pcwise
 
             # Store results
             lda_data = dc.LDAPredictionData(
@@ -89,34 +90,37 @@ for s in global_settings['stride_numbers']:
                 stride=s,
                 mouse_id=midx,
                 x_vals=runs_zeroed,
-                y_pred=y_preds,  # Linear combination of features and weights
+                y_pred=y_pred,
+                y_preds_pcs=y_preds_pcs,
                 weights=lda_weights,
                 accuracy=accuracy,
                 cv_acc=cv_acc,
                 w_folds=w_folds,
-                pc_acc= pc_acc,  # Not computed in this function
-                null_acc= null_acc  # Not computed in this function
+                pc_acc= pc_acc,
+                null_acc= null_acc
             )
-
-            # Run LDA to
-            lda = LDA()
-            lda.fit(pcs, labels)
-            lda_predictions = lda.predict(pcs)
-            accuracy = lda.score(pcs, labels)
-
-            cv_scores = cross_val_score(lda, pcs, labels, cv=5)
-            cv_accuracy = cv_scores.mean()
-
-            accuracies.loc[(s, midx), 'accuracy'] = accuracy
-            accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy
-
-            lda_run_scores = pcs @ lda.coef_[0] + lda.intercept_[0]
-
-            lda_weights = lda.coef_[0]
-
-            weights.loc[(s, midx)] = lda_weights
-
-            run_scores.loc[(s, midx), runs_zeroed] = lda_run_scores
+            lda_apa_predictions.append(lda_data)
+            lda_wash_predictions.append(None)
+            #
+            # # Run LDA to
+            # lda = LDA()
+            # lda.fit(pcs, labels)
+            # lda_predictions = lda.predict(pcs)
+            # accuracy = lda.score(pcs, labels)
+            #
+            # cv_scores = cross_val_score(lda, pcs, labels, cv=5)
+            # cv_accuracy = cv_scores.mean()
+            #
+            # accuracies.loc[(s, midx), 'accuracy'] = accuracy
+            # accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy
+            #
+            # lda_run_scores = pcs @ lda.coef_[0] + lda.intercept_[0]
+            #
+            # lda_weights = lda.coef_[0]
+            #
+            # weights.loc[(s, midx)] = lda_weights
+            #
+            # run_scores.loc[(s, midx), runs_zeroed] = lda_run_scores
 
         ######################################################
         ##### LDA separating wash in raw HL and HL data ######
@@ -154,50 +158,99 @@ for s in global_settings['stride_numbers']:
             labels1 = np.array([0] * LH_pcs_p1_trim.shape[0] + [1] * HL_pcs_p1_trim.shape[0])
             labels2 = np.array([0] * LH_pcs_p2_trim.shape[0] + [1] * HL_pcs_p2_trim.shape[0])
 
-            # Run LDA to
-            lda = LDA()
-            lda.fit(pcs2, labels2)
-            lda_predictions = lda.predict(pcs2)
-            accuracy = lda.score(pcs2, labels2)
+            results = LDA.compute_lda(pcs2, labels2, folds=5)
+            y_pred, lda_weights, accuracy, w_folds, cv_acc, intercept = results
+            results_pcwise = LDA.compute_lda_pcwise(pcs2, labels2, lda_weights, intercept, shuffles=1000)
+            pc_acc, null_acc, y_preds_pcs = results_pcwise
 
-            cv_scores = cross_val_score(lda, pcs2, labels2, cv=5)
-            cv_accuracy = cv_scores.mean()
+            lda_wash_data = dc.LDAPredictionData(
+                phase='wash',
+                stride=s,
+                mouse_id=midx,
+                x_vals=runs_zeroed_p2,
+                y_pred=y_pred,
+                y_preds_pcs=y_preds_pcs,
+                weights=lda_weights,
+                accuracy=accuracy,
+                cv_acc=cv_acc,
+                w_folds=w_folds,
+                pc_acc=pc_acc,
+                null_acc=null_acc
+            )
+            lda_wash_predictions.append(lda_wash_data)
 
-            # accuracies.loc[(s, midx), 'accuracy'] = accuracy
-            # accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy
 
-            lda_run_scores = pcs2 @ lda.coef_[0] + lda.intercept_[0]
+            # # Run LDA to
+            # lda = LDA()
+            # lda.fit(pcs2, labels2)
+            # lda_predictions = lda.predict(pcs2)
+            # accuracy = lda.score(pcs2, labels2)
+            #
+            # cv_scores = cross_val_score(lda, pcs2, labels2, cv=5)
+            # cv_accuracy = cv_scores.mean()
+            #
+            # # accuracies.loc[(s, midx), 'accuracy'] = accuracy
+            # # accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy
+            #
+            # lda_run_scores = pcs2 @ lda.coef_[0] + lda.intercept_[0]
+            #
+            # lda_weights = lda.coef_[0]
+            #
+            # # weights.loc[(s, midx)] = lda_weights
+            #
+            # # run_scores.loc[(s, midx), runs_zeroed] = lda_run_scores
 
-            lda_weights = lda.coef_[0]
-
-            # weights.loc[(s, midx)] = lda_weights
-
-            # run_scores.loc[(s, midx), runs_zeroed] = lda_run_scores
-
-            # then find null space of lda_weights
-            null_basis = null_space(lda.coef_) # lda.coef_ is shape (1, n_features)
-
+            null_basis = null_space(lda_weights.reshape(1, -1))  # lda_weights is shape (n_features,)
             pcs_proj_null = pcs1 @ null_basis  # shape: (n_trials, n_pcs_used - 1)
 
-            lda2 = LDA()
-            lda2.fit(pcs_proj_null, labels1)
-            lda2_weights = lda2.coef_[0]
+            results2 = LDA.compute_lda(pcs_proj_null, labels1, folds=5)
+            y_pred2, lda2_weights, accuracy2, w_folds2, cv_acc2, intercept2 = results2
+            results_pcwise2 = LDA.compute_lda_pcwise(pcs_proj_null, labels1, lda2_weights, intercept2, shuffles=1000)
+            pc_acc2, null_acc2, y_preds_pcs2 = results_pcwise2
 
-            lda2_in_pca_space = null_basis @ lda2_weights
+            lda_apa_data = dc.LDAPredictionData(
+                phase='apa',
+                stride=s,
+                mouse_id=midx,
+                x_vals=runs_zeroed_p1,
+                y_pred=y_pred2,
+                y_preds_pcs=y_preds_pcs2,
+                weights=lda2_weights,
+                accuracy=accuracy2,
+                cv_acc=cv_acc2,
+                w_folds=w_folds2,
+                pc_acc=pc_acc2,
+                null_acc=null_acc2
+            )
+            lda_apa_predictions.append(lda_apa_data)
 
-            # Accuracy and CV accuracy of the second LDA (on null-projected data)
-            accuracy2 = lda2.score(pcs_proj_null, labels1)
-            cv_scores2 = cross_val_score(lda2, pcs_proj_null, labels1, cv=5)
-            cv_accuracy2 = cv_scores2.mean()
 
-            accuracies.loc[(s, midx), 'accuracy'] = accuracy2
-            accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy2
 
-            # Run scores along the new LDA2 axis (in original PC space)
-            lda2_run_scores = pcs1 @ lda2_in_pca_space + lda2.intercept_[0]
 
-            run_scores.loc[(s, midx), runs_zeroed_p1] = lda2_run_scores
-            weights.loc[(s, midx)] = lda2_in_pca_space
+            # # then find null space of lda_weights
+            # null_basis = null_space(lda.coef_) # lda.coef_ is shape (1, n_features)
+            #
+            # pcs_proj_null = pcs1 @ null_basis  # shape: (n_trials, n_pcs_used - 1)
+            #
+            # lda2 = LDA()
+            # lda2.fit(pcs_proj_null, labels1)
+            # lda2_weights = lda2.coef_[0]
+            #
+            # lda2_in_pca_space = null_basis @ lda2_weights
+            #
+            # # Accuracy and CV accuracy of the second LDA (on null-projected data)
+            # accuracy2 = lda2.score(pcs_proj_null, labels1)
+            # cv_scores2 = cross_val_score(lda2, pcs_proj_null, labels1, cv=5)
+            # cv_accuracy2 = cv_scores2.mean()
+            #
+            # accuracies.loc[(s, midx), 'accuracy'] = accuracy2
+            # accuracies.loc[(s, midx), 'cv_accuracy'] = cv_accuracy2
+            #
+            # # Run scores along the new LDA2 axis (in original PC space)
+            # lda2_run_scores = pcs1 @ lda2_in_pca_space + lda2.intercept_[0]
+            #
+            # run_scores.loc[(s, midx), runs_zeroed_p1] = lda2_run_scores
+            # weights.loc[(s, midx)] = lda2_in_pca_space
 
 
         else:

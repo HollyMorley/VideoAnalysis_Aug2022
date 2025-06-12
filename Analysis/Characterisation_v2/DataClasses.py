@@ -74,7 +74,7 @@ class FeatureWeights:
     feature_weights: pd.DataFrame
 
 @dataclass
-class LDAPredictionData:
+class LDAPredictionData: # --> for condition comparison
     phase: str
     stride: int
     mouse_id: str
@@ -82,6 +82,22 @@ class LDAPredictionData:
     y_pred: np.ndarray
     y_preds_pcs: np.ndarray
     weights: np.ndarray
+    accuracy: float
+    cv_acc: np.ndarray
+    w_folds: np.ndarray
+    pc_acc: np.ndarray
+    null_acc: np.ndarray
+
+@dataclass
+class RegressionPredicitonData: # --> for condition comparison
+    conditions: List[str]
+    phase: str
+    stride: int
+    mouse_id: str
+    x_vals: np.ndarray
+    y_pred: np.ndarray
+    y_preds_pcs: np.ndarray
+    pc_weights: np.ndarray # note this is different to LDA to accomodate existing regression functions
     accuracy: float
     cv_acc: np.ndarray
     w_folds: np.ndarray

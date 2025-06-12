@@ -320,8 +320,11 @@ def create_mouse_save_directory(base_dir, mouse_id, stride_number, phase1, phase
     return save_path
 
 
-def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
-    from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
+def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, reglda='reg', accmse='acc'):
+    if reglda == 'reg':
+        from Analysis.Characterisation_v2.AnalysisTools import Regression as src
+    elif reglda == 'lda':
+        from Analysis.Characterisation_v2.AnalysisTools import LDA as src
 
     all_pc_sigs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
     all_mean_accs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
@@ -330,27 +333,45 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
     all_pcs_of_interest_criteria = []  # list to collect per-stride DataFrames
 
     for s in stride_numbers:
-        PC_sigs, mean_accs, mouse_uniform = reg.calculate_PC_prediction_significances(pca_pred, s, mice_thresh=2)
+        PC_sigs, mean_accs, mouse_uniform = src.calculate_PC_prediction_significances(pca_pred, s, mice_thresh=2, accmse=accmse)
         all_pc_sigs[s] = PC_sigs
         all_mean_accs[s] = mean_accs
         all_uniformities[s] = mouse_uniform
 
-        of_interest = np.logical_and.reduce((mean_accs >= 0.6, PC_sigs <= 0.05, mouse_uniform))
+        if reglda == 'reg':
+            if accmse == 'acc':
+                of_interest = np.logical_and.reduce((mean_accs >= 0.6, PC_sigs <= 0.05, mouse_uniform))
+            elif accmse == 'mse':
+                of_interest = np.logical_and.reduce((mean_accs <= 0.2, PC_sigs <= 0.05, mouse_uniform)) # todo choose better mse cut-off
+        elif reglda == 'lda':
+            of_interest = np.logical_and(PC_sigs <= 0.05, mouse_uniform)
+
         pcs_of_interest = np.where(of_interest)[0] + 1  # Convert to 1-indexed
         print(f"Stride {s}: PCs of interest: {pcs_of_interest}")
         all_pcs_of_interest[s] = pcs_of_interest
 
-        # Create a DataFrame for the current stride with the measures as its row index.
-        pcs_of_interest_criteria_df = pd.DataFrame(
-            [PC_sigs, mean_accs, mouse_uniform],
-            index=['PC_sigs', 'mean_accs', 'uniformity'],
-            columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
-        )
+        if reglda == 'reg':
+            if accmse == 'acc':
+                pcs_of_interest_criteria_df = pd.DataFrame(
+                    [PC_sigs, mean_accs, mouse_uniform],
+                    index=['PC_sigs', 'mean_accs', 'uniformity'],
+                    columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
+                )
+            elif accmse == 'mse':
+                pcs_of_interest_criteria_df = pd.DataFrame(
+                    [PC_sigs, mean_accs, mouse_uniform],
+                    index=['PC_sigs', 'mean_mse', 'uniformity'],
+                    columns=np.arange(global_settings["pcs_to_use"]) + 1
+                )
+        elif reglda == 'lda':
+            pcs_of_interest_criteria_df = pd.DataFrame(
+                [PC_sigs, mouse_uniform],
+                index=['PC_sigs', 'uniformity'],
+                columns=np.arange(global_settings["pcs_to_use"]) + 1
+            )
         pcs_of_interest_criteria_df.columns.name = 'PCs'
         all_pcs_of_interest_criteria.append(pcs_of_interest_criteria_df)
 
-    # Combine all criteria DataFrames into one MultiIndex DataFrame:
-    # The multi-index will have 'stride' (from the keys) and 'measure' (the index of each small df)
     criteria_multi_df = pd.concat(all_pcs_of_interest_criteria, keys=stride_numbers, names=['stride', 'measure'])
 
     rows = []
@@ -383,7 +404,13 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir):
                 return str(val)
 
         formatted_df = stride_criteria.applymap(format_val)
-        formatted_df.columns = ['pval','acc', 'uniformity']
+        if reglda == 'reg':
+            if accmse == 'acc':
+                formatted_df.columns = ['pval', 'acc', 'uniformity']
+            elif accmse == 'mse':
+                formatted_df.columns = ['pval', 'mse', 'uniformity']
+        elif reglda == 'lda':
+            formatted_df.columns = ['pval', 'uniformity']
 
         # Create the figure and table.
         fig, ax = plt.subplots(figsize=(3, 4))

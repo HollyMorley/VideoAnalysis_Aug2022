@@ -31,7 +31,7 @@ random.seed(42)
 np.random.seed(42)
 
 # base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LH_res')
-base_save_dir_no_c = r"H:\Characterisation\\HL"
+base_save_dir_no_c = r"H:\Characterisation\\HL3"
 
 def main(stride_numbers: List[int], phases: List[str],
          condition: str = 'LowHigh', exp: str = 'Extended', day=None, compare_condition: str = 'None',
@@ -99,20 +99,22 @@ def main(stride_numbers: List[int], phases: List[str],
                     runs = expstuff["condition_exp_runs"]["APAChar"][exp]["Wash2"]
                     # get mean of wash2 runs
                     wash2_LH_means = feature_data_LH.loc[idx[stride, mouse_id, runs], :].mean()
-                    wash2_current_means = feature_data_notscaled.loc[idx[stride, mouse_id, runs], :].mean()
+                    wash2_HL_means = feature_data_notscaled.loc[idx[stride, mouse_id, runs], :].mean()
 
                     means_LH.loc[idx[stride, mouse_id], :] = wash2_LH_means
-                    means_current.loc[idx[stride, mouse_id], :] = wash2_current_means
+                    means_current.loc[idx[stride, mouse_id], :] = wash2_HL_means
 
                 # subtract each mouse's wash2 mean from all other runs
                 for (stride, mouse_id), data in means_current.groupby(level=[0, 1]):
                     # get mean of wash2 runs
                     wash2_LH_means = means_LH.loc[idx[stride, mouse_id], :].values
-                    wash2_current_means = means_current.loc[idx[stride, mouse_id], :].values
-                    wash2_diff = wash2_current_means - wash2_LH_means
+                    wash2_HL_means = means_current.loc[idx[stride, mouse_id], :].values
+                    wash2_diff = wash2_HL_means - wash2_LH_means
 
                     # subtract from all other runs
                     feature_data_notscaled.loc[idx[stride, mouse_id, :], :] = feature_data_notscaled.loc[idx[stride, mouse_id, :], :] - wash2_diff
+            else:
+                wash2_diff = None
 
             feature_data_notscaled = feature_data_notscaled.astype(float)
 

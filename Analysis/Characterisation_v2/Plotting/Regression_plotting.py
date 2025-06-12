@@ -1,5 +1,4 @@
 import os
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -417,6 +416,8 @@ def plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred, s, p1, p2, 
     fig.savefig(os.path.join(save_dir, f"Normalized_PC_regression_weights_{p1}_{p2}_stride{s}_{condition}.svg"), dpi=300)
     plt.close()
 
+
+
 def plot_top3_pcs_run_projections(feature_data, pca_all, stride, condition, save_dir, fs=7):
     data = feature_data.loc(axis=0)[stride]
     common_x = np.arange(0, 160)
@@ -480,10 +481,180 @@ def plot_top3_pcs_run_projections(feature_data, pca_all, stride, condition, save
     plt.close()
 
 
+##### condition comparisons ##########
+
+def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir, fs=7):
+    weights = [reg.pc_weights for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    if len(np.array(weights).shape) == 3 and np.array(weights).shape[1] == 1:  # if weights are in shape (n_mice, 1, n_pcs) or similar
+        weights = np.squeeze(weights, axis=1)
+    weights = np.array(weights)[:, :global_settings['pcs_to_plot']]
+    mice_names = [reg.mouse_id for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+
+    fig, ax = plt.subplots(figsize=(4, 8))
+
+    w_norm = np.zeros_like(weights)
+    for midx, mouse_weights in enumerate(weights):
+        mouse_name = mice_names[midx]
+
+        # max/abs normalisation
+        max_abs = np.abs(mouse_weights).max()
+        w_mouse_norm = mouse_weights / max_abs if max_abs != 0 else mouse_weights
+        w_norm[midx] = w_mouse_norm
+
+        ms = pu.get_marker_style_mice(mouse_name)
+        ls = '-'
+
+        ax.plot(mouse_weights, np.arange(1, len(mouse_weights) + 1),
+                marker=ms, markersize=4, linestyle=ls, linewidth=0.5, label=mouse_name, color='k')
+
+    ax.axvline(x=0, color='black', linestyle='--', alpha=0.4)
+
+    ax.set_xlabel("Normalized PC Weights", fontsize=fs)
+    ax.set_ylabel("PC", fontsize=fs)
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_xticks(np.arange(-1, 1.1, 0.5))
+    ax.set_xticklabels(np.arange(-1, 1.1, 0.5), fontsize=fs)
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.25))
+    ax.tick_params(axis='x', which='major', bottom=True, top=False, length=4, width=1)
+    ax.tick_params(axis='x', which='minor', bottom=True, top=False, length=2, width=1)
+    ax.set_ylim(0, global_settings["pcs_to_plot"] + 1)
+    ax.set_yticks(np.arange(1, global_settings["pcs_to_plot"] + 1))
+    ax.set_yticklabels(np.arange(1, global_settings["pcs_to_plot"] + 1), fontsize=fs)
+    ax.legend(fontsize=7, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., title=f"Mouse ID",
+              title_fontsize=fs)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
+    ax.grid(False)
+
+    ax.invert_yaxis()
+
+    plt.subplots_adjust(right=0.7, top=0.95)
+
+    fig.savefig(os.path.join(save_dir, f"Normalized_PC_reg_weights_{'_vs_'.join(conditions)}_stride{s}_{exp}.png"), dpi=300)
+    fig.savefig(os.path.join(save_dir, f"Normalized_PC_reg_weights_{'_vs_'.join(conditions)}_stride{s}_{exp}.svg"), dpi=300)
+    plt.close()
+
+def plot_prediciton_per_trial(reg_data, s, conditions, exp, save_dir, smooth_kernel=3, normalise=True, fs=7):
+    preds = [reg.y_pred for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    x_vals = [reg.x_vals for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    mice_names = [reg.mouse_id for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    common_x = np.arange(0, len(conditions)*50, 1)
+
+    preds_df = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
+    for midx, mouse_preds in enumerate(preds):
+        mouse_name = mice_names[midx]
+        preds_df.loc[x_vals[midx], mouse_name] = mouse_preds.ravel()
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+
+    colors = [pu.get_color_speedpair(con.split('_')[-1]) for con in conditions]
+
+    boxy = 1
+    height = 0.02
+    for c in range(len(conditions)):
+        patch = plt.axvspan(xmin=c*50, xmax=(c+1)*50, ymin=boxy, ymax=boxy+height, color=colors[c], lw=0)
+        patch.set_clip_on(False)
+
+    interp_preds = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
+    for mouse_name in mice_names:
+        pred = preds_df[mouse_name].values  # shape: (len(common_x),)
+
+        # Interpolate missing values before smoothing
+        pred_interp = pd.Series(pred, index=common_x).interpolate(limit_direction='both').values
+
+        # Apply smoothing
+        smoothed_preds = median_filter(pred_interp, size=smooth_kernel,
+                                       mode='nearest') if smooth_kernel > 1 else pred_interp
+
+        # Normalize if requested
+        if normalise and not np.all(np.isnan(smoothed_preds)):
+            max_abs = max(abs(np.nanmin(smoothed_preds)), abs(np.nanmax(smoothed_preds)))
+            smoothed_preds = smoothed_preds / max_abs if max_abs != 0 else smoothed_preds
+
+        # Store final prediction
+        interp_preds[mouse_name] = smoothed_preds
+        ax.plot(common_x, smoothed_preds, linewidth=0.6, alpha=0.3, color='grey', label=f'Mouse {mouse_name}')
+
+    mean_preds = interp_preds.mean(axis=1)
+    ax.plot(common_x, mean_preds, color='black', linewidth=1, label='Mean Curve')
+
+    for c in range(len(conditions)):
+        ax.axvline(x=c*50, color='black', linestyle='--', alpha=0.5)
+
+    ax.set_title(s, fontsize=fs, pad=10)
+    ax.set_xlabel('Trial', fontsize=fs)
+    ax.set_ylabel('Normalized Prediction', fontsize=fs)
+    ax.set_ylim(-1, 1)
+    ax.set_yticks(np.arange(-0.5, 0.6, 0.5))
+    ax.set_yticklabels(np.arange(-0.5, 0.6, 0.5), fontsize=fs)
+    ax.set_xticks(np.arange(0, len(conditions)*50, 20))
+    ax.set_xticklabels(np.arange(0, len(conditions)*50, 20), fontsize=fs)
+    ax.set_xlim(0, len(conditions)*50)
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(10))
+    ax.tick_params(axis='x', which='major', bottom=True, top=False, length=4, width=1)
+    ax.tick_params(axis='x', which='minor', bottom=True, top=False, length=2, width=1)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    plt.grid(False)
+    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.1)
+
+    save_path_full = os.path.join(save_dir,
+                                  f"Reg_run_predictions_{'_vs_'.join(conditions)}_stride{s}_{exp}")
+    plt.savefig(f"{save_path_full}.png", dpi=300)
+    plt.savefig(f"{save_path_full}.svg", dpi=300)
+    plt.close()
+    return mean_preds, interp_preds
+
+def plot_prediction_discrete_conditions(interp_preds, s, conditions, exp, save_dir, fs=7):
+    cond_labels = [c.split('_')[-1] for c in conditions]
+    fig, ax = plt.subplots(figsize=(2, 3))
+
+    n_conditions = len(conditions)
+    n_per_condition = 50
+    data_to_plot = []
+    means_by_mouse = []
+
+    # Compute means for each condition
+    for i in range(n_conditions):
+        start_idx = i * n_per_condition
+        end_idx = (i + 1) * n_per_condition
+        cond_vals = interp_preds.loc[start_idx:end_idx].mean(axis=0)
+        data_to_plot.append(cond_vals.values)
+        means_by_mouse.append(cond_vals)
+
+    ax.boxplot(data_to_plot, positions=list(range(n_conditions)), widths=0.3, patch_artist=True, zorder=1,
+               boxprops=dict(facecolor='lightgrey', color='black'),
+               medianprops=dict(color='black'),
+               whiskerprops=dict(color='black'),
+               capprops=dict(color='black'))
+
+    # Paired lines across conditions per mouse
+    for midx in interp_preds.columns:
+        mouse_vals = [means[midx] for means in means_by_mouse]
+        ax.plot(range(n_conditions), mouse_vals, linestyle='--', marker='o', markersize=3,
+                linewidth=1, alpha=0.3, color='grey', zorder=2)
+
+    ax.set_xticks(range(n_conditions))
+    ax.set_xticklabels(cond_labels)
+    ax.set_xlim(-0.5, n_conditions - 0.5)
+    ax.set_ylim(-0.5, 0.5)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    plt.xticks(fontsize=fs)
+    plt.yticks(fontsize=fs)
+    plt.xlabel('Condition', fontsize=fs)
+    plt.ylabel('Prediction Score', fontsize=fs)
+    plt.title(s, fontsize=fs)
+    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.15)
 
 
-
-
+    save_path_full = os.path.join(save_dir, f"Reg_mean_predictions_{'_vs_'.join(conditions)}_stride{s}_{exp}")
+    plt.savefig(f"{save_path_full}.png", dpi=300)
+    plt.savefig(f"{save_path_full}.svg", dpi=300)
+    plt.close()
 
 
 

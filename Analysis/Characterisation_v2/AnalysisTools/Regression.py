@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
 from scipy.signal import medfilt
 from sklearn.model_selection import StratifiedKFold
@@ -8,12 +8,62 @@ from scipy.stats import wilcoxon, ttest_1samp
 import matplotlib.pyplot as plt
 import os
 import pickle
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold
 
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2.Plotting import Regression_plotting as rp
 from Analysis.Tools.config import condition_specific_settings, global_settings
 
 np.random.seed(42)
+
+def compute_linear_regression(X, y, folds=5):
+    model = LinearRegression(fit_intercept=False)
+
+    n_samples = X.shape[1]
+    kf = KFold(n_splits=folds, shuffle=True, random_state=42)
+    cv_mse = []
+    w_folds = []
+
+    for train_idx, test_idx in kf.split(np.arange(n_samples)):
+        model_fold = LinearRegression(fit_intercept=False)
+        model_fold.fit(X[:, train_idx].T, y[train_idx])
+        w_fold = model_fold.coef_
+        y_pred = np.dot(w_fold, X[:, test_idx])
+        mse_fold = mean_squared_error(y[test_idx], y_pred.ravel())
+        cv_mse.append(mse_fold)
+        w_folds.append(w_fold)
+
+    cv_mse = np.array(cv_mse)
+    w_folds = np.array(w_folds)
+
+    model.fit(X.T, y)
+    w = model.coef_
+    y_pred = np.dot(w, X)
+    full_mse = mean_squared_error(y, y_pred.ravel())
+
+    return w, full_mse, cv_mse, w_folds
+def compute_linear_regression_pcwise_prediction(X, y, w, shuffles=1000):
+    #w = w[0]
+    num_pcs = X.shape[0]
+
+    pc_mse = np.zeros((num_pcs,))
+    null_mse = np.zeros((num_pcs, shuffles))
+    y_preds = np.zeros((num_pcs, X.shape[1]))
+
+    for pc in range(num_pcs):
+        wpc = w[pc]
+        y_pred = np.dot(wpc, X[pc, :])
+        y_preds[pc, :] = y_pred
+        pc_mse[pc] = mean_squared_error(y, y_pred)
+
+        for idx in range(shuffles):
+            x_shuffle = np.random.permutation(X[pc, :].T).T
+            y_pred_shuffle = np.dot(wpc, x_shuffle)
+            shuffle_mse = mean_squared_error(y, y_pred_shuffle.ravel())
+            null_mse[pc, idx] = shuffle_mse
+
+    return pc_mse, y_preds, null_mse
 
 def compute_regression(X, y, folds=5):
     model = LogisticRegression(penalty='l2', fit_intercept=False, solver='liblinear', C=0.5)
@@ -244,7 +294,7 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred, run_pred_scaled
 
-def calculate_PC_prediction_significances(pca_pred, stride, mice_thresh):
+def calculate_PC_prediction_significances(pca_pred, stride, mice_thresh, accmse='acc'):
     mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride ]
 
     accuracies_x_pcs = []
@@ -253,7 +303,7 @@ def calculate_PC_prediction_significances(pca_pred, stride, mice_thresh):
     for mouse_pred in mouse_stride_preds:
         accuracies_x_pcs.append(mouse_pred.pc_acc)
         accuracies_pcs_x_shuffle.append(mouse_pred.null_acc)
-        pc_weights.append(mouse_pred.pc_weights[0])
+        pc_weights.append(mouse_pred.pc_weights[0]) if mouse_pred.pc_weights.ndim == 2 else pc_weights.append(mouse_pred.pc_weights)
     accuracies_x_pcs = np.array(accuracies_x_pcs) # mice x pcs
     accuracies_shuffle_x_pcs = np.array(accuracies_pcs_x_shuffle) # mice x pcs x shuffle
     mean_accs = accuracies_x_pcs.mean(axis=0)
@@ -266,14 +316,16 @@ def calculate_PC_prediction_significances(pca_pred, stride, mice_thresh):
     ideal_mice_num  = total_mice_num - mice_thresh
     counts_more_than_thresh = max_counts >= ideal_mice_num
 
+    if accmse == 'acc': # ie higher is better
+        delta_acc_by_mouse = accuracies_x_pcs - accuracies_shuffle_x_pcs.mean(axis=2)
+    elif accmse == 'mse': # ie lower is better
+        delta_acc_by_mouse = accuracies_shuffle_x_pcs.mean(axis=2) - accuracies_x_pcs
 
-    delta_acc_by_mouse = accuracies_x_pcs - accuracies_shuffle_x_pcs.mean(axis=2)
     pc_significances = np.zeros((delta_acc_by_mouse.shape[1]))
     for pc in np.arange(delta_acc_by_mouse.shape[1]):
         pc_acc = delta_acc_by_mouse[:, pc]
         stat = ttest_1samp(pc_acc, 0)
         pc_significances[pc] = stat.pvalue
-
 
     return pc_significances, mean_accs, counts_more_than_thresh
 

@@ -60,7 +60,7 @@ global_settings = {
     "pcs_to_plot": 8,
     "use_LH_pcs": True,
     "use_LH_reg_model": False,
-    "normalise_to_LH_wash": True,
+    "normalise_to_LH_wash": False,
     #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": True,

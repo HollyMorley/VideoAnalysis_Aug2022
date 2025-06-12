@@ -5,6 +5,7 @@ plt.rcParams['svg.fonttype'] = 'none'
 from scipy.signal import medfilt
 import matplotlib.ticker as ticker
 import os
+import pickle
 
 from Helpers.Config_23 import *
 
@@ -243,3 +244,8 @@ def plot_angle_polar(angle_p1, angle_p2 ,p1, p2, stride, feature, savedir):
     plt.savefig(f"{save_path}.png", dpi=300)
     plt.savefig(f"{save_path}.svg", dpi=300)
     plt.close()
+
+# Import data
+with open(r"H:\\Characterisation\\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\\preprocessed_data_APAChar_LowHigh.pkl",
+          'rb') as f:
+    data_LH = pickle.load(f)

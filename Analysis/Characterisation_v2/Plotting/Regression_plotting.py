@@ -12,6 +12,8 @@ import scipy.signal
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as mcolors
 from matplotlib import ticker
+from scipy.ndimage import gaussian_filter1d
+
 
 from Helpers.Config_23 import *
 from Analysis.Characterisation_v2 import General_utils as gu
@@ -483,6 +485,45 @@ def plot_top3_pcs_run_projections(feature_data, pca_all, stride, condition, save
 
 ##### condition comparisons ##########
 
+def plot_condition_comparison_pc_features(feature_data, pca, reg_data, s, conditions, exp, save_dir, n_top_features=8, fs=7):
+    short_condition_names = [con.split('_')[-1] for con in conditions]
+
+    import Analysis.Characterisation_v2.Plotting.PCA_plotting as pca_plot
+    pca_loadings = pca.pca_loadings.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
+    top_features = {}
+    for pc in pca_loadings.columns:
+        top_features[pc] = pca_loadings.loc(axis=1)[pc].abs().nlargest(n_top_features).index.tolist()
+
+    for pc in pca_loadings.columns:
+        top_feats_pc = top_features[pc]
+        top_feats_loadings = pca_loadings.loc(axis=1)[pc].loc(axis=0)[top_feats_pc]
+
+        feats_all = []
+        conds = short_condition_names #if len(conditions) == 3 else conditions
+        for cond in conds:
+            feats = feature_data[cond].loc(axis=0)[s].loc(axis=1)[top_feats_pc].copy(deep=True)
+            mask, _ = gu.get_mask_p1_p2(feats, 'APA2', 'Wash2')
+            feats = feats.loc(axis=0)[mask]
+            feats_all.append(feats)
+
+        top_feats_display_names = [short_names.get(f, f) for f in top_feats_pc]
+
+        if len(conditions) == 2:
+            pca_plot.plot_top_feat_descriptives(feats_all[0], feats_all[1], top_feats_pc, top_feats_loadings, pc,
+                                                short_condition_names, s, top_feats_display_names, save_dir,
+                                                fs=fs, conditions=True)
+        elif len(conditions) == 3:
+            shared_mice = list(set.intersection(*[set(f.index.get_level_values(0)) for f in feats_all]))
+            feats_all = [f.loc[f.index.get_level_values(0).isin(shared_mice)] for f in feats_all]
+            pca_plot.plot_top_feat_descriptives_3way(feats_all, top_feats_pc, top_feats_loadings, pc,
+                                                     short_condition_names, s, top_feats_display_names, save_dir,
+                                                     fs=fs, conditions=True)
+        else:
+            raise ValueError("Only 2 or 3 conditions are supported.")
+
+
+
+
 def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir, fs=7):
     weights = [reg.pc_weights for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
     if len(np.array(weights).shape) == 3 and np.array(weights).shape[1] == 1:  # if weights are in shape (n_mice, 1, n_pcs) or similar
@@ -535,6 +576,187 @@ def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir
     fig.savefig(os.path.join(save_dir, f"Normalized_PC_reg_weights_{'_vs_'.join(conditions)}_stride{s}_{exp}.svg"), dpi=300)
     plt.close()
 
+
+def plot_prediction_histogram_ConditionComp(data, s, conditions, exp, save_dir, fs=7, model_type='reg'):
+    preds = [reg.y_pred for reg in data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    x_vals = [reg.x_vals for reg in data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    mice_names = [reg.mouse_id for reg in data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+
+    common_x = np.arange(0, len(conditions) * 50, 1)
+
+    preds_df = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
+    for midx, mouse_preds in enumerate(preds):
+        mouse_name = mice_names[midx]
+        preds_df.loc[x_vals[midx], mouse_name] = mouse_preds.ravel()
+
+    for mouse in mice_names:
+        # interpolate, smooth and normalise
+        all_pred = []
+        for cond in range(len(conditions)):
+            pred = preds_df[mouse].values[cond * 50:(cond + 1) * 50]
+            pred_interp = pd.Series(pred, index=np.arange(0, 50)).interpolate(limit_direction='both').values
+            smoothed_preds = median_filter(pred_interp, size=3, mode='nearest')
+            max_abs = max(abs(np.nanmin(smoothed_preds)), abs(np.nanmax(smoothed_preds)))
+            smoothed_preds = smoothed_preds / max_abs if max_abs != 0 else smoothed_preds
+            all_pred.append(smoothed_preds)
+        all_pred = np.concatenate(all_pred)
+        preds_df[mouse] = all_pred
+
+    all_preds = {}
+    for i, cond in enumerate(conditions):
+        trial_inds = np.arange(i * 50, (i + 1) * 50)
+        preds_cond = preds_df.loc[trial_inds].values.flatten()
+        preds_cond = preds_cond[~np.isnan(preds_cond)]
+        all_preds[cond] = preds_cond
+
+    fig, ax = plt.subplots(figsize=(2, 2))
+    num_bins = 30 if model_type == 'reg' else 20
+    bins = np.linspace(-1, 1, num_bins)
+    num_sigma = 3 if model_type == 'reg' else 1.5
+
+    for cond in conditions:
+        color = pu.get_color_speedpair(cond.split('_')[-1])
+        hist_vals, _ = np.histogram(all_preds[cond], bins=bins)
+        smoothed_hist = gaussian_filter1d(hist_vals, sigma=num_sigma)  # Tune sigma as needed
+        ax.plot(bins[:-1], smoothed_hist, label=cond.split('_')[-1], color=color, linewidth=1.5, linestyle='-')
+
+    ax.set_xlabel('Z-scored Prediction Score', fontsize=fs)
+    ax.set_ylabel('Count', fontsize=fs)
+    ax.legend(fontsize=fs - 1, loc='upper right')
+
+    # X-axis: labels + minor ticks
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_xticks(np.arange(-1, 1.1, 0.5))
+    ax.set_xticklabels(np.arange(-1, 1.1, 0.5), fontsize=fs)
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.25))
+    ax.tick_params(axis='x', which='minor', bottom=True, length=2, width=1, color='k')
+    ax.tick_params(axis='x', which='major', bottom=True, length=4, width=1)
+
+    # Y-axis: font size + minor ticks
+    ax.tick_params(axis='y', labelsize=fs)
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=2, width=1, color='k')
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.grid(False)
+    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.2)
+
+
+    fname = f"PredictionHistogram_stride{s}_{'_vs_'.join(conditions)}_{exp}"
+    if model_type == 'lda':
+        fname = f"LDA_{fname}"
+    save_path_full = os.path.join(save_dir,fname)
+    plt.savefig(f"{save_path_full}.png", dpi=300)
+    plt.savefig(f"{save_path_full}.svg", dpi=300)
+    plt.close()
+
+
+def plot_prediction_histogram_with_projection(reg_data, s, trained_conditions, other_condition, exp, save_dir, fs=7, model_type='reg'):
+    preds = [reg.y_pred for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == trained_conditions]
+    other_preds = [reg.y_pred for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == [other_condition]]
+
+    x_vals = [reg.x_vals for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == trained_conditions]
+    other_x_vals = [reg.x_vals for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == [other_condition]]
+
+
+    mice_names = [reg.mouse_id for reg in reg_data if
+                  reg.stride == s and reg.phase == 'apa' and reg.conditions == trained_conditions]
+    other_mice_names = [reg.mouse_id for reg in reg_data if
+                    reg.stride == s and reg.phase == 'apa' and reg.conditions == [other_condition]]
+
+    n_per_condition = 50
+    all_conditions = trained_conditions + [other_condition]
+    common_x = np.arange(0, len(trained_conditions) * n_per_condition, 1)
+
+    preds_df = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
+    for midx, mouse_preds in enumerate(preds):
+        preds_df.loc[x_vals[midx], mice_names[midx]] = mouse_preds.ravel()
+
+    for mouse in mice_names:
+        # process conditions separately
+        all_pred = []
+        for cond in range(len(trained_conditions)):
+            pred = preds_df[mouse].values[cond * n_per_condition:(cond + 1) * n_per_condition]
+            pred_interp = pd.Series(pred, index=np.arange(0, n_per_condition)).interpolate(limit_direction='both').values
+            smoothed_preds = median_filter(pred_interp, size=3, mode='nearest')
+            max_abs = max(abs(np.nanmin(smoothed_preds)), abs(np.nanmax(smoothed_preds)))
+            smoothed_preds = smoothed_preds / max_abs if max_abs != 0 else smoothed_preds
+            all_pred.append(smoothed_preds)
+        all_pred = np.concatenate(all_pred)
+        preds_df[mouse] = all_pred
+
+    # Handle other condition
+    other_preds_df = pd.DataFrame(index=np.arange(0, n_per_condition), columns=other_mice_names, dtype=float)
+    offset = len(trained_conditions) * n_per_condition
+    for midx, mouse_preds in enumerate(other_preds):
+        adjusted_x = other_x_vals[midx] - offset
+        other_preds_df.loc[adjusted_x, other_mice_names[midx]] = mouse_preds.ravel()
+
+    for mouse in other_mice_names:
+        pred = other_preds_df[mouse].values
+        pred_interp = pd.Series(pred, index=np.arange(n_per_condition)).interpolate(limit_direction='both').values
+        smoothed_preds = median_filter(pred_interp, size=3, mode='nearest')
+        max_abs = max(abs(np.nanmin(smoothed_preds)), abs(np.nanmax(smoothed_preds)))
+        smoothed_preds = smoothed_preds / max_abs if max_abs != 0 else smoothed_preds
+        other_preds_df[mouse] = smoothed_preds
+
+    all_preds = {}
+    for i, cond in enumerate(trained_conditions):
+        trial_inds = np.arange(i * n_per_condition, (i + 1) * n_per_condition)
+        preds_cond = preds_df.loc[trial_inds].values.flatten()
+        preds_cond = preds_cond[~np.isnan(preds_cond)]
+        all_preds[cond] = preds_cond
+    # Add in the other condition
+    trial_inds = np.arange(n_per_condition)
+    other_preds_cond = other_preds_df.loc[trial_inds].values.flatten()
+    other_preds_cond = other_preds_cond[~np.isnan(other_preds_cond)]
+    all_preds[other_condition] = other_preds_cond
+
+    fig, ax = plt.subplots(figsize=(2, 2))
+    num_bins = 30 if model_type == 'reg' else 20
+    bins = np.linspace(-1, 1, num_bins)
+    num_sigma = 3 if model_type == 'reg' else 1.5
+
+    for cond in trained_conditions:
+        color = pu.get_color_speedpair(cond.split('_')[-1])
+        hist_vals, _ = np.histogram(all_preds[cond], bins=bins)
+        smoothed_hist = gaussian_filter1d(hist_vals, sigma=num_sigma)
+        ax.plot(bins[:-1], smoothed_hist, label=cond.split('_')[-1], color=color, linewidth=1.5, linestyle='-')
+
+    color_proj = pu.get_color_speedpair(other_condition.split('_')[-1])
+    hist_vals_proj, _ = np.histogram(all_preds[other_condition], bins=bins)
+    smoothed_hist_proj = gaussian_filter1d(hist_vals_proj, sigma=3)
+    ax.plot(bins[:-1], smoothed_hist_proj, label=f"{other_condition.split('_')[-1]} (projected)",
+            color=color_proj, linewidth=1.5, linestyle='--', alpha=0.7)
+
+    ax.set_xlabel('Z-Scored Prediction Score', fontsize=fs)
+    ax.set_ylabel('Count', fontsize=fs)
+    ax.legend(fontsize=fs - 1, loc='upper right')
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_xticks(np.arange(-1, 1.1, 0.5))
+    ax.set_xticklabels(np.arange(-1, 1.1, 0.5), fontsize=fs)
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.25))
+    ax.tick_params(axis='x', which='minor', bottom=True, length=2, width=1, color='k')
+    ax.tick_params(axis='x', which='major', bottom=True, length=4, width=1)
+    ax.tick_params(axis='y', labelsize=fs)
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=2, width=1, color='k')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.grid(False)
+    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.2)
+
+    fname = f"PredictionHistogram_stride{s}_{'_vs_'.join(trained_conditions)}_proj_{other_condition.split('_')[-1]}_{exp}"
+    if model_type == 'lda':
+        fname = f"LDA_{fname}"
+    save_path_full = os.path.join(save_dir, fname)
+    plt.savefig(f"{save_path_full}.png", dpi=300)
+    plt.savefig(f"{save_path_full}.svg", dpi=300)
+    plt.close()
+
 def plot_prediciton_per_trial(reg_data, s, conditions, exp, save_dir, smooth_kernel=3, normalise=True, fs=7):
     preds = [reg.y_pred for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
     x_vals = [reg.x_vals for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
@@ -557,7 +779,7 @@ def plot_prediciton_per_trial(reg_data, s, conditions, exp, save_dir, smooth_ker
         patch.set_clip_on(False)
 
     interp_preds = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
-    for mouse_name in mice_names:
+    for mouse_name in mice_names: # todo am interpolating across conditions here so the transition point might be affected
         pred = preds_df[mouse_name].values  # shape: (len(common_x),)
 
         # Interpolate missing values before smoothing
@@ -599,7 +821,7 @@ def plot_prediciton_per_trial(reg_data, s, conditions, exp, save_dir, smooth_ker
     ax.spines['left'].set_visible(False)
 
     plt.grid(False)
-    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.1)
+    plt.subplots_adjust(left=0.3, right=0.95, top=0.95, bottom=0.2)
 
     save_path_full = os.path.join(save_dir,
                                   f"Reg_run_predictions_{'_vs_'.join(conditions)}_stride{s}_{exp}")

@@ -1,5 +1,6 @@
 import itertools
 import os
+from scipy.linalg import null_space
 
 import pandas as pd
 
@@ -9,10 +10,11 @@ from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2 import DataClasses as dc
 from Analysis.Characterisation_v2.Plotting import PCA_plotting as pcap
 from Analysis.Characterisation_v2.AnalysisTools import Regression as reg
+from Analysis.Characterisation_v2.AnalysisTools import LDA
 
 
 def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_data, stride_data, save_dir,
-                        select_pcs=None, select_pc_type=None):
+                        select_pcs=None, select_pc_type=None, feature_compare_data=None, feature_compare_stride_data=None):
     pca_predictions = []
     for p1, p2 in itertools.combinations(phases, 2):
 
@@ -20,7 +22,6 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
             raise ValueError("Not expecting more PCA data than for APA2 and Wash2 now!")
         else:
             pca = pca_data[0].pca
-            #pcs = pca_data[0].pcs
             pca_loadings = pca_data[0].pca_loadings
 
         if select_pcs is not None:
@@ -35,18 +36,41 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                 # # Get mouse run data
                 featsxruns, featsxruns_phaseruns, run_ns, stepping_limbs, mask_p1, mask_p2 = gu.select_runs_data(
                     midx, s, feature_data, stride_data, p1, p2)
-
                 pcs = pca.transform(featsxruns)
 
                 pcs_p1 = pcs[mask_p1]
                 pcs_p2 = pcs[mask_p2]
                 pcs_p1p2 = np.vstack([pcs_p1, pcs_p2])
 
+                # Check if need to run LDA on Wash data to find null space
+                if feature_compare_data is not None and feature_compare_stride_data is not None:
+                    featsxruns_compare, featsxruns_phaseruns_compare, run_ns_compare, stepping_limbs_compare, mask_p1_compare, mask_p2_compare = gu.select_runs_data(
+                        midx, s, feature_compare_data, feature_compare_stride_data, p1, p2)
+                    pcs_compare = pca.transform(featsxruns_compare)
+
+                    if p2 == 'Wash2':
+                        pcs_p2_compare = pcs_compare[mask_p2_compare]
+
+                        pcs_wash = np.vstack([pcs_p2, pcs_p2_compare])
+                        labels_wash = np.array([0] * pcs_p2.shape[0] + [1] * pcs_p2_compare.shape[0])
+
+                        pcs_wash_trim = pcs_wash[:, :global_settings['pcs_to_use']]
+
+                        _, lda_w, _, _, _, _ = LDA.compute_lda(pcs_wash_trim, labels_wash, folds=5)
+                        lda_w_unit = lda_w / np.linalg.norm(lda_w)
+                    else:
+                        raise ValueError("Unexpected phase for comparison data. Expected 'Wash2'.")
+
+                pcs_p1p2 = pcs_p1p2[:, :global_settings['pcs_to_use']] # todo is this correct?
+
                 if select_pcs is not None:
-                    select_PCs_as_numbers = [int(pc[-1]) - 1 for pc in select_pcs]
-                    pcs_p1 = pcs_p1[:, select_PCs_as_numbers]
-                    pcs_p2 = pcs_p2[:, select_PCs_as_numbers]
-                    pcs_p1p2 = pcs_p1p2[:, select_PCs_as_numbers]
+                    if feature_compare_data is not None and feature_compare_stride_data is not None:
+                        raise ValueError("Cannot select PCs when using comparison data for null space calculation.")
+                    else:
+                        select_PCs_as_numbers = [int(pc[-1]) - 1 for pc in select_pcs]
+                        pcs_p1 = pcs_p1[:, select_PCs_as_numbers]
+                        pcs_p2 = pcs_p2[:, select_PCs_as_numbers]
+                        pcs_p1p2 = pcs_p1p2[:, select_PCs_as_numbers]
 
                 labels_phase1 = np.array([p1] * pcs_p1.shape[0])
                 labels_phase2 = np.array([p2] * pcs_p2.shape[0])
@@ -55,7 +79,8 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
 
                 # --------- Plot PCA projections for mouse ---------
                 pcap.plot_pca(pca, pcs_p1p2, labels, p1, p2, s, stepping_limbs, run_ns, midx,
-                         condition, save_path)
+                            condition, save_path)
+
 
                 # ----------- Run Regression on PCA data and use to predict full run set for mouse -----------
                 results = reg.run_regression_on_PCA_and_predict(pca_loadings, pcs_p1p2, featsxruns,
@@ -63,7 +88,8 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                                 mask_p1, mask_p2,
                                                                 midx, p1, p2, s,
                                                                 condition, save_path,
-                                                                select_pc_type)
+                                                                select_pc_type,
+                                                                lda_w_unit=lda_w_unit)
                 (y_pred, smoothed_y_pred, feature_weights, w_PC, normalize_mean_pc, normalize_std_pc,
                  acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc) = results
 

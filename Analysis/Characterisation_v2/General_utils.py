@@ -95,6 +95,9 @@ def collect_stride_data(condition, exp, day, compare_condition):
     return stride_data, stride_data_compare
 
 def set_up_save_dir(condition, exp, base_save_dir_no_c):
+    if global_settings["pca_CombineAllConditions"]:
+        base_save_dir_no_c += '_allpca'
+
     if global_settings["use_LH_pcs"] and global_settings["use_LH_reg_model"]:
         base_save_dir_no_c += '_LHmodels'
     elif global_settings["use_LH_pcs"]:
@@ -102,6 +105,8 @@ def set_up_save_dir(condition, exp, base_save_dir_no_c):
 
     if global_settings['normalise_to_LH_wash']:
         base_save_dir_no_c += '_LhWnrm'
+    elif global_settings['normalise_wash_nullspace']:
+        base_save_dir_no_c += '_WnrmNullspace'
 
     pcs_total= global_settings['pcs_to_show']
     pcs_using = global_settings['pcs_to_use']
@@ -242,7 +247,7 @@ def get_mask_p1_p2(data, p1, p2):
         expstuff['condition_exp_runs']['APAChar']['Extended'][p2])
     return mask_p1, mask_p2
 
-def get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2):
+def get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase2, ignore_stepping_limb=False):
     mask_phase1, mask_phase2 = get_mask_p1_p2(scaled_data_df, phase1, phase2)
 
     if not mask_phase1.any():
@@ -255,8 +260,11 @@ def get_runs(scaled_data_df, stride_data, mouse_id, stride_number, phase1, phase
     run_numbers = list(run_numbers_phase1) + list(run_numbers_phase2)
 
     # Determine stepping limbs.
-    stepping_limbs = [determine_stepping_limbs(stride_data, mouse_id, run, stride_number)
-                      for run in run_numbers]
+    if not ignore_stepping_limb:
+        stepping_limbs = [determine_stepping_limbs(stride_data, mouse_id, run, stride_number)
+                          for run in run_numbers]
+    else:
+        stepping_limbs = None
 
     return run_numbers, stepping_limbs, mask_phase1, mask_phase2
 
@@ -280,12 +288,12 @@ def determine_stepping_limbs(stride_data, mouse_id, run, stride_number):
     else:
         return paws[0]
 
-def select_runs_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2):
+def select_runs_data(mouse_id, stride_number, feature_data, stride_data, phase1, phase2, ignore_stepping_limb=False):
     try:
         scaled_data_df = feature_data.loc(axis=0)[stride_number, mouse_id]
         # Get runs and stepping limbs for each phase.
         run_numbers, stepping_limbs, mask_phase1, mask_phase2 = get_runs(scaled_data_df, stride_data, mouse_id,
-                                                                         stride_number, phase1, phase2)
+                                                                         stride_number, phase1, phase2, ignore_stepping_limb=ignore_stepping_limb)
 
         # Select only runs from the two phases in feature data
         selected_mask = mask_phase1 | mask_phase2
@@ -320,7 +328,7 @@ def create_mouse_save_directory(base_dir, mouse_id, stride_number, phase1, phase
     return save_path
 
 
-def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, reglda='reg', accmse='acc'):
+def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=None, reglda='reg', accmse='acc'):
     if reglda == 'reg':
         from Analysis.Characterisation_v2.AnalysisTools import Regression as src
     elif reglda == 'lda':
@@ -333,42 +341,42 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, reglda='reg'
     all_pcs_of_interest_criteria = []  # list to collect per-stride DataFrames
 
     for s in stride_numbers:
-        PC_sigs, mean_accs, mouse_uniform = src.calculate_PC_prediction_significances(pca_pred, s, mice_thresh=2, accmse=accmse)
+        PC_sigs, mean_accs, mouse_uniform = src.calculate_PC_prediction_significances(pca_pred, s, conditions=conditions, mice_thresh=2, accmse=accmse)
         all_pc_sigs[s] = PC_sigs
         all_mean_accs[s] = mean_accs
         all_uniformities[s] = mouse_uniform
 
-        if reglda == 'reg':
-            if accmse == 'acc':
-                of_interest = np.logical_and.reduce((mean_accs >= 0.6, PC_sigs <= 0.05, mouse_uniform))
-            elif accmse == 'mse':
-                of_interest = np.logical_and.reduce((mean_accs <= 0.2, PC_sigs <= 0.05, mouse_uniform)) # todo choose better mse cut-off
-        elif reglda == 'lda':
-            of_interest = np.logical_and(PC_sigs <= 0.05, mouse_uniform)
+        # if reglda == 'reg':
+        if accmse == 'acc':
+            of_interest = np.logical_and.reduce((mean_accs >= 0.6, PC_sigs <= 0.05, mouse_uniform))
+        elif accmse == 'mse':
+            of_interest = np.logical_and.reduce((mean_accs <= 0.2, PC_sigs <= 0.05, mouse_uniform)) # todo choose better mse cut-off
+        # elif reglda == 'lda':
+        #     of_interest = np.logical_and(PC_sigs <= 0.05, mouse_uniform)
 
         pcs_of_interest = np.where(of_interest)[0] + 1  # Convert to 1-indexed
         print(f"Stride {s}: PCs of interest: {pcs_of_interest}")
         all_pcs_of_interest[s] = pcs_of_interest
 
-        if reglda == 'reg':
-            if accmse == 'acc':
-                pcs_of_interest_criteria_df = pd.DataFrame(
-                    [PC_sigs, mean_accs, mouse_uniform],
-                    index=['PC_sigs', 'mean_accs', 'uniformity'],
-                    columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
-                )
-            elif accmse == 'mse':
-                pcs_of_interest_criteria_df = pd.DataFrame(
-                    [PC_sigs, mean_accs, mouse_uniform],
-                    index=['PC_sigs', 'mean_mse', 'uniformity'],
-                    columns=np.arange(global_settings["pcs_to_use"]) + 1
-                )
-        elif reglda == 'lda':
+        # if reglda == 'reg':
+        if accmse == 'acc':
             pcs_of_interest_criteria_df = pd.DataFrame(
-                [PC_sigs, mouse_uniform],
-                index=['PC_sigs', 'uniformity'],
+                [PC_sigs, mean_accs, mouse_uniform],
+                index=['PC_sigs', 'mean_accs', 'uniformity'],
+                columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
+            )
+        elif accmse == 'mse':
+            pcs_of_interest_criteria_df = pd.DataFrame(
+                [PC_sigs, mean_accs, mouse_uniform],
+                index=['PC_sigs', 'mean_mse', 'uniformity'],
                 columns=np.arange(global_settings["pcs_to_use"]) + 1
             )
+        # elif reglda == 'lda':
+        #     pcs_of_interest_criteria_df = pd.DataFrame(
+        #         [PC_sigs, mouse_uniform],
+        #         index=['PC_sigs', 'uniformity'],
+        #         columns=np.arange(global_settings["pcs_to_use"]) + 1
+        #     )
         pcs_of_interest_criteria_df.columns.name = 'PCs'
         all_pcs_of_interest_criteria.append(pcs_of_interest_criteria_df)
 
@@ -404,13 +412,13 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, reglda='reg'
                 return str(val)
 
         formatted_df = stride_criteria.applymap(format_val)
-        if reglda == 'reg':
-            if accmse == 'acc':
-                formatted_df.columns = ['pval', 'acc', 'uniformity']
-            elif accmse == 'mse':
-                formatted_df.columns = ['pval', 'mse', 'uniformity']
-        elif reglda == 'lda':
-            formatted_df.columns = ['pval', 'uniformity']
+        # if reglda == 'reg':
+        if accmse == 'acc':
+            formatted_df.columns = ['pval', 'acc', 'uniformity']
+        elif accmse == 'mse':
+            formatted_df.columns = ['pval', 'mse', 'uniformity']
+        # elif reglda == 'lda':
+        #     formatted_df.columns = ['pval', 'uniformity']
 
         # Create the figure and table.
         fig, ax = plt.subplots(figsize=(3, 4))

@@ -10,6 +10,7 @@ import seaborn as sns
 import pandas as pd
 from typing import List
 from collections import defaultdict
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as SklearnLDA
 
 from Helpers.Config_23 import *
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
@@ -24,14 +25,23 @@ from Analysis.Characterisation_v2.Plotting import ClusterFeatures_plotting as cf
 from Analysis.Characterisation_v2.Plotting import SingleFeaturePred_plotting as sfpp
 from Analysis.Characterisation_v2.Plotting import PCA_plotting as pcap
 from Analysis.Characterisation_v2.Plotting import Regression_plotting as regp
-from Analysis.Characterisation_v2.Plotting import GeneralDescriptives_plotting as gdp
+# from Analysis.Characterisation_v2.Plotting import GeneralDescriptives_plotting as gdp
+from Analysis.Characterisation_v2.AnalysisTools import LDA
 
 sns.set(style="whitegrid")
 random.seed(42)
 np.random.seed(42)
 
 # base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LH_res')
-base_save_dir_no_c = r"H:\Characterisation\\HL3"
+base_save_dir_no_c = r"H:\Characterisation\\HL"
+
+
+def filter_data(data, phase):
+    apa_mask, wash_mask = gu.get_mask_p1_p2(data, 'APA2', 'Wash2')
+    phase_mask = apa_mask if phase == 'APA2' else wash_mask
+    phase_run_vals = data.index[phase_mask]
+    data_trimmed = data.loc[phase_run_vals, :]
+    return data_trimmed, phase_run_vals
 
 def main(stride_numbers: List[int], phases: List[str],
          condition: str = 'LowHigh', exp: str = 'Extended', day=None, compare_condition: str = 'None',
@@ -50,7 +60,7 @@ def main(stride_numbers: List[int], phases: List[str],
     LH_preprocessed_data_file_path = os.path.join(r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\preprocessed_data_APAChar_LowHigh.pkl")
     SingleFeatPath = os.path.join(base_save_dir_condition, 'SingleFeaturePredictions')
     MultiFeatPath = os.path.join(base_save_dir_condition, 'MultiFeaturePredictions')
-    LH_MultiFeatPath = r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions"
+    LH_MultiFeatPath = r"H:\Characterisation\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2\APAChar_LowHigh_Extended\MultiFeaturePredictions"
     ResidualFeatPath = os.path.join(base_save_dir_condition, 'Residuals')
     SingleResidualFeatPath = os.path.join(SingleFeatPath, 'Residuals')
     MultiResidualFeatPath = os.path.join(MultiFeatPath, 'Residuals')
@@ -78,28 +88,28 @@ def main(stride_numbers: List[int], phases: List[str],
         """
                    # -------- Normalize to LH wash per mouse (if applicable) --------
                """
-        if inst["condition"] == "APAChar_HighLow":
+        if inst["condition"] == "APAChar_HighLow" or inst["compare_condition"] == "APAChar_HighLow":
             idx = pd.IndexSlice
+            HL_data = feature_data_notscaled.copy() if inst["condition"] == "APAChar_HighLow" else feature_data_compare_notscaled.copy()
 
-            if global_settings["normalise_to_LH_wash"]:
-                print("Normalizing to LH wash...")
-
+            if global_settings["normalise_to_LH_wash"] and not global_settings["normalise_wash_nullspace"]:
+                print("Normalizing HL to LH wash...")
                 # load LH data
                 with open(LH_preprocessed_data_file_path, 'rb') as f:
                     data = pickle.load(f)
                     feature_data_LH = data['feature_data']
 
                 # per mouse and stride, find mean of wash2 and subtract this from current phase
-                higher_level_index = feature_data_notscaled.index.droplevel('Run').drop_duplicates()
-                means_LH = pd.DataFrame(index=higher_level_index, columns=feature_data_notscaled.columns)
-                means_current = pd.DataFrame(index=higher_level_index, columns=feature_data_notscaled.columns)
+                higher_level_index = HL_data.index.droplevel('Run').drop_duplicates()
+                means_LH = pd.DataFrame(index=higher_level_index, columns=HL_data.columns)
+                means_current = pd.DataFrame(index=higher_level_index, columns=HL_data.columns)
 
                 for (stride, mouse_id), data in means_current.groupby(level=[0, 1]):
                     # find wash2 runs
                     runs = expstuff["condition_exp_runs"]["APAChar"][exp]["Wash2"]
                     # get mean of wash2 runs
                     wash2_LH_means = feature_data_LH.loc[idx[stride, mouse_id, runs], :].mean()
-                    wash2_HL_means = feature_data_notscaled.loc[idx[stride, mouse_id, runs], :].mean()
+                    wash2_HL_means = HL_data.loc[idx[stride, mouse_id, runs], :].mean()
 
                     means_LH.loc[idx[stride, mouse_id], :] = wash2_LH_means
                     means_current.loc[idx[stride, mouse_id], :] = wash2_HL_means
@@ -112,9 +122,16 @@ def main(stride_numbers: List[int], phases: List[str],
                     wash2_diff = wash2_HL_means - wash2_LH_means
 
                     # subtract from all other runs
-                    feature_data_notscaled.loc[idx[stride, mouse_id, :], :] = feature_data_notscaled.loc[idx[stride, mouse_id, :], :] - wash2_diff
+                    HL_data.loc[idx[stride, mouse_id, :], :] = HL_data.loc[idx[stride, mouse_id, :], :] - wash2_diff
             else:
                 wash2_diff = None
+
+            if inst["condition"] == "APAChar_HighLow":
+                feature_data_notscaled = HL_data.copy()
+            elif inst["compare_condition"] == "APAChar_HighLow":
+                feature_data_compare_notscaled = HL_data.copy()
+            else:
+                raise ValueError(f"Unknown condition: {inst['condition']} or {inst['compare_condition']}")
 
             feature_data_notscaled = feature_data_notscaled.astype(float)
 
@@ -153,24 +170,6 @@ def main(stride_numbers: List[int], phases: List[str],
             feature_data_compare.loc[idx[stride, mouse_id, :], :] = d
             norm_df = pd.DataFrame([normalize_mean, normalize_std], columns=feature_names, index=['mean', 'std'])
             Normalize_compare[(stride, mouse_id)] = norm_df
-
-        # if stride_numbers == [0]:
-        #     datas= []
-        #     for data in [feature_data, feature_data_compare]:
-        #         a = data.loc(axis=0)[0]
-        #         b = data.loc(axis=0)[-1]
-        #
-        #         # find intersection of indexs
-        #         a = a.loc[a.index.intersection(b.index)]
-        #         b = b.loc[b.index.intersection(a.index)]
-        #
-        #         # 2) compute the difference
-        #         diff = a - b
-        #
-        #         # 3) stick “Stride=0” back on top
-        #         data = pd.concat({0: diff},names=['Stride'] + diff.index.names)
-        #         datas.append(data)
-        #     feature_data, feature_data_compare = datas
 
         # Get average feature values for each feature in each stride (across mice)
         feature_data_average = feature_data.groupby(level=['Stride', 'Run']).median()
@@ -352,7 +351,13 @@ def main(stride_numbers: List[int], phases: List[str],
                              "PCA filepath is:\n{filepath_pca}\n")
         else:
             print("Running PCA...")
-            pca_all = pca.pca_main(feature_data, stride_data, phases, stride_numbers, condition, MultiFeatPath)
+            if global_settings["pca_CombineAllConditions"]:
+                all_feature_data = pd.concat([feature_data, feature_data_compare], axis=0)
+                all_stride_data = pd.concat([stride_data, stride_data_compare], axis=0)
+                all_condition = f'{condition}_and_{compare_condition}'
+                pca_all = pca.pca_main(all_feature_data, all_stride_data, phases, stride_numbers, all_condition, MultiFeatPath)
+            else:
+                pca_all = pca.pca_main(feature_data, stride_data, phases, stride_numbers, condition, MultiFeatPath)
 
             # Save PCA results
             with open(os.path.join(MultiFeatPath, filename_pca), 'wb') as f:
@@ -360,7 +365,10 @@ def main(stride_numbers: List[int], phases: List[str],
 
     # Plot how each feature loads onto the PCA components
     pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
-    pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8)
+    top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8)
+    # Save the top features for each PC
+    with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
+        pickle.dump(top_features, f)
 
     """
     -------------------- PCA/Multi Feature Predictions ----------------------
@@ -374,7 +382,14 @@ def main(stride_numbers: List[int], phases: List[str],
         with open(filepath_pca_pred, 'rb') as f:
             pca_pred = pickle.load(f)
     else:
-        pca_pred = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all, feature_data, stride_data, MultiFeatPath)
+        if global_settings["normalise_wash_nullspace"] and not global_settings["normalise_to_LH_wash"] and inst["condition"] == "APAChar_HighLow":
+            pca_pred = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all,
+                                                feature_data, stride_data, MultiFeatPath,
+                                                feature_compare_data=feature_data_compare,
+                                                feature_compare_stride_data=stride_data_compare
+                                                )
+        else:
+            pca_pred = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all, feature_data, stride_data, MultiFeatPath)
         # Save PCA predictions
         with open(os.path.join(MultiFeatPath, filename_pca_pred), 'wb') as f:
             pickle.dump(pca_pred, f)
@@ -383,14 +398,20 @@ def main(stride_numbers: List[int], phases: List[str],
         regp.plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, stride_numbers,condition, MultiFeatPath, cbar_scaling=0.7)
 
     # ------ PCA for residual features too -----
-    if residuals:
+    if residuals and inst["condition"] == "APAChar_LowHigh":
         residual_filename_pca_pred = 'residual_' + filename_pca_pred
         if os.path.exists(os.path.join(MultiResidualFeatPath, residual_filename_pca_pred)):
             print("Loading PCA predictions from file...")
             with open(os.path.join(MultiResidualFeatPath, residual_filename_pca_pred), 'rb') as f:
                 pca_pred_residual = pickle.load(f)
         else:
-            pca_pred_residual = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all, residual_data, stride_data, MultiResidualFeatPath)
+            if global_settings["normalise_wash_nullspace"] and not global_settings["normalise_to_LH_wash"] and inst["condition"] == "APAChar_HighLow":
+                pca_pred_residual = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all,
+                                                             residual_data, stride_data, MultiResidualFeatPath,
+                                                             feature_compare_data=residual_data,
+                                                             feature_compare_stride_data=stride_data)
+            else:
+                pca_pred_residual = mfpu.run_pca_regressions(phases, stride_numbers, condition, pca_all, residual_data, stride_data, MultiResidualFeatPath)
             # Save PCA predictions
             with open(os.path.join(MultiResidualFeatPath, residual_filename_pca_pred), 'wb') as f:
                 pickle.dump(pca_pred_residual, f)
@@ -406,7 +427,7 @@ def main(stride_numbers: List[int], phases: List[str],
 
     print('Features:')
     pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath)
-    if residuals:
+    if residuals and inst["condition"] == "APAChar_LowHigh":
         print('Residuals:')
         residual_pcs_of_interest, residual_pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred_residual, stride_numbers, MultiResidualFeatPath)
 
@@ -420,69 +441,69 @@ def main(stride_numbers: List[int], phases: List[str],
         regp.plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred, s, phases[0], phases[1], condition, MultiFeatPath)
 
         # residual
-        if residuals:
+        if residuals and inst["condition"] == "APAChar_LowHigh":
             stride_pred_mean_residual = regp.plot_aggregated_run_predictions(pca_pred_residual, MultiResidualFeatPath, phases[0], phases[1], s, condition, smooth_kernel=3)
             residual_stride_mean_preds[s] = stride_pred_mean_residual
             regp.plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred_residual, s, phases[0], phases[1], condition, MultiResidualFeatPath)
 
 
     regp.plot_multi_stride_predictions(stride_mean_preds, phases[0], phases[1], condition, MultiFeatPath, mean_smooth_window=21)
-    if residuals:
+    if residuals and inst["condition"] == "APAChar_LowHigh":
         regp.plot_multi_stride_predictions(residual_stride_mean_preds, phases[0], phases[1], condition, MultiResidualFeatPath, mean_smooth_window=21)
 
     regp.plot_top3_pcs_run_projections(feature_data, pca_all, stride=-1, condition=condition, save_dir=MultiFeatPath)
 
-    # if condition == 'APAChar_LowHigh':
-    # ----------- Now predict APA with only the top 3 PCs ---------
-    filename_top3_pca_pred = f'pca_predictions_top3_{condition}.pkl'
-    if os.path.exists(os.path.join(MultiTopPCsPath, filename_top3_pca_pred)):
-        print("Loading top 3 PCA predictions from file...")
-        with open(os.path.join(MultiTopPCsPath, filename_top3_pca_pred), 'rb') as f:
-            pca_pred_top3 = pickle.load(f)
-    else:
-        print("Running PCA regressions with only the top 3 PCs...")
-        pca_pred_top3 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiTopPCsPath, select_pcs=['PC1','PC3','PC7'], select_pc_type='Top3')
-        # Save PCA predictions
-        with open(os.path.join(MultiTopPCsPath, filename_top3_pca_pred), 'wb') as f:
-            pickle.dump(pca_pred_top3, f)
+    # # if condition == 'APAChar_LowHigh':
+    # # ----------- Now predict APA with only the top 3 PCs ---------
+    # filename_top3_pca_pred = f'pca_predictions_top3_{condition}.pkl'
+    # if os.path.exists(os.path.join(MultiTopPCsPath, filename_top3_pca_pred)):
+    #     print("Loading top 3 PCA predictions from file...")
+    #     with open(os.path.join(MultiTopPCsPath, filename_top3_pca_pred), 'rb') as f:
+    #         pca_pred_top3 = pickle.load(f)
+    # else:
+    #     print("Running PCA regressions with only the top 3 PCs...")
+    #     pca_pred_top3 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiTopPCsPath, select_pcs=['PC1','PC3','PC7'], select_pc_type='Top3')
+    #     # Save PCA predictions
+    #     with open(os.path.join(MultiTopPCsPath, filename_top3_pca_pred), 'wb') as f:
+    #         pickle.dump(pca_pred_top3, f)
+    #
+    # # ----------- Now predict APA with only the remaining PCs ---------
+    # filename_bottom9_pca_pred = f'pca_predictions_bottom9_{condition}.pkl'
+    # if os.path.exists(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred)):
+    #     print("Loading bottom 9 PCA predictions from file...")
+    #     with open(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred), 'rb') as f:
+    #         pca_pred_bottom_9 = pickle.load(f)
+    # else:
+    #     print("Running PCA regressions with only the remaining PCs...")
+    #     other_pcs = ['PC2', 'PC4', 'PC5', 'PC6', 'PC8', 'PC9', 'PC10', 'PC11', 'PC12']
+    #     pca_pred_bottom_9 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiBottom9PCsPath, select_pcs=other_pcs, select_pc_type='Bottom9')
+    #     # Save PCA predictions
+    #     with open(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred), 'wb') as f:
+    #         pickle.dump(pca_pred_bottom_9, f)
+    #
+    # filename_bottom3_pca_pred = f'pca_predictions_bottom3_{condition}.pkl'
+    # if os.path.exists(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred)):
+    #     print("Loading bottom 3 PCA predictions from file...")
+    #     with open(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred), 'rb') as f:
+    #         pca_pred_bottom_3 = pickle.load(f)
+    # else:
+    #     bottom_3 = ['PC5', 'PC6', 'PC8']
+    #     pca_pred_bottom_3 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiBottom3PCsPath, select_pcs=bottom_3, select_pc_type='Bottom3')
+    #     # Save PCA predictions
+    #     with open(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred), 'wb') as f:
+    #         pickle.dump(pca_pred_bottom_3, f)
+    #
+    # _ = regp.plot_aggregated_run_predictions(pca_pred_top3, MultiTopPCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
+    # _ = regp.plot_aggregated_run_predictions(pca_pred_bottom_9, MultiBottom9PCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
+    # _ = regp.plot_aggregated_run_predictions(pca_pred_bottom_3, MultiBottom3PCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
 
-    # ----------- Now predict APA with only the remaining PCs ---------
-    filename_bottom9_pca_pred = f'pca_predictions_bottom9_{condition}.pkl'
-    if os.path.exists(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred)):
-        print("Loading bottom 9 PCA predictions from file...")
-        with open(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred), 'rb') as f:
-            pca_pred_bottom_9 = pickle.load(f)
-    else:
-        print("Running PCA regressions with only the remaining PCs...")
-        other_pcs = ['PC2', 'PC4', 'PC5', 'PC6', 'PC8', 'PC9', 'PC10', 'PC11', 'PC12']
-        pca_pred_bottom_9 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiBottom9PCsPath, select_pcs=other_pcs, select_pc_type='Bottom9')
-        # Save PCA predictions
-        with open(os.path.join(MultiBottom9PCsPath, filename_bottom9_pca_pred), 'wb') as f:
-            pickle.dump(pca_pred_bottom_9, f)
-
-    filename_bottom3_pca_pred = f'pca_predictions_bottom3_{condition}.pkl'
-    if os.path.exists(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred)):
-        print("Loading bottom 3 PCA predictions from file...")
-        with open(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred), 'rb') as f:
-            pca_pred_bottom_3 = pickle.load(f)
-    else:
-        bottom_3 = ['PC5', 'PC6', 'PC8']
-        pca_pred_bottom_3 = mfpu.run_pca_regressions(phases, [-1], condition, pca_all, feature_data, stride_data, MultiBottom3PCsPath, select_pcs=bottom_3, select_pc_type='Bottom3')
-        # Save PCA predictions
-        with open(os.path.join(MultiBottom3PCsPath, filename_bottom3_pca_pred), 'wb') as f:
-            pickle.dump(pca_pred_bottom_3, f)
-
-    _ = regp.plot_aggregated_run_predictions(pca_pred_top3, MultiTopPCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
-    _ = regp.plot_aggregated_run_predictions(pca_pred_bottom_9, MultiBottom9PCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
-    _ = regp.plot_aggregated_run_predictions(pca_pred_bottom_3, MultiBottom3PCsPath, phases[0], phases[1], -1, condition, smooth_kernel=3)
-
-    # Save and print all the cv accuracies
-    top3_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_top3, -1, phases, MultiTopPCsPath)
-    print(f"Top 3 model CV accuracy for stride -1: {top3_model_cv_acc}")
-    bottom9_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_bottom_9, -1, phases, MultiBottom9PCsPath)
-    print(f"Bottom 9 model CV accuracy for stride -1: {bottom9_model_cv_acc}")
-    bottom3_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_bottom_3, -1, phases, MultiBottom3PCsPath)
-    print(f"Bottom 3 model CV accuracy for stride -1: {bottom3_model_cv_acc}")
+    # # Save and print all the cv accuracies
+    # top3_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_top3, -1, phases, MultiTopPCsPath)
+    # print(f"Top 3 model CV accuracy for stride -1: {top3_model_cv_acc}")
+    # bottom9_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_bottom_9, -1, phases, MultiBottom9PCsPath)
+    # print(f"Bottom 9 model CV accuracy for stride -1: {bottom9_model_cv_acc}")
+    # bottom3_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_bottom_3, -1, phases, MultiBottom3PCsPath)
+    # print(f"Bottom 3 model CV accuracy for stride -1: {bottom3_model_cv_acc}")
 
     # Save the remainder of the cv accuracies
     full_model_cv_accs = dict.fromkeys(stride_numbers, None)
@@ -490,11 +511,12 @@ def main(stride_numbers: List[int], phases: List[str],
         full_model_cv_acc = reg.find_model_cv_accuracy(pca_pred, s, phases, MultiFeatPath)
         full_model_cv_accs[s] = full_model_cv_acc
         print(f"Full model CV accuracy for stride {s}: {full_model_cv_acc}")
-    res_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_residual, -1, phases, MultiResidualFeatPath)
-    print(f"Residual model CV accuracy for stride -1: {res_model_cv_acc}")
+    if residuals and inst["condition"] == "APAChar_LowHigh":
+        res_model_cv_acc = reg.find_model_cv_accuracy(pca_pred_residual, -1, phases, MultiResidualFeatPath)
+        print(f"Residual model CV accuracy for stride -1: {res_model_cv_acc}")
 
-    gdp.plot_literature_parallels(feature_data, -1, phases, GeneralDescriptivesPath)
-    gdp.plot_angles(feature_data_notscaled, phases, -1, GeneralDescriptivesPath)
+    # gdp.plot_literature_parallels(feature_data, -1, phases, GeneralDescriptivesPath)
+    # gdp.plot_angles(feature_data_notscaled, phases, -1, GeneralDescriptivesPath)
 
     print('Done')
 

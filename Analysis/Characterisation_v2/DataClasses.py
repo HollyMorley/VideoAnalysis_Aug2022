@@ -75,6 +75,7 @@ class FeatureWeights:
 
 @dataclass
 class LDAPredictionData: # --> for condition comparison
+    conditions: List[str]
     phase: str
     stride: int
     mouse_id: str

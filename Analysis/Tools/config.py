@@ -53,14 +53,15 @@ global_settings = {
     "cluster_all_strides": True,
     "select_features": False,
     "pool_mice": False,
-    "pca_CombineAllConditions": False,
+    "pca_CombineAllConditions": True, ## !!!
     "pca_CombineAllStrides": True,
     "pcs_to_show": 60,
     "pcs_to_use": 12,
     "pcs_to_plot": 8,
-    "use_LH_pcs": True,
+    "use_LH_pcs": True, ## !!!
     "use_LH_reg_model": False,
-    "normalise_to_LH_wash": False,
+    "normalise_to_LH_wash": False, ## !!!
+    "normalise_wash_nullspace": True, ## !!!
     #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": True,

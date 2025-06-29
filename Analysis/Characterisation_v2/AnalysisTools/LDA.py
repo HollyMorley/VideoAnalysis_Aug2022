@@ -80,8 +80,11 @@ def compute_lda_pcwise(X, y, w, intercept, shuffles=1000):
             null_acc[pc, idx] = bal_acc
     return pc_acc, null_acc, y_preds
 
-def calculate_PC_prediction_significances(lda_data, s, mice_thresh, accmse='acc'): # ignore accmse here
-    mouse_stride_preds = [pred for pred in lda_data if pred.stride == s ]
+def calculate_PC_prediction_significances(lda_data, s, conditions, mice_thresh, accmse='acc'): # ignore accmse here
+    if conditions:
+        mouse_stride_preds = [pred for pred in lda_data if pred.stride == s and pred.conditions == conditions]
+    else:
+        mouse_stride_preds = [pred for pred in lda_data if pred.stride == s]
 
     accuracies_x_pcs = []
     accuracies_pcs_x_shuffle = []

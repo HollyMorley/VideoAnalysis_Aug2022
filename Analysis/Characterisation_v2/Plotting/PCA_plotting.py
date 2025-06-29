@@ -239,6 +239,7 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
 
             plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s,
                                        top_feats_display_names, save_path, fs=fs)
+    return top_features
 
             # # Plot the raw features
             # common_x = np.arange(160)
@@ -258,18 +259,150 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
             #     median_feats = np.median(mice_feats, axis=0)
             #     axs[i].plot(common_x, median_feats, alpha=0.7, color='black', zorder=10, linewidth=1)
 
+def plot_top_feat_descriptives_3way(feats_list, top_feats_pc, top_feats_loadings, pc, phases, s, top_feats_display_names, save_path, fs=7, conditions=False):
+    assert len(feats_list) == len(phases), "Each phase must have a corresponding feature dataframe"
 
-def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s, top_feats_display_names, save_path, fs=7):
+    # Compute per-mouse means
+    feats_permouse_medians = [f.groupby(level=0).mean() for f in feats_list]
+    shared_mice = list(set.intersection(*[set(f.index) for f in feats_permouse_medians]))
+    feats_permouse_medians = [f.loc[shared_mice] for f in feats_permouse_medians]
+
+    data_per_phase = [[f[feat].values for feat in top_feats_pc] for f in feats_permouse_medians]
+
+    # Get phase colors
+    if not conditions:
+        colors = [pu.get_color_phase(ph) for ph in phases]
+    else:
+        colors = [pu.get_color_speedpair(ph) for ph in phases]
+    dark_colors = [pu.darken_color(c, 0.7) for c in colors]
+
+    boxprops_list = [dict(facecolor=c, color=c) for c in colors]
+    medianprops_list = [dict(color=dc, linewidth=2) for dc in dark_colors]
+    whiskerprops_list = [dict(color=dc, linewidth=1.5, linestyle='-') for dc in dark_colors]
+
+    x = np.arange(len(top_feats_pc))
+    width = 0.2
+    bar_multiple = 0.6
+    shifts = np.linspace(-width, width, len(phases))
+    positions_list = [x + shift for shift in shifts]
+
+    fig, axs = plt.subplots(4, 1, figsize=(6, 10))
+
+    ### Subplot 0: Loadings
+    axs[0].bar(x, top_feats_loadings, width * bar_multiple, alpha=0.7, color='k')
+    axs[0].set_ylabel('Feature Loadings', fontsize=fs)
+    axs[0].set_ylim(-0.6, 0.6)
+    axs[0].set_yticks(np.arange(-0.5, 0.6, 0.5))
+    axs[0].set_xticks([])
+
+    ### Subplot 1: Z-scored Feature Values
+    for pos, data, boxprops, medprops, whiskprops in zip(positions_list, data_per_phase, boxprops_list, medianprops_list, whiskerprops_list):
+        axs[2].boxplot(data, positions=pos, widths=width * bar_multiple,
+                      patch_artist=True, boxprops=boxprops,
+                      medianprops=medprops, whiskerprops=whiskprops,
+                      showcaps=False, showfliers=False)
+
+    for midx in shared_mice:
+        vals = [f.loc[midx][top_feats_pc].values for f in feats_permouse_medians]
+        axs[2].plot(positions_list, vals, 'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
+
+    axs[2].set_ylabel('Z-scored Feature', fontsize=fs)
+    axs[2].set_xticklabels([])
+    # axs[2].set_xticks(x)
+    # axs[2].set_xticklabels(top_feats_display_names, fontsize=fs, rotation=90)
+
+
+    handles = [mpatches.Patch(color=c, label=ph) for c, ph in zip(colors, phases)]
+    axs[2].legend(handles=handles, fontsize=fs, loc='upper right', bbox_to_anchor=(1.2, 1), title='Phase', title_fontsize=fs)
+
+    ### Subplot 2: PC Projection
+    weighted_features = [[feature * loading for feature, loading in zip(data, top_feats_loadings.values)] for data in data_per_phase]
+    for pos, data, boxprops, medprops, whiskprops in zip(positions_list, weighted_features, boxprops_list, medianprops_list, whiskerprops_list):
+        axs[1].boxplot(data, positions=pos, widths=width * bar_multiple,
+                      patch_artist=True, boxprops=boxprops,
+                      medianprops=medprops, whiskerprops=whiskprops,
+                      showcaps=False, showfliers=False)
+
+    # Convert weighted features into DataFrames for consistent mouse indexing
+    weighted_dfs = [
+        pd.DataFrame(np.column_stack(data), index=shared_mice, columns=top_feats_pc)
+        for data in weighted_features
+    ]
+
+    for midx in shared_mice:
+        vals = [df.loc[midx].values for df in weighted_dfs]
+        axs[1].plot(positions_list, vals, 'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
+
+    axs[1].set_ylabel('PC Projection', fontsize=fs)
+    axs[1].set_ylim(-0.6, 0.6)
+    axs[1].set_yticks(np.arange(-0.5, 0.6, 0.5))
+    axs[1].set_yticklabels(np.arange(-0.5, 0.6, 0.5), fontsize=fs)
+    axs[1].set_xticklabels([])
+
+    ### Subplot 3: Relative Feature Differences (LowHigh - others)
+    base = feats_permouse_medians[0]  # Assume LowHigh is first
+    diffs = [base[feat] - other[feat] for other in feats_permouse_medians[1:] for feat in top_feats_pc]
+    diffs = np.reshape(diffs, (len(feats_permouse_medians) - 1, len(top_feats_pc), -1))
+    labels = [f'{phases[0]}-{ph}' for ph in phases[1:]]
+    for i, d in enumerate(diffs):
+        axs[3].boxplot(d.T, positions=x + (i - 0.5) * 0.2, widths=0.15,
+                       patch_artist=True, boxprops=dict(facecolor='white', edgecolor=dark_colors[i + 1]),
+                       medianprops=dict(color=dark_colors[i + 1]), whiskerprops=dict(color=dark_colors[i + 1]))
+
+    axs[3].set_ylabel('Relative Feature Diff.', fontsize=fs)
+    axs[3].set_xticks(x)
+    axs[3].set_xticklabels(top_feats_display_names, fontsize=fs, rotation=90)
+    axs[3].legend(
+        [mpatches.Patch(edgecolor=dark_colors[i + 1], facecolor='white', label=labels[i]) for i in range(len(labels))],
+        labels, fontsize=fs, loc='upper right', title='Diffs rel. to LowHigh')
+
+    for ax in axs:
+        if ax != axs[0] and ax != axs[1]:
+            ax.set_ylim(-1.4, 1.4)
+            ax.set_yticks(np.arange(-1, 1.1, 1))
+            ax.set_yticklabels(np.arange(-1, 1.1, 1), fontsize=fs)
+        ax.axhline(0, color='gray', linewidth=1, linestyle='--', alpha=0.4)
+        ax.spines['left'].set_visible(True)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.grid(False)
+        ax.set_xlim(-0.5, len(top_feats_pc) - 0.5)
+        ax.tick_params(axis='y', which='both', left=True, labelsize=fs)
+        ax.minorticks_on()
+        ax.yaxis.set_minor_locator(ticker.MultipleLocator(0.25))
+        ax.tick_params(axis='y', which='minor', length=4, width=1, color='k')
+        if i != 3:
+            ax.tick_params(axis='x', which='both', bottom=False, top=False)
+
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.95, bottom=0.21, hspace=0.1)
+    plt.suptitle(pc, fontsize=fs)
+
+    plt.savefig(os.path.join(save_path, f'PCA_top_features_{"vs".join(phases)}_stride{s}_{pc}.png'), dpi=300)
+    plt.savefig(os.path.join(save_path, f'PCA_top_features_{"vs".join(phases)}_stride{s}_{pc}.svg'), dpi=300)
+    plt.close()
+
+
+def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s, top_feats_display_names, save_path, fs=7, conditions=False):
     feats_permouse_medians_p1 = feats_p1.groupby(level=0).mean()
     feats_permouse_medians_p2 = feats_p2.groupby(level=0).mean()
 
-    # Prepare data lists for the boxplots
+    shared_mice = feats_permouse_medians_p1.index.intersection(feats_permouse_medians_p2.index)
+
+    feats_permouse_medians_p1 = feats_permouse_medians_p1.loc[shared_mice]
+    feats_permouse_medians_p2 = feats_permouse_medians_p2.loc[shared_mice]
+
+    # Prepare data lists trimmed to shared mice
     data_p1 = [feats_permouse_medians_p1[feat].values for feat in top_feats_pc]
     data_p2 = [feats_permouse_medians_p2[feat].values for feat in top_feats_pc]
 
     # Get the phase colours and darker versions for the median and whiskers
-    p1_color = pu.get_color_phase(phases[0])
-    p2_color = pu.get_color_phase(phases[1])
+    if not conditions:
+        p1_color = pu.get_color_phase(phases[0])
+        p2_color = pu.get_color_phase(phases[1])
+    else:
+        p1_color = pu.get_color_speedpair(phases[0])
+        p2_color = pu.get_color_speedpair(phases[1])
     dark_color_p1 = pu.darken_color(p1_color, 0.7)
     dark_color_p2 = pu.darken_color(p2_color, 0.7)
 
@@ -293,61 +426,62 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
     ### Subplot 0: Feature Loadings
     axs[0].bar(x, top_feats_loadings, width * bar_multiple, alpha=0.7, color='k')
     axs[0].set_xticks([])
-    axs[0].set_ylabel('Feature Loadings', fontsize=fs)
+    axs[0].set_ylabel('Feature loading onto PC', fontsize=fs)
     axs[0].set_ylim(-0.6, 0.6)
     axs[0].set_yticks(np.arange(-0.5, 0.6, 0.5))
 
     ### Subplot 1: Phase Z-scored Feature Values
     # Boxplots for p1 and p2
-    axs[2].boxplot(data_p1, positions=positions_p1, widths=width * bar_multiple,
+    axs[1].boxplot(data_p1, positions=positions_p1, widths=width * bar_multiple,
                    patch_artist=True, boxprops=boxprops_p1,
                    medianprops=medianprops_p1, whiskerprops=whiskerprops_p1, showcaps=False, showfliers=False)
-    axs[2].boxplot(data_p2, positions=positions_p2, widths=width * bar_multiple,
+    axs[1].boxplot(data_p2, positions=positions_p2, widths=width * bar_multiple,
                    patch_artist=True, boxprops=boxprops_p2,
                    medianprops=medianprops_p2, whiskerprops=whiskerprops_p2, showcaps=False, showfliers=False)
 
     # Plot scatter lines connecting each mouse's data between phases:
     for midx in feats_permouse_medians_p1.index:
-        axs[2].plot([positions_p1, positions_p2],
-                    [feats_permouse_medians_p1.loc[midx], feats_permouse_medians_p2.loc[midx]],
-                    'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
+        if midx in feats_permouse_medians_p2.index:
+            axs[1].plot([positions_p1, positions_p2],
+                        [feats_permouse_medians_p1.loc[midx], feats_permouse_medians_p2.loc[midx]],
+                        'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
     p1_patch = mpatches.Patch(color=p1_color, label=f'{phases[0]}')
     p2_patch = mpatches.Patch(color=p2_color, label=f'{phases[1]}')
-    axs[2].set_xticklabels('')
-    axs[2].set_ylabel('Z-scored Feature', fontsize=fs)
+    axs[1].set_xticklabels('')
+    axs[1].set_ylabel('Feature magnitude (z)', fontsize=fs)
     # legend labels
-    axs[2].legend(handles=[p1_patch, p2_patch], fontsize=fs, loc='upper right', bbox_to_anchor=(1.2, 1),
+    axs[1].legend(handles=[p1_patch, p2_patch], fontsize=fs, loc='upper right', bbox_to_anchor=(1.2, 1),
                   title='Phase', title_fontsize=fs)
 
     ### Subplot 2: Projection of features on PCA
     weighted_features_p1 = [feature * loading for feature, loading in zip(data_p1, top_feats_loadings.values)]
     weighted_features_p2 = [feature * loading for feature, loading in zip(data_p2, top_feats_loadings.values)]
     # boxplots
-    axs[1].boxplot(weighted_features_p1, positions=positions_p1, widths=width * bar_multiple,
+    axs[2].boxplot(weighted_features_p1, positions=positions_p1, widths=width * bar_multiple,
                    patch_artist=True, boxprops=boxprops_p1,
                    medianprops=medianprops_p1, whiskerprops=whiskerprops_p1, showcaps=False, showfliers=False)
-    axs[1].boxplot(weighted_features_p2, positions=positions_p2, widths=width * bar_multiple,
+    axs[2].boxplot(weighted_features_p2, positions=positions_p2, widths=width * bar_multiple,
                    patch_artist=True, boxprops=boxprops_p2,
                    medianprops=medianprops_p2, whiskerprops=whiskerprops_p2, showcaps=False, showfliers=False)
     # Convert the lists of weighted feature arrays into DataFrames.
     # Each column corresponds to a feature and each row to a mouse.
     weighted_df_p1 = pd.DataFrame(np.column_stack(weighted_features_p1),
-                                  index=feats_permouse_medians_p1.index,
+                                  index=shared_mice,
                                   columns=top_feats_pc)
     weighted_df_p2 = pd.DataFrame(np.column_stack(weighted_features_p2),
-                                  index=feats_permouse_medians_p1.index,
+                                  index=shared_mice,
                                   columns=top_feats_pc)
 
     # Plot paired translucent line plots for each mouse (like in ax[1])
     for midx in weighted_df_p1.index:
-        axs[1].plot([positions_p1, positions_p2],
+        axs[2].plot([positions_p1, positions_p2],
                     [weighted_df_p1.loc[midx].values, weighted_df_p2.loc[midx].values],
                     'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
-    axs[1].set_ylabel('PC Projection', fontsize=fs)
-    axs[1].set_ylim(-0.6, 0.6)
-    axs[1].set_yticks(np.arange(-0.5, 0.6, 0.5))
-    axs[1].set_yticklabels(np.arange(-0.5, 0.6, 0.5), fontsize=fs)
-    axs[1].set_xticklabels('')
+    axs[2].set_ylabel('Projection onto PC', fontsize=fs)
+    axs[2].set_ylim(-0.6, 0.6)
+    axs[2].set_yticks(np.arange(-0.5, 0.6, 0.5))
+    axs[2].set_yticklabels(np.arange(-0.5, 0.6, 0.5), fontsize=fs)
+    axs[2].set_xticklabels('')
 
     ### Subplot 3: Phase Difference (p2 - p1)
     # Compute the per-mouse differences for each feature
@@ -373,11 +507,11 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
         # x_vals = np.random.normal(loc=x[i], scale=0.04, size=len(diff_vals))  # jitter for clarity
         axs[3].scatter([x[i]] * len(diff_vals), diff_vals, color='k', alpha=0.5, s=3, zorder=10)
     axs[3].set_xticklabels(top_feats_display_names, fontsize=fs, rotation=90)
-    axs[3].set_ylabel('Phase2 - Phase1', fontsize=fs)
+    axs[3].set_ylabel(f'{phases[-1]} - {phases[0]} (z)', fontsize=fs)
 
     for ax in axs:
         #ax.set_xticks(x)
-        if ax != axs[1] and ax != axs[0]:
+        if ax != axs[2] and ax != axs[0]:
             ax.set_ylim(-1.4, 1.4)
             ax.set_yticks(np.arange(-1, 1.1, 1))
             ax.set_yticklabels(np.arange(-1, 1.1, 1), fontsize=fs)

@@ -5,14 +5,15 @@ import matplotlib.ticker as ticker
 import os
 import pandas as pd
 from scipy.ndimage import median_filter
+from scipy.ndimage import gaussian_filter1d
 
 from Analysis.Characterisation_v2 import Plotting_utils as pu
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
 
 def plot_lda_weights(lda_data, s, cond1, cond2, exp, save_dir, fs=7):
-    apa_weights = [lda.weights for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+    apa_weights = [lda.weights for lda in lda_data if lda.stride == s and lda.phase == 'apa' and lda.conditions == [f"APAChar_{cond1}", f"APAChar_{cond2}"]]
     apa_weights = np.array(apa_weights)[:, :global_settings["pcs_to_plot"]]
-    mice_names = [lda.mouse_id for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+    mice_names = [lda.mouse_id for lda in lda_data if lda.stride == s and lda.phase == 'apa' and lda.conditions == [f"APAChar_{cond1}", f"APAChar_{cond2}"]]
 
     fig, ax = plt.subplots(figsize=(4, 8))
 
@@ -58,10 +59,67 @@ def plot_lda_weights(lda_data, s, cond1, cond2, exp, save_dir, fs=7):
     fig.savefig(os.path.join(save_dir, f"Normalized_PC_lda_weights_{cond1}_{cond2}_stride{s}_{exp}.svg"), dpi=300)
     plt.close()
 
+# def plot_prediction_histogram(lda_data, s, conditions, exp, save_dir, fs=7):
+#     apa_preds = [lda.y_pred for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+#     x_vals = [lda.x_vals for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+#     mice_names = [lda.mouse_id for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+#     common_x = np.arange(0, 100, 1)
+#
+#     preds_df = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)
+#     for midx, mouse_preds in enumerate(apa_preds):
+#         mouse_name = mice_names[midx]
+#         preds_df.loc[x_vals[midx], mouse_name] = mouse_preds
+#
+#     all_preds = {}
+#     for i, cond in enumerate(conditions):
+#         trial_inds = np.arange(i * 50, (i + 1) * 50)
+#         preds_cond = preds_df.loc[trial_inds].values.flatten()
+#         preds_cond = preds_cond[~np.isnan(preds_cond)]
+#         all_preds[cond] = preds_cond
+#
+#     fig, ax = plt.subplots(figsize=(2, 2))
+#     bins = np.linspace(-1, 1, 20)
+#
+#     for cond in conditions:
+#         color = pu.get_color_speedpair(cond.split('_')[-1])
+#         hist_vals, _ = np.histogram(all_preds[cond], bins=bins)
+#         smoothed_hist = gaussian_filter1d(hist_vals, sigma=1.5)
+#         ax.plot(bins[:-1], smoothed_hist, label=cond.split('_')[-1], color=color, linewidth=1.5, linestyle='-')
+#
+#     ax.set_xlabel('Prediction Score', fontsize=fs)
+#     ax.set_ylabel('Count', fontsize=fs)
+#     ax.legend(fontsize=fs - 1, loc='upper right')
+#
+#     # X-axis: labels + minor ticks
+#     ax.set_xlim(-1.2, 1.2)
+#     ax.set_xticks(np.arange(-1, 1.1, 0.5))
+#     ax.set_xticklabels(np.arange(-1, 1.1, 0.5), fontsize=fs)
+#     ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.25))
+#     ax.tick_params(axis='x', which='minor', bottom=True, length=2, width=1, color='k')
+#     ax.tick_params(axis='x', which='major', bottom=True, length=4, width=1)
+#
+#     # Y-axis: font size + minor ticks
+#     ax.tick_params(axis='y', labelsize=fs)
+#     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+#     ax.tick_params(axis='y', which='minor', length=2, width=1, color='k')
+#
+#     ax.spines['top'].set_visible(False)
+#     ax.spines['right'].set_visible(False)
+#
+#     plt.grid(False)
+#     plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.2)
+#
+#     fname = f"LDA_PredictionHistogram_stride{s}_{'_vs_'.join(conditions)}_{exp}"
+#     save_path_full = os.path.join(save_dir, fname)
+#     plt.savefig(f"{save_path_full}.png", dpi=300)
+#     plt.savefig(f"{save_path_full}.svg", dpi=300)
+#     plt.close()
+
+
 def plot_prediction_per_trial(lda_data, s, cond1, cond2, exp, save_dir, smooth_kernel=3, normalise=True, fs=7):
-    apa_preds = [lda.y_pred for lda in lda_data if lda.stride == s and lda.phase == 'apa']
-    x_vals = [lda.x_vals for lda in lda_data if lda.stride == s and lda.phase == 'apa']
-    mice_names = [lda.mouse_id for lda in lda_data if lda.stride == s and lda.phase == 'apa']
+    apa_preds = [lda.y_pred for lda in lda_data if lda.stride == s and lda.phase == 'apa' and lda.conditions == [f"APAChar_{cond1}", f"APAChar_{cond2}"]]
+    x_vals = [lda.x_vals for lda in lda_data if lda.stride == s and lda.phase == 'apa' and lda.conditions == [f"APAChar_{cond1}", f"APAChar_{cond2}"]]
+    mice_names = [lda.mouse_id for lda in lda_data if lda.stride == s and lda.phase == 'apa' and lda.conditions == [f"APAChar_{cond1}", f"APAChar_{cond2}"]]
     common_x = np.arange(0, 100, 1)
 
     preds_df = pd.DataFrame(index=common_x, columns=mice_names, dtype=float)

@@ -19,11 +19,18 @@ def pca_main(feature_data, stride_data, phases, stride_numbers,
                     # select_feats=True, combine_conditions=False, combine_strides=False):
     pca_results = []
     for p1, p2 in itertools.combinations(phases, 2):
+        if global_settings["pca_CombineAllConditions"]:
+            mice = list(set(condition_specific_settings['APAChar_LowHigh']['global_fs_mouse_ids']) & set(condition_specific_settings['APAChar_HighLow']['global_fs_mouse_ids']))
+            ignore_stepping_limb = True
+        else:
+            mice = condition_specific_settings[condition]['global_fs_mouse_ids']
+            ignore_stepping_limb = False
         pca, pcs, pca_loadings = compute_pca_allStrides(
             feature_data,
-            condition_specific_settings[condition]['global_fs_mouse_ids'],
+            mice,
             stride_data, p1, p2, stride_numbers,
-            n_components=global_settings["pcs_to_show"]
+            n_components=global_settings["pcs_to_show"],
+            ignore_stepping_limb=ignore_stepping_limb
         )
         pca_class = dc.PCAData(phase=(p1,p2),
                                stride='all',
@@ -37,7 +44,7 @@ def pca_main(feature_data, stride_data, phases, stride_numbers,
 
     return pca_results
 
-def compute_pca_allStrides(feature_data, mouseIDs_condition, stride_data, p1, p2, stride_numbers, n_components):
+def compute_pca_allStrides(feature_data, mouseIDs_condition, stride_data, p1, p2, stride_numbers, n_components, ignore_stepping_limb=False):
     aggregated_data = []
     data_mouse_pairs = [(feature_data, mouseIDs_condition, stride_data)]
 
@@ -46,7 +53,7 @@ def compute_pca_allStrides(feature_data, mouseIDs_condition, stride_data, p1, p2
             for mouse_id in mouseIDs:
                 # Select runs data for the current mouse and stride number AND phases
                 _, selected_data, _, _, _, _ = gu.select_runs_data(
-                    mouse_id, stride_number, data, stride_d, p1, p2)
+                    mouse_id, stride_number, data, stride_d, p1, p2, ignore_stepping_limb)
                 aggregated_data.append(selected_data.T) # todo added .T as the function tranforms the data for some reason as we didnt here before
 
     global_data = pd.concat(aggregated_data)

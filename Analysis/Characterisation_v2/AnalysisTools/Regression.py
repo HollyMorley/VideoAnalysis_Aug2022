@@ -178,6 +178,7 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
                        condition: str,
                        save_path: str,
                        select_pc_type: str = None,
+                       lda_w_unit: np.ndarray = None,
                        ) -> tuple:
 
     # # Fit regression model on PCA data
@@ -186,10 +187,9 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     #     selected_feature_data = selected_feature_data[::2]
     #     mask_p1 = mask_p1[::2]
     #     mask_p2 = mask_p2[::2]
-    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2, mouse_id, s, select_pc_type)
+    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2, mouse_id, s, select_pc_type, lda_w_unit=lda_w_unit)
     (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc) = results
 
-    # Trim the weights and normalization parameters to the number of PCs to use
     w = np.array(w[0][:global_settings['pcs_to_use']]).reshape(1, -1)
     normalize_mean = normalize_mean[:global_settings['pcs_to_use']]
     normalize_std = normalize_std[:global_settings['pcs_to_use']]
@@ -212,7 +212,8 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
 
 
 def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame,
-                         mask_p1: np.ndarray, mask_p2: np.ndarray, mouse_id: str, s: int, select_pc_type: str = None):
+                         mask_p1: np.ndarray, mask_p2: np.ndarray, mouse_id: str, s: int, select_pc_type: str = None,
+                         lda_w_unit: np.ndarray = None):
     # trim pc loadings
     loadings = loadings.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
     # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
@@ -228,6 +229,11 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     if not global_settings["use_LH_reg_model"]:
         w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
         pc_acc, y_preds, null_acc = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+
+        if lda_w_unit is not None:
+            # Remove w's component along lda_w_unit
+            w = w - np.dot(w, lda_w_unit) * lda_w_unit
+
     else:
         # load the regression from the LowHigh model
         multipath = r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions"
@@ -276,6 +282,7 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                  w: np.ndarray, save_path: str, mouse_id: str, p1: str, p2:str, s: int, condition_name: str):
     # Apply the full model to all runs (scaled and unscaled)
     all_trials_dr = np.dot(loadings.T, feature_data.T)
+
     all_trials_dr = ((all_trials_dr.T - normalize_mean) / normalize_std).T # pc wise normalization
     run_pred = np.dot(w, np.dot(loadings.T, feature_data.T))
     run_pred_scaled = np.dot(w, all_trials_dr)
@@ -294,8 +301,11 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred, run_pred_scaled
 
-def calculate_PC_prediction_significances(pca_pred, stride, mice_thresh, accmse='acc'):
-    mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride ]
+def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thresh, accmse='acc'):
+    if conditions:
+        mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride and pred.conditions == conditions]
+    else:
+        mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride]
 
     accuracies_x_pcs = []
     accuracies_pcs_x_shuffle = []

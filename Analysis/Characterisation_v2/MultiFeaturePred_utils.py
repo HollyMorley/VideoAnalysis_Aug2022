@@ -60,6 +60,8 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                         lda_w_unit = lda_w / np.linalg.norm(lda_w)
                     else:
                         raise ValueError("Unexpected phase for comparison data. Expected 'Wash2'.")
+                else:
+                    lda_w_unit = None
 
                 pcs_p1p2 = pcs_p1p2[:, :global_settings['pcs_to_use']] # todo is this correct?
 
@@ -91,7 +93,7 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                                 select_pc_type,
                                                                 lda_w_unit=lda_w_unit)
                 (y_pred, smoothed_y_pred, feature_weights, w_PC, normalize_mean_pc, normalize_std_pc,
-                 acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc) = results
+                 acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc, pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ) = results
 
                 # Skipping w/in vs b/wn mice comparison
 
@@ -111,7 +113,10 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                       w_folds=w_folds,
                                                       y_preds_PCwise=pc_y_preds,
                                                       pc_acc=pc_acc,
-                                                      null_acc=null_acc
+                                                      null_acc=null_acc,
+                                                      null_acc_circ=null_acc_circ,
+                                                      pc_lesions_cv_acc=pc_lesions_cv_acc,
+                                                      pc_lesions_w_folds=pc_lesions_w_folds
                                                       # y_preds_PCwise=y_preds_PCwise,
                                                       # cv_acc_PCwise=cv_acc_PCwise,
                                                       # shuffle_acc=cv_acc_shuffle_PCwise,

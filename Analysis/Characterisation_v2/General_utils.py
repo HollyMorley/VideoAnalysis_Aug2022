@@ -6,6 +6,7 @@ import itertools
 import datetime
 from collections import defaultdict
 import matplotlib.pyplot as plt
+plt.rcParams['svg.fonttype'] = 'none'
 
 from Analysis.Tools.config import (
     global_settings, condition_specific_settings, instance_settings
@@ -327,24 +328,33 @@ def create_mouse_save_directory(base_dir, mouse_id, stride_number, phase1, phase
 
     return save_path
 
+def get_pc_weights(pca_pred, stride):
+    mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride]
+    mouse_names = [pred.mouse_id for pred in mouse_stride_preds]
 
-def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=None, reglda='reg', accmse='acc'):
+    pc_weights = []
+    for mouse_pred in mouse_stride_preds:
+        pc_weights.append(mouse_pred.pc_weights[0]) if mouse_pred.pc_weights.ndim == 2 else pc_weights.append(mouse_pred.pc_weights)
+    pc_weights = np.array(pc_weights)
+
+    # dataframe with names
+    pc_weights_df = pd.DataFrame(pc_weights, index=mouse_names, columns=np.arange(global_settings["pcs_to_use"]) + 1)
+
+    return pc_weights_df
+
+
+def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=None, reglda='reg', accmse='acc', lesion_significance=False, LH_pred=None):
     if reglda == 'reg':
         from Analysis.Characterisation_v2.AnalysisTools import Regression as src
     elif reglda == 'lda':
         from Analysis.Characterisation_v2.AnalysisTools import LDA as src
 
-    all_pc_sigs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
-    all_mean_accs = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
-    all_uniformities = np.zeros((len(stride_numbers), global_settings["pcs_to_use"]))
     all_pcs_of_interest = defaultdict(list)
     all_pcs_of_interest_criteria = []  # list to collect per-stride DataFrames
 
     for s in stride_numbers:
-        PC_sigs, mean_accs, mouse_uniform = src.calculate_PC_prediction_significances(pca_pred, s, conditions=conditions, mice_thresh=2, accmse=accmse)
-        all_pc_sigs[s] = PC_sigs
-        all_mean_accs[s] = mean_accs
-        all_uniformities[s] = mouse_uniform
+        PC_sigs, mean_accs, mouse_uniform, num_mice, total_mice = src.calculate_PC_prediction_significances(pca_pred, s, conditions=conditions, mice_thresh_percent=0.75, accmse=accmse, lesion_significance=lesion_significance)
+        uniformity_display = np.array([f"{num}/{total_mice}" for num in num_mice])
 
         # if reglda == 'reg':
         if accmse == 'acc':
@@ -361,13 +371,13 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=N
         # if reglda == 'reg':
         if accmse == 'acc':
             pcs_of_interest_criteria_df = pd.DataFrame(
-                [PC_sigs, mean_accs, mouse_uniform],
+                [PC_sigs, mean_accs, uniformity_display],
                 index=['PC_sigs', 'mean_accs', 'uniformity'],
                 columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
             )
         elif accmse == 'mse':
             pcs_of_interest_criteria_df = pd.DataFrame(
-                [PC_sigs, mean_accs, mouse_uniform],
+                [PC_sigs, mean_accs, uniformity_display],
                 index=['PC_sigs', 'mean_mse', 'uniformity'],
                 columns=np.arange(global_settings["pcs_to_use"]) + 1
             )
@@ -377,6 +387,33 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=N
         #         index=['PC_sigs', 'uniformity'],
         #         columns=np.arange(global_settings["pcs_to_use"]) + 1
         #     )
+
+        if LH_pred is not None:
+            LH_weights_df = get_pc_weights(LH_pred, s)
+            current_weights_df = get_pc_weights(pca_pred, s)
+
+            # Match shared mice
+            shared_mice = LH_weights_df.index.intersection(current_weights_df.index)
+            LH_weights_df = LH_weights_df.loc[shared_mice]
+            current_weights_df = current_weights_df.loc[shared_mice]
+
+            # Calculate per mouse per PC sign
+            LH_signs = np.sign(LH_weights_df)
+            current_signs = np.sign(current_weights_df)
+
+            # Check where signs differ per mouse per PC
+            sign_diff = LH_signs != current_signs
+
+            # Count number of mice with different signs per PC
+            num_switch = sign_diff.sum(axis=0)
+            total_mice = len(shared_mice)
+
+            # Format as 'num/total' string per PC
+            num_switch_str = [f"{n}/{total_mice}" for n in num_switch]
+
+            # Add as a new row to dataframe
+            pcs_of_interest_criteria_df.loc['Sign switch'] = num_switch_str
+
         pcs_of_interest_criteria_df.columns.name = 'PCs'
         all_pcs_of_interest_criteria.append(pcs_of_interest_criteria_df)
 
@@ -414,14 +451,17 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=N
         formatted_df = stride_criteria.applymap(format_val)
         # if reglda == 'reg':
         if accmse == 'acc':
-            formatted_df.columns = ['pval', 'acc', 'uniformity']
+            formatted_df.columns = ['pval', 'acc', 'uniformity'] if LH_pred is None else ['pval', 'acc', 'uniformity', 'Sign switch']
         elif accmse == 'mse':
             formatted_df.columns = ['pval', 'mse', 'uniformity']
         # elif reglda == 'lda':
         #     formatted_df.columns = ['pval', 'uniformity']
 
         # Create the figure and table.
-        fig, ax = plt.subplots(figsize=(3, 4))
+        column_width = 1  # adjust as needed for clarity
+        fig_width = column_width * (len(formatted_df.columns) + 1)  # +1 for row labels
+        fig, ax = plt.subplots(figsize=(fig_width, 4))
+
         ax.axis('tight')
         ax.axis('off')
 
@@ -460,8 +500,8 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=N
         plt.subplots_adjust(left=0.3, right=0.7)
 
         # Save the figure as an SVG file.
-        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.svg'), format='svg')
-        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.png'), format='png')
+        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.svg'), format='svg', dpi=300)
+        plt.savefig(os.path.join(savedir, f'pcs_of_interest_criteria_table_{s}.png'), format='png', dpi=300)
         plt.close(fig)
 
     return all_pcs_of_interest_df, criteria_multi_df

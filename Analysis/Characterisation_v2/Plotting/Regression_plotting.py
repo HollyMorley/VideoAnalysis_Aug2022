@@ -6,6 +6,7 @@ plt.rcParams['svg.fonttype'] = 'none'
 import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+import matplotlib.ticker as ticker
 #from scipy.signal import medfilt
 from scipy.ndimage import median_filter
 import scipy.signal
@@ -499,7 +500,7 @@ def plot_condition_comparison_pc_features(feature_data, pca, reg_data, s, condit
         top_feats_loadings = pca_loadings.loc(axis=1)[pc].loc(axis=0)[top_feats_pc]
 
         feats_all = []
-        conds = short_condition_names #if len(conditions) == 3 else conditions
+        conds = short_condition_names if len(conditions) == 3 else conditions # i got rid of this, is it because doesnt work with lda?
         for cond in conds:
             feats = feature_data[cond].loc(axis=0)[s].loc(axis=1)[top_feats_pc].copy(deep=True)
             mask, _ = gu.get_mask_p1_p2(feats, 'APA2', 'Wash2')
@@ -616,12 +617,12 @@ def plot_prediction_histogram_ConditionComp(data, s, conditions, exp, save_dir, 
 
     for cond in conditions:
         color = pu.get_color_speedpair(cond.split('_')[-1])
-        hist_vals, _ = np.histogram(all_preds[cond], bins=bins)
+        hist_vals, _ = np.histogram(all_preds[cond], bins=bins, density=True)
         smoothed_hist = gaussian_filter1d(hist_vals, sigma=num_sigma)  # Tune sigma as needed
         ax.plot(bins[:-1], smoothed_hist, label=cond.split('_')[-1], color=color, linewidth=1.5, linestyle='-')
 
     ax.set_xlabel('Z-scored Prediction Score', fontsize=fs)
-    ax.set_ylabel('Count', fontsize=fs)
+    ax.set_ylabel('Probability Density', fontsize=fs)
     ax.legend(fontsize=fs - 1, loc='upper right')
 
     # X-axis: labels + minor ticks
@@ -721,18 +722,18 @@ def plot_prediction_histogram_with_projection(reg_data, s, trained_conditions, o
 
     for cond in trained_conditions:
         color = pu.get_color_speedpair(cond.split('_')[-1])
-        hist_vals, _ = np.histogram(all_preds[cond], bins=bins)
+        hist_vals, _ = np.histogram(all_preds[cond], bins=bins, density=True)
         smoothed_hist = gaussian_filter1d(hist_vals, sigma=num_sigma)
         ax.plot(bins[:-1], smoothed_hist, label=cond.split('_')[-1], color=color, linewidth=1.5, linestyle='-')
 
     color_proj = pu.get_color_speedpair(other_condition.split('_')[-1])
-    hist_vals_proj, _ = np.histogram(all_preds[other_condition], bins=bins)
+    hist_vals_proj, _ = np.histogram(all_preds[other_condition], bins=bins, density=True)
     smoothed_hist_proj = gaussian_filter1d(hist_vals_proj, sigma=3)
     ax.plot(bins[:-1], smoothed_hist_proj, label=f"{other_condition.split('_')[-1]} (projected)",
             color=color_proj, linewidth=1.5, linestyle='--', alpha=0.7)
 
     ax.set_xlabel('Z-Scored Prediction Score', fontsize=fs)
-    ax.set_ylabel('Count', fontsize=fs)
+    ax.set_ylabel('Probability Density', fontsize=fs)
     ax.legend(fontsize=fs - 1, loc='upper right')
     ax.set_xlim(-1.2, 1.2)
     ax.set_xticks(np.arange(-1, 1.1, 0.5))
@@ -757,7 +758,7 @@ def plot_prediction_histogram_with_projection(reg_data, s, trained_conditions, o
     plt.savefig(f"{save_path_full}.svg", dpi=300)
     plt.close()
 
-def plot_prediciton_per_trial(reg_data, s, conditions, exp, save_dir, smooth_kernel=3, normalise=True, fs=7):
+def plot_prediction_per_trial(reg_data, s, conditions, exp, save_dir, smooth_kernel=3, normalise=True, fs=7):
     preds = [reg.y_pred for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
     x_vals = [reg.x_vals for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
     mice_names = [reg.mouse_id for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
@@ -870,13 +871,67 @@ def plot_prediction_discrete_conditions(interp_preds, s, conditions, exp, save_d
     plt.xlabel('Condition', fontsize=fs)
     plt.ylabel('Prediction Score', fontsize=fs)
     plt.title(s, fontsize=fs)
-    plt.subplots_adjust(left=0.2, right=0.95, top=0.95, bottom=0.15)
+    plt.subplots_adjust(left=0.3, right=0.95, top=0.95, bottom=0.15)
 
 
     save_path_full = os.path.join(save_dir, f"Reg_mean_predictions_{'_vs_'.join(conditions)}_stride{s}_{exp}")
     plt.savefig(f"{save_path_full}.png", dpi=300)
     plt.savefig(f"{save_path_full}.svg", dpi=300)
     plt.close()
+def mouse_sign_flip_with_LH(pca_pred, LH_pca_pred, s, condition, savedir, fs=7):
+    current_weights_df = gu.get_pc_weights(pca_pred, s)
+    LH_weights_df = gu.get_pc_weights(LH_pca_pred, s)
+
+    shared_mice = LH_weights_df.index.intersection(current_weights_df.index)
+    current_weights_df = current_weights_df.loc[shared_mice]
+    LH_weights_df = LH_weights_df.loc[shared_mice]
+
+    condition_name = condition.split('_')[-1] if '_' in condition else condition
+
+    for pc in current_weights_df.columns:
+        fig, ax = plt.subplots(figsize=(2, 2))
+
+        # Gather all values to determine ylim
+        all_vals = pd.concat([LH_weights_df[pc], current_weights_df[pc]])
+        abs_max = np.ceil(np.max(np.abs(all_vals)) * 4) / 4  # round up to nearest 0.25
+        ax.set_ylim(-abs_max, abs_max)
+        ax.yaxis.set_major_locator(ticker.MultipleLocator(0.25))
+        ax.tick_params(axis='y', which='both', left=True, right=False, length=4, width=1, color='grey', labelsize=fs)
+
+        for mouse in current_weights_df.index:
+            current_weight = current_weights_df.loc[mouse, pc]
+            LH_weight = LH_weights_df.loc[mouse, pc]
+
+            ms = pu.get_marker_style_mice(mouse)
+
+            # Determine if sign flip
+            sign_flip = np.sign(current_weight) != np.sign(LH_weight)
+            line_color = 'red' if sign_flip else 'k'
+
+            ax.plot([0.5, 1.5], [LH_weight, current_weight],
+                    marker=ms, markersize=3, linestyle='-',
+                    color=line_color, alpha=0.5,
+                    label=mouse if mouse == shared_mice[0] else "")
+
+        ax.axhline(0, color='black', linestyle='--', alpha=0.5)
+
+        ax.set_xlim(0, 2)
+        ax.set_xticks([0.5, 1.5])
+        ax.set_xticklabels(['LowHigh', condition_name], fontsize=fs)
+        ax.set_ylabel('Regression Coefficient', fontsize=fs)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_color('k')
+        ax.grid(False)
+
+        save_path = os.path.join(savedir, f"Mouse_sign_LH_flip_{pc}_stride{s}_{condition_name}")
+        plt.savefig(f"{save_path}.png", dpi=300)
+        plt.savefig(f"{save_path}.svg", dpi=300)
+
+
+
 
 
 

@@ -26,11 +26,18 @@ class LDARunner:
         self._load_data()
 
     def _load_data(self):
-        file_map = {
-            'APAChar_LowHigh': r"H:\\Characterisation\\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\\preprocessed_data_APAChar_LowHigh.pkl",
-            'APAChar_LowMid': r"H:\\Characterisation\\LM_LHpcsonly_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\\preprocessed_data_APAChar_LowMid.pkl",
-            'APAChar_HighLow': r"H:\\Characterisation\\HL_LHpcsonly_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\\preprocessed_data_APAChar_HighLow.pkl"
+        base_paths = {
+            'APAChar_LowHigh': r"H:\Characterisation\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2",
+            'APAChar_LowMid': r"H:\Characterisation\LM_allpca_LHpcsonly_res_-3-2-1_APA2Wash2",
+            'APAChar_HighLow': r"H:\Characterisation\HL_allpca_LHpcsonly_res_-3-2-1_APA2Wash2" ## todo THIS DOESNT EXIST YET!!
         }
+
+        file_map = {
+            'APAChar_LowHigh': os.path.join(base_paths['APAChar_LowHigh'], 'preprocessed_data_APAChar_LowHigh.pkl'),
+            'APAChar_LowMid': os.path.join(base_paths['APAChar_LowMid'], 'preprocessed_data_APAChar_LowMid.pkl'),
+            'APAChar_HighLow': os.path.join(base_paths['APAChar_HighLow'], 'preprocessed_data_APAChar_HighLow.pkl')
+        }
+
         file_map_wash = {
             'APAChar_HighLow': r"H:\\Characterisation\\HL_LHpcsonly_LhWnrm_res_-3-2-1_APA2Wash2\\preprocessed_data_APAChar_HighLow.pkl"
         }

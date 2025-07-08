@@ -80,7 +80,7 @@ def compute_lda_pcwise(X, y, w, intercept, shuffles=1000):
             null_acc[pc, idx] = bal_acc
     return pc_acc, null_acc, y_preds
 
-def calculate_PC_prediction_significances(lda_data, s, conditions, mice_thresh, accmse='acc'): # ignore accmse here
+def calculate_PC_prediction_significances(lda_data, s, conditions, mice_thresh_percent, accmse='acc', lesion_significance=False): # ignore accmse and lesion_significance here
     if conditions:
         mouse_stride_preds = [pred for pred in lda_data if pred.stride == s and pred.conditions == conditions]
     else:
@@ -102,8 +102,10 @@ def calculate_PC_prediction_significances(lda_data, s, conditions, mice_thresh, 
     neg_counts = (pc_weights < 0).sum(axis=0)
     max_counts = np.maximum(pos_counts, neg_counts)
     total_mice_num = len(mouse_stride_preds)
-    ideal_mice_num  = total_mice_num - mice_thresh
-    counts_more_than_thresh = max_counts >= ideal_mice_num
+    percent_uniform = max_counts / total_mice_num
+    mice_uniform = percent_uniform >= mice_thresh_percent
+    # ideal_mice_num  = total_mice_num - mice_thresh
+    # counts_more_than_thresh = max_counts >= ideal_mice_num
 
     delta_acc_by_mouse = accuracies_x_pcs - accuracies_shuffle_x_pcs.mean(axis=2)
     pc_significances = np.zeros((delta_acc_by_mouse.shape[1]))
@@ -112,6 +114,6 @@ def calculate_PC_prediction_significances(lda_data, s, conditions, mice_thresh, 
         stat = ttest_1samp(pc_acc, 0)
         pc_significances[pc] = stat.pvalue
 
-    return pc_significances, mean_accs, counts_more_than_thresh
+    return pc_significances, mean_accs, mice_uniform, max_counts, total_mice_num
 
 

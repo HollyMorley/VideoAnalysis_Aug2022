@@ -28,10 +28,10 @@ base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'FeatureReducti
 # ----------------------- Individual running settings: -----------------------
 instance_settings = [
     {
-        "condition": 'APAChar_HighLow',
+        "condition": 'APAChar_LowHigh',
         "exp": 'Extended',
         "day": None,
-        "compare_condition": 'APAChar_LowHigh',
+        "compare_condition": 'APAChar_HighLow',
     },
     # {
     #     "condition": 'APAChar_HighLow',
@@ -43,8 +43,8 @@ instance_settings = [
 
 # --------------------------- Global settings: -------------------------------
 global_settings = {
-    "stride_numbers": [-3,-2,-1],#[-3,-2,-1],#[0]
-    "phases": ['APA2','Wash2'], #['APA2','Wash2'], #['APA1', 'APA2'],
+    "stride_numbers": [-1],#[-3,-2,-1],#[0]
+    "phases": ['APA1','APA2'], #['APA2','Wash2'], #['APA1', 'APA2'],
     "residuals": True,
     "script_version": 'SingleCondition',
     "allmice": True,
@@ -53,15 +53,15 @@ global_settings = {
     "cluster_all_strides": True,
     "select_features": False,
     "pool_mice": False,
-    "pca_CombineAllConditions": True, ## !!!
+    "pca_CombineAllConditions": False, ## !!!
     "pca_CombineAllStrides": True,
     "pcs_to_show": 60,
     "pcs_to_use": 12,
     "pcs_to_plot": 8,
     "use_LH_pcs": True, ## !!!
-    "use_LH_reg_model": False,
+    "use_LH_reg_model": False, ## !!!
     "normalise_to_LH_wash": False, ## !!!
-    "normalise_wash_nullspace": True, ## !!!
+    "normalise_wash_nullspace": False, ## !!!
     #"multi_strides": True,
     "overwrite_FeatureSelection": False,
     "overwrite_data_collection": True,

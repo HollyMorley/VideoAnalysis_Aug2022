@@ -62,6 +62,9 @@ class PCAPredictionData:
     y_preds_PCwise: np.ndarray
     pc_acc: np.ndarray
     null_acc: np.ndarray
+    null_acc_circ: np.ndarray
+    pc_lesions_cv_acc: Optional[np.ndarray] = None  # Optional for lesion analysis
+    pc_lesions_w_folds: Optional[np.ndarray] = None  # Optional for lesion analysis
 
     # cv_acc_PCwise: np.ndarray
     # shuffle_acc: np.ndarray
@@ -104,5 +107,8 @@ class RegressionPredicitonData: # --> for condition comparison
     w_folds: np.ndarray
     pc_acc: np.ndarray
     null_acc: np.ndarray
+    pc_lesions_cv_acc: Optional[np.ndarray] = None  # Optional for lesion analysis
+    pc_lesions_w_folds: Optional[np.ndarray] = None  # Optional for lesion analysis
+
 
 

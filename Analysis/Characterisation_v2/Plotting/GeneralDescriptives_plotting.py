@@ -455,7 +455,7 @@ def across_mice_L_R_percentage(TransitioningPaws, savedir):
 
 
 # Import data
-with open(r"H:\\Characterisation\\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\\preprocessed_data_APAChar_LowHigh.pkl",
+with open(r"H:\\Characterisation\\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2\\preprocessed_data_APAChar_LowHigh.pkl",
           'rb') as f:
     data_LH = pickle.load(f)
 print("Loaded data from preprocessed_data_APAChar_LowHigh.pkl")

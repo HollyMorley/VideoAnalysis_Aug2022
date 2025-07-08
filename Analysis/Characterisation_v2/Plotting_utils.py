@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from curlyBrace import curlyBrace
 import numpy as np
 import matplotlib.colors as mcolors
@@ -116,6 +117,31 @@ def get_color_speedpair(speed):
         raise ValueError(f"Unknown speed: {speed}")
     return color
 
+def get_color_stride(s):
+    if s == 0:
+        color = "#49080F"
+    elif s == -1:
+        color = "#810E1A"
+    elif s == -2:
+        color = "#DC182C"
+    elif s == -3:
+        color = "#ED5A68"
+    else:
+        raise ValueError(f"Unknown stride: {s}")
+    return color
+
+def get_color_pc(pc, colormap='gist_ncar', n_pcs=12):
+    import matplotlib.colors as mcolors
+    # length of possible PCs is 12, so we can use the first 12 colors from Set1
+    if pc < 0 or pc >= n_pcs:
+        raise ValueError(f"PC index {pc} is out of range. Must be between 0 and {n_pcs - 1}.")
+
+    cm = plt.get_cmap(colormap)
+    color = mcolors.to_hex(cm(pc / (n_pcs - 1)))  # Normalize pc to [0, 1]
+
+    return color
+
+
 def get_ls_stride(s):
     if s == -1:
         ls = "-"
@@ -181,6 +207,25 @@ def get_marker_style_mice(m):
         raise ValueError(f"Unknown mouse ID: {m}")
     return marker
 
+def get_color_mice(m, cmap='YlGnBu', speedordered=None):
+    import matplotlib.colors as mcolors
+    if not speedordered:
+        all_mice = ['1035243', '1035244', '1035245', '1035246',
+                    '1035250', '1035297',
+                    '1035299', '1035301'] # removed '1035249', '1035298', '1035302'
+    else:
+        all_mice = speedordered
+    if m not in all_mice:
+        raise ValueError(f"Unknown mouse ID: {m}")
+    cm = plt.get_cmap(cmap)
+    # Map to a narrower range (e.g. 0.3-0.8)
+    lower, upper = 0.3, 0.8
+    index = all_mice.index(m) / (len(all_mice) - 1)
+    index_scaled = lower + index * (upper - lower)
+    color = cm(index_scaled)
+    return mcolors.to_hex(color)
+
+
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
@@ -235,4 +280,43 @@ def gradient_colors(start_hex, end_hex, n):
         for frac in np.linspace(0, 1, n)
     ]
 
+def add_significance_stars(ax, positions_p1, positions_p2, data_p1, data_p2, pvals, height_buffer=0.1, fs=7): # currently for pca feature plots
+    for i, p in enumerate(pvals):
+        # Determine y position for the star: max of both groups + buffer
+        max_y = max(max(data_p1[i]), max(data_p2[i]))
+        y = max_y + height_buffer
+
+        # Choose number of stars based on p-value
+        if p < 0.001:
+            star = '***'
+        elif p < 0.01:
+            star = '**'
+        elif p < 0.05:
+            star = '*'
+        else:
+            star = ''
+
+        if star != '':
+            # Draw line between bars
+            x1, x2 = positions_p1[i], positions_p2[i]
+            ax.plot([x1, x1, x2, x2], [y-0.05, y, y, y-0.05], lw=1, color='k')
+            # Add text
+            ax.text((x1 + x2) / 2, y + 0.02, star, ha='center', va='bottom', fontsize=fs)
+
+def plot_phase_bars():
+    apa1_color = get_color_phase('APA1')
+    apa2_color = get_color_phase('APA2')
+    wash1_color = get_color_phase('Wash1')
+    wash2_color = get_color_phase('Wash2')
+
+    boxy = 1
+    height = 0.02
+    patch1 = plt.axvspan(xmin=9.5, xmax=59.5, ymin=boxy, ymax=boxy + height, color=apa1_color, lw=0)
+    patch2 = plt.axvspan(xmin=59.5, xmax=109.5, ymin=boxy, ymax=boxy + height, color=apa2_color, lw=0)
+    patch3 = plt.axvspan(xmin=109.5, xmax=134.5, ymin=boxy, ymax=boxy + height, color=wash1_color, lw=0)
+    patch4 = plt.axvspan(xmin=134.5, xmax=159.5, ymin=boxy, ymax=boxy + height, color=wash2_color, lw=0)
+    patch1.set_clip_on(False)
+    patch2.set_clip_on(False)
+    patch3.set_clip_on(False)
+    patch4.set_clip_on(False)
 

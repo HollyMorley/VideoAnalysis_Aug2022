@@ -5,7 +5,6 @@ from sklearn.metrics import balanced_accuracy_score as balanced_accuracy
 from scipy.signal import medfilt
 from sklearn.model_selection import StratifiedKFold
 from scipy.stats import wilcoxon, ttest_1samp
-import matplotlib.pyplot as plt
 import os
 import pickle
 from sklearn.metrics import mean_squared_error
@@ -112,6 +111,65 @@ def compute_regression(X, y, folds=5):
 
     return w, bal_acc, cv_acc, w_folds
 
+def compute_null_accuracy_circular(Xdr_long, y_reg, mask_p1, mask_p2, num_repeats=100, folds=5, min_shift=25, max_shift=None):
+    null_accuracies = []
+
+    n_samples = Xdr_long.shape[1]
+    if max_shift is None:
+        max_shift = n_samples - 3  # for example, avoid wrapping around entirely
+
+    for i in range(num_repeats):
+        Xdr_null = np.zeros_like(Xdr_long)
+
+        # draw shift within desired range (avoiding zero shift)
+        shift = np.random.randint(min_shift, max_shift+1)
+        for pc in range(Xdr_long.shape[0]):
+            Xdr_null[pc] = np.roll(Xdr_long[pc], shift)
+
+        # Select only p1 and p2 data points after shifting
+        Xdr_null_selected = Xdr_null[:, np.concatenate([np.where(mask_p1)[0], np.where(mask_p2)[0]])]
+
+        # Run regression on shifted-selected data
+        w_null, bal_acc_null, cv_acc_null, w_folds_null = compute_regression(Xdr_null_selected, y_reg, folds=folds)
+        null_accuracies.append(bal_acc_null)
+
+    null_accuracies = np.array(null_accuracies)
+    return null_accuracies
+
+
+def compute_regression_lesion(X, y, folds=5, regressor_to_shuffle: int=None):
+    # cross-validate
+    n_samples = X.shape[1]
+    kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+    cv_acc = []
+    w_folds = []
+    for train_idx, test_idx in kf.split(np.arange(n_samples), y):
+        ### start loop through pcs
+        # Create a new model instance for each fold
+        model_fold = LogisticRegression(penalty='l2', fit_intercept=False, solver='liblinear', C=0.5)
+        # Train using the training columns
+        if regressor_to_shuffle is not None:
+            X_lesion = X.copy()
+            X_lesion[regressor_to_shuffle, train_idx] = np.random.permutation(X_lesion[regressor_to_shuffle, train_idx])
+
+        model_fold.fit(X_lesion[:, train_idx].T, y[train_idx])
+
+        w_fold = model_fold.coef_
+        y_pred = np.dot(w_fold, X_lesion[:, test_idx])
+        y_pred[y_pred > 0] = 1
+        y_pred[y_pred < 0] = 0
+
+        acc_fold = balanced_accuracy(y[test_idx], y_pred.ravel())
+        cv_acc.append(acc_fold)
+        w_folds.append(w_fold)
+
+
+    cv_acc = np.array(cv_acc)
+    w_folds = np.array(w_folds)
+
+
+    return cv_acc, w_folds
+
 def compute_regression_pcwise_prediction(X, y, w, folds=10, shuffles=1000):
     w = w[0]
     n_samples = X.shape[1]
@@ -187,8 +245,8 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     #     selected_feature_data = selected_feature_data[::2]
     #     mask_p1 = mask_p1[::2]
     #     mask_p2 = mask_p2[::2]
-    results = fit_regression_model(loadings, selected_feature_data, mask_p1, mask_p2, mouse_id, s, select_pc_type, lda_w_unit=lda_w_unit)
-    (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc) = results
+    results = fit_regression_model(loadings, selected_feature_data, feature_data, mask_p1, mask_p2, mouse_id, s, select_pc_type, lda_w_unit=lda_w_unit)
+    (w, normalize_mean, normalize_std, y_reg, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc, pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ) = results
 
     w = np.array(w[0][:global_settings['pcs_to_use']]).reshape(1, -1)
     normalize_mean = normalize_mean[:global_settings['pcs_to_use']]
@@ -208,16 +266,18 @@ def run_regression_on_PCA_and_predict(loadings: pd.DataFrame,
     smoothed_y_pred, y_pred = predict_runs(loadings, feature_data, normalize_mean, normalize_std, w, #todo check dtypes are correct
                                            save_path, mouse_id, p1, p2, s, condition)
 
-    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc
+    return y_pred, smoothed_y_pred, feature_weights, w, normalize_mean, normalize_std, full_accuracy, cv_acc, w_folds, pc_acc, y_preds, null_acc,pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ
 
 
-def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame,
+def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataFrame, feature_data: pd.DataFrame,
                          mask_p1: np.ndarray, mask_p2: np.ndarray, mouse_id: str, s: int, select_pc_type: str = None,
                          lda_w_unit: np.ndarray = None):
     # trim pc loadings
     loadings = loadings.iloc(axis=1)[:global_settings['pcs_to_use']].copy()
     # Transform X (scaled feature data) to Xdr (PCA space) - ie using the loadings from PCA
     Xdr = np.dot(loadings.T, selected_feature_data)
+    Xdr_long = np.dot(loadings.T, feature_data.T)
+
 
     # Normalize X
     _, normalize_mean, normalize_std = gu.normalize_Xdr(Xdr)
@@ -225,18 +285,36 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     # Create y (regression target) - 1 for phase1, 0 for phase2
     y_reg = np.concatenate([np.ones(np.sum(mask_p1)), np.zeros(np.sum(mask_p2))])
 
+    null_acc_circ = compute_null_accuracy_circular(Xdr_long, y_reg, mask_p1, mask_p2)
+    print(f"Mean null accuracy: {np.mean(null_acc_circ):.3f}")
+
     # Run logistic regression on the full model
     if not global_settings["use_LH_reg_model"]:
-        w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg)
+        num_folds = 5
+        w, bal_acc, cv_acc, w_folds = compute_regression(Xdr, y_reg, folds=num_folds)
         pc_acc, y_preds, null_acc = compute_regression_pcwise_prediction(Xdr, y_reg, w)
+        pc_lesions_cv_acc = np.zeros((global_settings['pcs_to_use'], num_folds))
+        pc_lesions_w_folds = np.zeros((global_settings['pcs_to_use'], num_folds, global_settings['pcs_to_use']))
+        for pc in range(global_settings['pcs_to_use']):
+            cv_acc_lesion, w_folds_lesion = compute_regression_lesion(Xdr, y_reg, folds=num_folds, regressor_to_shuffle=pc)
+            pc_lesions_cv_acc[pc, :] = cv_acc_lesion
+            pc_lesions_w_folds[pc, :, :] = w_folds_lesion.squeeze()
 
         if lda_w_unit is not None:
-            # Remove w's component along lda_w_unit
+            # Remove w projected on the lda axis from w
             w = w - np.dot(w, lda_w_unit) * lda_w_unit
+
+            # w_folds and pc_lesions_w_folds are 2D arrays, so we need to iterate over folds
+            for fold in range(num_folds):
+                w_folds[fold] = w_folds[fold] - np.dot(w_folds[fold], lda_w_unit) * lda_w_unit
+            for pc in range(global_settings['pcs_to_use']):
+                for fold in range(num_folds):
+                    pc_lesions_w_folds[pc, fold] = pc_lesions_w_folds[pc, fold] - np.dot(pc_lesions_w_folds[pc, fold], lda_w_unit) * lda_w_unit
+
 
     else:
         # load the regression from the LowHigh model
-        multipath = r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions"
+        multipath = r"H:\Characterisation\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2\APAChar_LowHigh_Extended\MultiFeaturePredictions"
         if select_pc_type is None:
             LH_reg_path = os.path.join(multipath, r"pca_predictions_APAChar_LowHigh.pkl")  #r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_APAChar_LowHigh.pkl"
         elif select_pc_type == "Top3":
@@ -269,6 +347,8 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
         pc_acc = pred.pc_acc
         y_preds = pred.y_preds_PCwise
         null_acc = pred.null_acc
+        pc_lesions_cv_acc = pred.pc_lesions_cv_acc
+        pc_lesions_w_folds = pred.pc_lesions_w_folds
 
     # mean_cv_acc_PCwise = np.mean(cv_acc_PCwise, axis=1)
     # mean_cv_acc_shuffle_PCwise = np.mean(cv_acc_shuffle_PCwise, axis=1)
@@ -276,7 +356,7 @@ def fit_regression_model(loadings: pd.DataFrame, selected_feature_data: pd.DataF
     # w, full_accuracy, cv_acc = compute_regression(Xdr, y_reg)
     print(f"Full model accuracy: {bal_acc:.3f}")
 
-    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, pc_acc, y_preds, null_acc
+    return w, normalize_mean, normalize_std, y_reg, bal_acc, cv_acc, w_folds, pc_acc, y_preds, null_acc, pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ
 
 def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_mean: float, normalize_std: float,
                  w: np.ndarray, save_path: str, mouse_id: str, p1: str, p2:str, s: int, condition_name: str):
@@ -301,7 +381,7 @@ def predict_runs(loadings: pd.DataFrame, feature_data: pd.DataFrame, normalize_m
                               scale_suffix="scaled", dataset_suffix=condition_name)
     return smoothed_scaled_pred, run_pred_scaled
 
-def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thresh, accmse='acc'):
+def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thresh_percent=0.75, accmse='acc', lesion_significance=False):
     if conditions:
         mouse_stride_preds = [pred for pred in pca_pred if pred.stride == stride and pred.conditions == conditions]
     else:
@@ -310,12 +390,18 @@ def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thr
     accuracies_x_pcs = []
     accuracies_pcs_x_shuffle = []
     pc_weights = []
+    if lesion_significance:
+        pc_lesions_cv_acc = []
     for mouse_pred in mouse_stride_preds:
         accuracies_x_pcs.append(mouse_pred.pc_acc)
         accuracies_pcs_x_shuffle.append(mouse_pred.null_acc)
         pc_weights.append(mouse_pred.pc_weights[0]) if mouse_pred.pc_weights.ndim == 2 else pc_weights.append(mouse_pred.pc_weights)
+        if lesion_significance:
+            pc_lesions_cv_acc.append(mouse_pred.pc_lesions_cv_acc)
     accuracies_x_pcs = np.array(accuracies_x_pcs) # mice x pcs
     accuracies_shuffle_x_pcs = np.array(accuracies_pcs_x_shuffle) # mice x pcs x shuffle
+    accuracies_lesions_x_pcs = np.array(pc_lesions_cv_acc) if lesion_significance else None # mice x pcs x folds
+
     mean_accs = accuracies_x_pcs.mean(axis=0)
 
     pc_weights = np.array(pc_weights)
@@ -323,21 +409,33 @@ def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thr
     neg_counts = (pc_weights < 0).sum(axis=0)
     max_counts = np.maximum(pos_counts, neg_counts)
     total_mice_num = len(mouse_stride_preds)
-    ideal_mice_num  = total_mice_num - mice_thresh
-    counts_more_than_thresh = max_counts >= ideal_mice_num
+    percent_uniform = max_counts / total_mice_num
+    mice_uniform = percent_uniform >= mice_thresh_percent
+    # ideal_mice_num  = total_mice_num - mice_thresh
+    # counts_more_than_thresh = max_counts >= ideal_mice_num
 
-    if accmse == 'acc': # ie higher is better
-        delta_acc_by_mouse = accuracies_x_pcs - accuracies_shuffle_x_pcs.mean(axis=2)
-    elif accmse == 'mse': # ie lower is better
-        delta_acc_by_mouse = accuracies_shuffle_x_pcs.mean(axis=2) - accuracies_x_pcs
 
-    pc_significances = np.zeros((delta_acc_by_mouse.shape[1]))
-    for pc in np.arange(delta_acc_by_mouse.shape[1]):
-        pc_acc = delta_acc_by_mouse[:, pc]
-        stat = ttest_1samp(pc_acc, 0)
-        pc_significances[pc] = stat.pvalue
+    if not lesion_significance:
+        if accmse == 'acc': # ie higher is better
+            delta_acc_by_mouse = accuracies_x_pcs - accuracies_shuffle_x_pcs.mean(axis=2)
+        elif accmse == 'mse': # ie lower is better
+            delta_acc_by_mouse = accuracies_shuffle_x_pcs.mean(axis=2) - accuracies_x_pcs
 
-    return pc_significances, mean_accs, counts_more_than_thresh
+        pc_significances = np.zeros((global_settings['pcs_to_use'],))
+        for pc in np.arange(delta_acc_by_mouse.shape[1]):
+            pc_acc = delta_acc_by_mouse[:, pc]
+            stat = ttest_1samp(pc_acc, 0)
+            pc_significances[pc] = stat.pvalue
+    else:
+        delta_acc_by_mouse_fold = accuracies_x_pcs[:, :, np.newaxis] - accuracies_lesions_x_pcs
+        delta_acc_by_mouse = delta_acc_by_mouse_fold.mean(axis=2)  # mice x pcs
+
+        pc_significances = np.zeros((global_settings['pcs_to_use'],))
+        for pc in np.arange(global_settings['pcs_to_use']):
+            stat = ttest_1samp(delta_acc_by_mouse[:, pc], 0)
+            pc_significances[pc] = stat.pvalue
+
+    return pc_significances, mean_accs, mice_uniform, max_counts, total_mice_num
 
 def find_residuals(feature_data, stride_numbers, phases, savedir):
     all_residuals = []

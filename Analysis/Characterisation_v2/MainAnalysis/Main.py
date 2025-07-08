@@ -33,7 +33,7 @@ random.seed(42)
 np.random.seed(42)
 
 # base_save_dir_no_c = os.path.join(paths['plotting_destfolder'], f'Characterisation\\LH_res')
-base_save_dir_no_c = r"H:\Characterisation\\HL"
+base_save_dir_no_c = r"H:\Characterisation_v2\\LH"
 
 
 def filter_data(data, phase):
@@ -57,10 +57,10 @@ def main(stride_numbers: List[int], phases: List[str],
     # Paths
     global_data_path = os.path.join(base_save_dir, f"global_data_{condition}.pkl")
     preprocessed_data_file_path = os.path.join(base_save_dir, f"preprocessed_data_{condition}.pkl")
-    LH_preprocessed_data_file_path = os.path.join(r"H:\Characterisation\LH_res_-3-2-1_APA2Wash2-PCStot=60-PCSuse=12\preprocessed_data_APAChar_LowHigh.pkl")
+    LH_preprocessed_data_file_path = os.path.join(r"H:\Characterisation_v2\LH_res_-3-2-1_APA2Wash2\preprocessed_data_APAChar_LowHigh.pkl") # was "H:\Characterisation\LH_allpca_res_-3-2-1_APA2Wash2\preprocessed_data_APAChar_LowHigh.pkl"
     SingleFeatPath = os.path.join(base_save_dir_condition, 'SingleFeaturePredictions')
     MultiFeatPath = os.path.join(base_save_dir_condition, 'MultiFeaturePredictions')
-    LH_MultiFeatPath = r"H:\Characterisation\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2\APAChar_LowHigh_Extended\MultiFeaturePredictions"
+    LH_MultiFeatPath = r"H:\Characterisation_v2\LH_res_-3-2-1_APA2Wash2\APAChar_LowHigh_Extended\MultiFeaturePredictions" # was "H:\Characterisation\LH_allpca_LhWnrm_res_-3-2-1_APA2Wash2\APAChar_LowHigh_Extended\MultiFeaturePredictions"
     ResidualFeatPath = os.path.join(base_save_dir_condition, 'Residuals')
     SingleResidualFeatPath = os.path.join(SingleFeatPath, 'Residuals')
     MultiResidualFeatPath = os.path.join(MultiFeatPath, 'Residuals')
@@ -82,6 +82,8 @@ def main(stride_numbers: List[int], phases: List[str],
 
     print(f"Base save directory: {base_save_dir_condition}")
 
+    idx = pd.IndexSlice
+
     # Skipping outlier removal
     if not os.path.exists(preprocessed_data_file_path):
 
@@ -89,7 +91,6 @@ def main(stride_numbers: List[int], phases: List[str],
                    # -------- Normalize to LH wash per mouse (if applicable) --------
                """
         if inst["condition"] == "APAChar_HighLow" or inst["compare_condition"] == "APAChar_HighLow":
-            idx = pd.IndexSlice
             HL_data = feature_data_notscaled.copy() if inst["condition"] == "APAChar_HighLow" else feature_data_compare_notscaled.copy()
 
             if global_settings["normalise_to_LH_wash"] and not global_settings["normalise_wash_nullspace"]:
@@ -97,7 +98,7 @@ def main(stride_numbers: List[int], phases: List[str],
                 # load LH data
                 with open(LH_preprocessed_data_file_path, 'rb') as f:
                     data = pickle.load(f)
-                    feature_data_LH = data['feature_data']
+                    feature_data_LH = data['feature_data_notscaled']
 
                 # per mouse and stride, find mean of wash2 and subtract this from current phase
                 higher_level_index = HL_data.index.droplevel('Run').drop_duplicates()
@@ -204,6 +205,8 @@ def main(stride_numbers: List[int], phases: List[str],
                 'feature_data_compare': feature_data_compare,
                 'feature_data_average': feature_data_average,
                 'feature_data_compare_average': feature_data_compare_average,
+                'feature_data_notscaled': feature_data_notscaled,
+                'feature_data_compare_notscaled': feature_data_compare_notscaled,
                 'stride_data': stride_data,
                 'stride_data_compare': stride_data_compare,
                 'Normalize': Normalize,
@@ -219,6 +222,8 @@ def main(stride_numbers: List[int], phases: List[str],
             feature_data_compare = data['feature_data_compare']
             feature_data_average = data['feature_data_average']
             feature_data_compare_average = data['feature_data_compare_average']
+            feature_data_notscaled = data['feature_data_notscaled']
+            feature_data_compare_notscaled = data['feature_data_compare_notscaled']
             stride_data = data['stride_data']
             stride_data_compare = data['stride_data_compare']
             Normalize = data['Normalize']
@@ -363,9 +368,11 @@ def main(stride_numbers: List[int], phases: List[str],
             with open(os.path.join(MultiFeatPath, filename_pca), 'wb') as f:
                 pickle.dump(pca_all, f)
 
-    # Plot how each feature loads onto the PCA components
-    pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
-    top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8)
+        # Plot how each feature loads onto the PCA components
+        pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
+
+    LH_feature_data  = feature_data_compare if inst["condition"] != "APAChar_LowHigh" else None
+    top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8, feature_data_LH=LH_feature_data)
     # Save the top features for each PC
     with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
         pickle.dump(top_features, f)
@@ -424,12 +431,21 @@ def main(stride_numbers: List[int], phases: List[str],
     """
     ------------------ Interpretations ----------------------
     """
+    if inst["condition"] != "APAChar_LowHigh":
+        LH_pred_path = os.path.join(LH_MultiFeatPath, 'pca_predictions_APAChar_LowHigh.pkl')
+        if os.path.exists(LH_pred_path):
+            with open(LH_pred_path, 'rb') as f:
+                pca_pred_LH = pickle.load(f)
+        regp.mouse_sign_flip_with_LH(pca_pred, pca_pred_LH, -1, condition, MultiFeatPath)
+    else:
+        pca_pred_LH = None
 
     print('Features:')
-    pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath)
+    pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath, lesion_significance=True, LH_pred=pca_pred_LH)
+
     if residuals and inst["condition"] == "APAChar_LowHigh":
         print('Residuals:')
-        residual_pcs_of_interest, residual_pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred_residual, stride_numbers, MultiResidualFeatPath)
+        residual_pcs_of_interest, residual_pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred_residual, stride_numbers, MultiResidualFeatPath, lesion_significance=True, LH_pred=pca_pred_LH)
 
 
     # --------------- Plot run predicitions ---------------

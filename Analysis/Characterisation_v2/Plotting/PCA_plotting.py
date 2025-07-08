@@ -7,6 +7,8 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 from scipy.ndimage import median_filter
 import matplotlib.ticker as ticker
+from scipy.stats import wilcoxon
+
 
 from Helpers.Config_23 import *
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
@@ -209,7 +211,7 @@ def pca_plot_feature_loadings(pca_data, phases, save_path, fs=7):
 
 
 
-def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, phases, stride_numbers, condition, save_path, n_top_features=5, fs=7):
+def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, phases, stride_numbers, condition, save_path, n_top_features=5, fs=7, feature_data_LH=None):
     """
     Find the top features which load onto each principal component.
     """
@@ -225,10 +227,13 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
     for s in stride_numbers:
         feats = feature_data.loc(axis=0)[s]
         feats_raw = feature_data_notscaled.loc(axis=0)[s]
+        feats_LH = feature_data_LH.loc(axis=0)[s] if feature_data_LH is not None else None
+
         for pc in pca_loadings.columns:
             top_feats_pc = top_features[pc]
             top_feats_loadings = pca_loadings.loc(axis=1)[pc].loc(axis=0)[top_feats_pc]
             top_feats_data = feats.loc(axis=1)[top_feats_pc]
+            top_feats_data_LH = feats_LH.loc(axis=1)[top_feats_pc] if feature_data_LH is not None else None
             top_feats_display_names = [short_names.get(f, f) for f in top_feats_pc]
 
             mask_p1, mask_p2 = gu.get_mask_p1_p2(top_feats_data, phases[0], phases[1])
@@ -236,9 +241,16 @@ def plot_top_features_per_PC(pca_data, feature_data, feature_data_notscaled, pha
             feats_p2 = top_feats_data.loc(axis=0)[mask_p2]
             # feats_raw_p1 = feats_raw.loc(axis=0)[mask_p1]
             # feats_raw_p2 = feats_raw.loc(axis=0)[mask_p2]
+            if feature_data_LH is not None:
+                mask_p1_LH, mask_p2_LH = gu.get_mask_p1_p2(top_feats_data_LH, phases[0], phases[1])
+                feats_p1_LH = top_feats_data_LH.loc(axis=0)[mask_p1_LH]
+                feats_p2_LH = top_feats_data_LH.loc(axis=0)[mask_p2_LH]
+            else:
+                feats_p1_LH = None
+                feats_p2_LH = None
 
             plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s,
-                                       top_feats_display_names, save_path, fs=fs)
+                                       top_feats_display_names, save_path, fs=fs, feats_p1_LH=feats_p1_LH, feats_p2_LH=feats_p2_LH)
     return top_features
 
             # # Plot the raw features
@@ -383,9 +395,14 @@ def plot_top_feat_descriptives_3way(feats_list, top_feats_pc, top_feats_loadings
     plt.close()
 
 
-def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s, top_feats_display_names, save_path, fs=7, conditions=False):
+def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadings, pc, phases, s,
+                               top_feats_display_names, save_path, fs=7, conditions=False, feats_p1_LH=None, feats_p2_LH=None):
     feats_permouse_medians_p1 = feats_p1.groupby(level=0).mean()
     feats_permouse_medians_p2 = feats_p2.groupby(level=0).mean()
+
+    if feats_p1_LH is not None and feats_p2_LH is not None:
+        feats_permouse_medians_p1_LH = feats_p1_LH.groupby(level=0).mean()
+        feats_permouse_medians_p2_LH = feats_p2_LH.groupby(level=0).mean()
 
     shared_mice = feats_permouse_medians_p1.index.intersection(feats_permouse_medians_p2.index)
 
@@ -430,6 +447,14 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
     axs[0].set_ylim(-0.6, 0.6)
     axs[0].set_yticks(np.arange(-0.5, 0.6, 0.5))
 
+    # Compute p-values per feature for phase differences
+    pvals = []
+    for feat in top_feats_pc:
+        vals_p1 = feats_permouse_medians_p1[feat].values
+        vals_p2 = feats_permouse_medians_p2[feat].values
+        stat, p = wilcoxon(vals_p1, vals_p2)
+        pvals.append(p)
+
     ### Subplot 1: Phase Z-scored Feature Values
     # Boxplots for p1 and p2
     axs[1].boxplot(data_p1, positions=positions_p1, widths=width * bar_multiple,
@@ -439,12 +464,16 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
                    patch_artist=True, boxprops=boxprops_p2,
                    medianprops=medianprops_p2, whiskerprops=whiskerprops_p2, showcaps=False, showfliers=False)
 
+
     # Plot scatter lines connecting each mouse's data between phases:
     for midx in feats_permouse_medians_p1.index:
         if midx in feats_permouse_medians_p2.index:
             axs[1].plot([positions_p1, positions_p2],
                         [feats_permouse_medians_p1.loc[midx], feats_permouse_medians_p2.loc[midx]],
                         'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
+
+    pu.add_significance_stars(axs[1], positions_p1, positions_p2, data_p1, data_p2, pvals, fs=fs)
+
     p1_patch = mpatches.Patch(color=p1_color, label=f'{phases[0]}')
     p2_patch = mpatches.Patch(color=p2_color, label=f'{phases[1]}')
     axs[1].set_xticklabels('')
@@ -456,6 +485,7 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
     ### Subplot 2: Projection of features on PCA
     weighted_features_p1 = [feature * loading for feature, loading in zip(data_p1, top_feats_loadings.values)]
     weighted_features_p2 = [feature * loading for feature, loading in zip(data_p2, top_feats_loadings.values)]
+
     # boxplots
     axs[2].boxplot(weighted_features_p1, positions=positions_p1, widths=width * bar_multiple,
                    patch_artist=True, boxprops=boxprops_p1,
@@ -477,6 +507,17 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
         axs[2].plot([positions_p1, positions_p2],
                     [weighted_df_p1.loc[midx].values, weighted_df_p2.loc[midx].values],
                     'o-', alpha=0.3, color='grey', markersize=3, zorder=10)
+
+    pvals_projection = []
+    for feat in top_feats_pc:
+        vals_p1 = weighted_df_p1[feat].values
+        vals_p2 = weighted_df_p2[feat].values
+        stat, p = wilcoxon(vals_p1, vals_p2)
+        pvals_projection.append(p)
+
+    pu.add_significance_stars(axs[2], positions_p1, positions_p2, weighted_features_p1, weighted_features_p2,
+                               pvals_projection, fs=fs)
+
     axs[2].set_ylabel('Projection onto PC', fontsize=fs)
     axs[2].set_ylim(-0.6, 0.6)
     axs[2].set_yticks(np.arange(-0.5, 0.6, 0.5))
@@ -488,6 +529,16 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
     feats_diff = feats_permouse_medians_p2 - feats_permouse_medians_p1
     # Create a list of arrays (one per feature) for the differences
     data_diff = [feats_diff[feat].values for feat in top_feats_pc]
+    data_diff_mean = np.mean(data_diff, axis=1)
+
+    feats_diff_LH = feats_permouse_medians_p2_LH - feats_permouse_medians_p1_LH if feats_p1_LH is not None and feats_p2_LH is not None else None
+    if feats_diff_LH is not None:
+        # reduce to the same mice as feats_diff
+        feats_diff_LH = feats_diff_LH.loc[shared_mice]
+        data_diff_LH = [feats_diff_LH[feat].values for feat in top_feats_pc]
+        data_diff_mean_LH = np.mean(data_diff_LH, axis=1)
+        # Find if sign changes across features
+        sign_flip = np.sign(data_diff_mean_LH) != np.sign(data_diff_mean)
 
     # Choose a neutral color for the phase differences
     diff_color = "#888888"
@@ -506,6 +557,12 @@ def plot_top_feat_descriptives(feats_p1, feats_p2, top_feats_pc, top_feats_loadi
         diff_vals = feats_diff[feat].values
         # x_vals = np.random.normal(loc=x[i], scale=0.04, size=len(diff_vals))  # jitter for clarity
         axs[3].scatter([x[i]] * len(diff_vals), diff_vals, color='k', alpha=0.5, s=3, zorder=10)
+
+    if feats_diff_LH is not None:
+        for i, flipped in enumerate(sign_flip):
+            if flipped:
+                axs[3].text(x[i], axs[3].get_ylim()[1] * 0.9, 'FLIP', ha='center', va='top', color='red', fontsize=fs - 1)
+
     axs[3].set_xticklabels(top_feats_display_names, fontsize=fs, rotation=90)
     axs[3].set_ylabel(f'{phases[-1]} - {phases[0]} (z)', fontsize=fs)
 

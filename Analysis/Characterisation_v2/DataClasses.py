@@ -63,8 +63,14 @@ class PCAPredictionData:
     pc_acc: np.ndarray
     null_acc: np.ndarray
     null_acc_circ: np.ndarray
+    w_single_pc: np.ndarray
+    bal_acc_single_pc: np.ndarray
+    cv_acc_single_pc: np.ndarray
+    cv_acc_shuffle_single_pc: np.ndarray
+    bal_acc_shuffle_single_pc: np.ndarray
     pc_lesions_cv_acc: Optional[np.ndarray] = None  # Optional for lesion analysis
     pc_lesions_w_folds: Optional[np.ndarray] = None  # Optional for lesion analysis
+
 
     # cv_acc_PCwise: np.ndarray
     # shuffle_acc: np.ndarray

@@ -279,6 +279,22 @@ def gradient_colors(start_hex, end_hex, n):
         )
         for frac in np.linspace(0, 1, n)
     ]
+def make_triple_cmap(base_color):
+    # Light: mix with white (90% white)
+    light_rgb = tuple([0.9 + 0.1 * c for c in mcolors.to_rgb(base_color)])
+    mid_rgb = mcolors.to_rgb(base_color)
+    dark_rgb = darken_color(base_color, factor=0.7)
+    return mcolors.LinearSegmentedColormap.from_list('triple_cmap', [light_rgb, mid_rgb, dark_rgb])
+
+
+def make_cmap_with_white_bottom(base_cmap, n_colors=256):
+    # Sample the base colormap
+    colors = base_cmap(np.linspace(0, 1, n_colors))
+    # Replace the first color with white
+    colors[0] = np.array([1, 1, 1, 1])  # RGBA white
+    # Create new colormap
+    new_cmap = mcolors.ListedColormap(colors)
+    return new_cmap
 
 def add_significance_stars(ax, positions_p1, positions_p2, data_p1, data_p2, pvals, height_buffer=0.1, fs=7): # currently for pca feature plots
     for i, p in enumerate(pvals):

@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 plt.rcParams['svg.fonttype'] = 'none'
 import seaborn as sns
 from scipy.stats import pearsonr
+from scipy.stats import ttest_rel
+from statsmodels.stats.multitest import multipletests
+import matplotlib.colors as mcolors
+
 
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
 from Analysis.Characterisation_v2 import General_utils as gu
@@ -40,7 +44,7 @@ class WhenAPA:
         self.strides = [-1, -2, -3]
 
     def plot_accuracy_of_each_stride_model(self, fs=7):
-        # APPROACH: If Δ accuracy > 0 significantly, decoding is better than chance given that mouse’s data structure.
+        import scipy.stats
 
         # Collect accuracy data
         all_stride_accs = {}
@@ -53,72 +57,91 @@ class WhenAPA:
             stride_null_accs = [pred.null_acc_circ for pred in self.LH_pred if pred.stride == s]
             null_df = pd.DataFrame(stride_null_accs, index=stride_mice_names)
 
-            delta_accs = accs_df.mean(axis=1) - null_df.mean(axis=1)
+            delta_accs = accs_df - null_df
+            delta_accs = delta_accs.median(axis=1)
 
             all_stride_accs[s] = delta_accs
 
-        # Combine into single DataFrame
         all_stride_accs_by_stride = pd.concat(all_stride_accs).reset_index()
         all_stride_accs_by_stride.columns = ['Stride', 'Mouse', 'Accuracy']
         all_stride_accs_by_stride['Stride_abs'] = all_stride_accs_by_stride['Stride'].abs()
         df = all_stride_accs_by_stride
 
-        # Define stride order and palette
         stride_order = sorted(df['Stride_abs'].unique())
         palette = {s: pu.get_color_stride(-s) for s in stride_order}
 
         fig, ax = plt.subplots(figsize=(4, 3))
 
-        # Plot violin plots
-        sns.violinplot(data=df, x='Stride_abs', y='Accuracy', ax=ax, inner=None,
-                       linewidth=0.5, palette=palette, order=stride_order)
+        means = []
+        cis_lower = []
+        cis_upper = []
+        p_values = []
 
-        # Calculate significance and overlay scatter points
-        for i, s in enumerate(stride_order):
+        # Calculate means, CIs, and significance
+        for s in stride_order:
             accs = df[df['Stride_abs'] == s]['Accuracy']
+            mean_val = accs.mean()
+            sem = scipy.stats.sem(accs)
+            ci_range = sem * scipy.stats.t.ppf((1 + 0.95) / 2, len(accs) - 1)
 
-            accs_mean = accs.mean()
+            means.append(mean_val)
+            cis_lower.append(mean_val - ci_range)
+            cis_upper.append(mean_val + ci_range)
 
-            # T-test
-            t_stat, p_value = ttest_1samp(accs, 0)
+            t_stat, p_value = ttest_1samp(accs, 0, alternative='greater')
+            p_values.append(p_value)
             print(f"Stride {int(-s)}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3f}")
 
-            # Scatter black points with jitter
+        # Jitter individual points
+        for i, s in enumerate(stride_order):
+            stride_color = palette[s]
+            accs = df[df['Stride_abs'] == s]['Accuracy']
             jitter = np.random.uniform(-0.1, 0.1, size=len(accs))
             x_jittered = i + jitter
-            ax.scatter(x_jittered, accs, marker='o', color='black', s=7)
+            ax.scatter(x_jittered, accs, marker='o', color=stride_color, s=7, alpha=0.6, zorder=1)
 
-            # Significance stars
+        x_pos = np.arange(len(stride_order))
+
+        # Plot mean points only (no lines)
+        ax.scatter(x_pos, means, color='black', s=10, zorder=3)
+
+        # Plot error bars (CI)
+        ax.errorbar(
+            x_pos, means,
+            yerr=[np.array(means) - np.array(cis_lower), np.array(cis_upper) - np.array(means)],
+            fmt='none',  # no marker, since scatter plots points
+            ecolor='black',
+            elinewidth=1,
+            capsize=4,
+            zorder=2
+        )
+
+        # Add significance stars
+        for i, (p_value, mean_val) in enumerate(zip(p_values, means)):
             star = ''
-            if p_value < 0.001 and accs_mean > 0:
+            if p_value < 0.001 and mean_val > 0:
                 star = '***'
-            elif p_value < 0.01 and accs_mean > 0:
+            elif p_value < 0.01 and mean_val > 0:
                 star = '**'
-            elif p_value < 0.05 and accs_mean > 0:
+            elif p_value < 0.05 and mean_val > 0:
                 star = '*'
 
             if star:
-                y_max = accs.max()
+                y_max = max(cis_upper[i], df[df['Stride_abs'] == stride_order[i]]['Accuracy'].max())
                 ax.text(i, y_max + 0.12, star, ha='center', va='bottom', fontsize=fs)
 
         # Chance line
         ax.axhline(y=0, color='gray', linestyle='--')
 
-        # Formatting
-        # set y limits as they are
-        # --- Automatic y‐axis limits & 5 nice ticks ---
+        # Y axis formatting
         y_vals = df['Accuracy']
         data_min, data_max = y_vals.min(), y_vals.max()
         span = data_max - data_min
-        pad = span * 0.5  # 10% padding
+        pad = span * 0.5
         y_lo = data_min - pad
         y_hi = data_max + pad
-
-        # round to nearest tenth
         y_lo = np.floor(y_lo * 10) / 10
         y_hi = np.ceil(y_hi * 10) / 10
-
-        # generate 5 ticks
         yticks = np.linspace(y_lo, y_hi, 5)
         ax.set_ylim(y_lo, y_hi)
         ax.set_yticks(yticks)
@@ -128,7 +151,7 @@ class WhenAPA:
         ax.set_xticks(range(len(stride_order)))
         ax.set_xticklabels([-s for s in stride_order], fontsize=fs)
         ax.set_xlabel('Stride', fontsize=fs)
-        ax.set_ylabel('CV Accuracy', fontsize=fs)
+        ax.set_ylabel('Delta CV Accuracy', fontsize=fs)
         ax.tick_params(axis='both', which='major', labelsize=fs)
 
         ax.spines['top'].set_visible(False)
@@ -142,7 +165,6 @@ class WhenAPA:
         plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
         plt.close()
 
-
     def _compute_corr_matrix(self, df1, df2):
         """Pearson‐r matrix for two [runs × PCs] DataFrames."""
         n = global_settings['pcs_to_use']
@@ -155,7 +177,7 @@ class WhenAPA:
                     M[i, j] = np.nan
         return M
 
-    def _compute_mean_r(self, baseline_stride, compare_stride, run_type, pcs_byStride_interpolated, eps=1e-6):
+    def _compute_mean_r(self, baseline_stride, compare_stride, run_type, pcs_byStride_interpolated, pcs_to_plot=None, eps=1e-6):
         """Returns the mean Pearson‐r matrix (after Fisher transform) for one stride comparison and run_type."""
         pcs_base = pcs_byStride_interpolated[baseline_stride]
         pcs_cmp = pcs_byStride_interpolated[compare_stride]
@@ -168,14 +190,19 @@ class WhenAPA:
                 runs = expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']
                 pc1 = pc1.loc[runs]
                 pc2 = pc2.loc[runs]
+            elif run_type == 'Washlate':
+                runs = expstuff['condition_exp_runs']['APAChar']['Extended']['Wash2']
+                pc1 = pc1.loc[runs]
+                pc2 = pc2.loc[runs]
             C = self._compute_corr_matrix(pc1, pc2)
+            if pcs_to_plot is not None:
+                C = C[np.ix_(pcs_to_plot, pcs_to_plot)]
             C_clipped = np.clip(C, -1 + eps, 1 - eps)
             zs.append(np.arctanh(C_clipped))
         return np.tanh(np.nanmean(zs, axis=0))
 
     def _compute_delta_stats(self, baseline_stride, compare_stride,
-                             run_type, pcs_byStride_interpolated,
-                             eps=1e-6):
+                             run_type, pcs_byStride_interpolated, pcs_to_plot=None, eps=1e-6):
         """
         Returns (mean_delta, stars) where
           mean_delta[i,j] = average over mice of (r_cmp[i,j] - r_base[i,j])
@@ -186,59 +213,209 @@ class WhenAPA:
         pcs_cmp = pcs_byStride_interpolated[compare_stride]
         mice = pcs_base.index.get_level_values(0).unique()
 
-        deltas = []
+        n_full = global_settings['pcs_to_use']
+        # If pcs_to_plot is None, use all
+        pcs_to_plot = pcs_to_plot if pcs_to_plot is not None else list(range(n_full))
+        n = len(pcs_to_plot)
+        deltas_restricted = []
+
         for midx in mice:
             pc1 = pcs_base.loc[midx]
             pc2 = pcs_cmp.loc[midx]
             if run_type == 'APAlate':
                 runs = expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']
-                pc1 = pc1.loc[runs];
+                pc1 = pc1.loc[runs]
+                pc2 = pc2.loc[runs]
+            elif run_type == 'Washlate':
+                runs = expstuff['condition_exp_runs']['APAChar']['Extended']['Wash2']
+                pc1 = pc1.loc[runs]
                 pc2 = pc2.loc[runs]
 
             # compute and clip both matrices
             Cb = np.clip(self._compute_corr_matrix(pc1, pc1), -1 + eps, 1 - eps)
             Cc = np.clip(self._compute_corr_matrix(pc1, pc2), -1 + eps, 1 - eps)
-            deltas.append(Cc - Cb)
+            Cb = Cb[np.ix_(pcs_to_plot, pcs_to_plot)]
+            Cc = Cc[np.ix_(pcs_to_plot, pcs_to_plot)]
+            deltas_restricted.append(Cc - Cb)
 
-        deltas = np.stack(deltas, axis=0)  # shape (n_mice, n_pcs, n_pcs)
-        mean_delta = np.nanmean(deltas, axis=0)
+        deltas_restricted = np.stack(deltas_restricted, axis=0) # shape (n_mice, n_pcs, n_pcs)
+        mean_delta = np.nanmean(deltas_restricted, axis=0)
 
-        # now compute p-values & stars
         n = mean_delta.shape[0]
-        stars = np.full((n, n), '', dtype=object)
+        pvals = []
+        positions = []
+        # Collect all p-values
         for i in range(n):
             for j in range(n):
-                vals = deltas[:, i, j]
-                # omit NaNs
+                vals = deltas_restricted[:, i, j]
                 vals = vals[~np.isnan(vals)]
                 if len(vals) > 1:
                     _, p = ttest_1samp(vals, 0.0)
-                    if p < 0.001:
-                        stars[i, j] = '***'
-                    elif p < 0.01:
-                        stars[i, j] = '**'
-                    elif p < 0.05:
-                        stars[i, j] = '*'
+                else:
+                    p = 1.0
+                pvals.append(p)
+                positions.append((i, j))
+
+        # Apply Holm-Bonferroni correction
+        reject, pvals_corrected, _, _ = multipletests(pvals, alpha=0.05, method='holm')
+
+        stars = np.full((n, n), '', dtype=object)
+        for idx, (i, j) in enumerate(positions):
+            p = pvals_corrected[idx]
+            if reject[idx]:
+                if p < 0.001:
+                    stars[i, j] = '***'
+                elif p < 0.01:
+                    stars[i, j] = '**'
+                elif p < 0.05:
+                    stars[i, j] = '*'
+            else:
+                stars[i, j] = ''
+
         return mean_delta, stars
 
-    def _plot_heatmap(self, mat, label, run_type, fs=7, suffix=""):
+    def _plot_heatmap(self, mat, label, run_type, fs=7, suffix="", pcs_to_plot=None):
         """Generic heatmap plotting + saving."""
-        pcs = global_settings['pcs_to_use']
-        xl = [f"PC{i + 1} ({label})" for i in range(pcs)]
-        yl = [f"PC{i + 1} (-1)" for i in range(pcs)]
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(mat, vmin=-1, vmax=1, cmap='coolwarm',
+        if pcs_to_plot is None:
+            pcs_to_plot = list(range(global_settings['pcs_to_use']))
+        n = len(pcs_to_plot)
+        xl = [f"PC{pc + 1} ({label})" for pc in pcs_to_plot]
+        yl = [f"PC{pc + 1} (-1)" for pc in pcs_to_plot]
+
+        if pcs_to_plot is None or len(pcs_to_plot) == global_settings['pcs_to_use']:
+            figsize = (10, 6)  # old fixed size for full heatmaps
+        else:
+            n = len(pcs_to_plot)
+            figsize = (5,4)  # smaller for subset
+        fig, ax = plt.subplots(figsize=figsize)
+        heatmap = sns.heatmap(mat, vmin=-1, vmax=1, cmap='coolwarm',
                     xticklabels=xl, yticklabels=yl,
-                    cbar_kws={'label': 'Pearson Correlation'})
+                    cbar_kws={'label': 'Pearson Correlation'}, ax=ax)
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label('Pearson Correlation', fontsize=fs)
+        cbar.ax.tick_params(labelsize=fs)
         ax.set_title(f"{'Δ ' if suffix else ''}Stride -1 vs {label}  ({run_type})", fontsize=fs)
         ax.tick_params(labelsize=fs)
         ax.figure.axes[-1].tick_params(labelsize=fs)
         plt.tight_layout()
-        fname = f"CorrPCs_{run_type}_Stride{label}{suffix}"
+        if pcs_to_plot is not None:
+            fname = f"CorrPCs_{run_type}_Stride{label}{suffix}_PCs{pcs_to_plot}"
+        else:
+            fname = f"CorrPCs_{run_type}_Stride{label}{suffix}"
         for ext in ('png', 'svg'):
             plt.savefig(os.path.join(self.base_dir, fname + f".{ext}"),
                         bbox_inches='tight', dpi=300)
         plt.close()
+
+    def _plot_density_grid(self, baseline_stride, compare_stride, pcs_byStride_interpolated, fs=7, bins=30):
+        """Plot density grids (2D histograms) for APA2 and Wash2 separately for stride comparison."""
+        apa_runs = expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']
+        wash_runs = expstuff['condition_exp_runs']['APAChar']['Extended']['Wash2']
+        apa_color = pu.get_color_phase('APA2')
+        wash_color = pu.get_color_phase('Wash2')
+        apa_cmap = pu.make_triple_cmap(apa_color)
+        apa_cmap = pu.make_cmap_with_white_bottom(apa_cmap)
+        wash_cmap = pu.make_triple_cmap(wash_color)
+        wash_cmap = pu.make_cmap_with_white_bottom(wash_cmap)
+
+        pcs_base = pcs_byStride_interpolated[baseline_stride]
+        pcs_cmp = pcs_byStride_interpolated[compare_stride]
+        mice = pcs_base.index.get_level_values(0).unique()
+
+        apa_x = np.zeros((global_settings['pcs_to_use'], len(mice), len(apa_runs)))
+        apa_y = np.zeros((global_settings['pcs_to_use'], len(mice), len(apa_runs)))
+        wash_x = np.zeros((global_settings['pcs_to_use'], len(mice), len(wash_runs)))
+        wash_y = np.zeros((global_settings['pcs_to_use'], len(mice), len(wash_runs)))
+
+        for pc_idx in range(global_settings['pcs_to_use']):
+            for midx, mouse in enumerate(mice):
+                pc1 = pcs_base.loc[mouse]
+                pc2 = pcs_cmp.loc[mouse]
+
+                pc1a = pc1.loc(axis=0)[apa_runs].iloc[:, pc_idx]
+                pc2a = pc2.loc(axis=0)[apa_runs].iloc[:, pc_idx]
+                pc1w = pc1.loc(axis=0)[wash_runs].iloc[:, pc_idx]
+                pc2w = pc2.loc(axis=0)[wash_runs].iloc[:, pc_idx]
+
+                apa_x[pc_idx, midx, :] = pc1a.values
+                apa_y[pc_idx, midx, :] = pc2a.values
+                wash_x[pc_idx, midx, :] = pc1w.values
+                wash_y[pc_idx, midx, :] = pc2w.values
+
+        PCs = np.array([1, 3, 7])
+        for pc_name in PCs:
+            pc_idx = pc_name - 1  # zero-based index
+            compare_pcs = PCs
+
+            for compare_pc in compare_pcs:
+                compare_pc_idx = compare_pc - 1
+
+                fig, axs = plt.subplots(1, 2, figsize=(6, 3), sharex=True, sharey=True)
+                ax_apa, ax_wash = axs
+
+                # Gather flattened data
+                apa_data_x = apa_x[pc_idx, :, :].flatten()
+                apa_data_y = apa_y[compare_pc_idx, :, :].flatten()
+                wash_data_x = wash_x[pc_idx, :, :].flatten()
+                wash_data_y = wash_y[compare_pc_idx, :, :].flatten()
+
+                # Calculate axis limits (rounding to nearest 5)
+                def round_down_to_5(x):
+                    return np.floor(x / 5) * 5
+
+                def round_up_to_5(x):
+                    return np.ceil(x / 5) * 5
+
+                all_x = np.concatenate([apa_data_x, wash_data_x])
+                all_y = np.concatenate([apa_data_y, wash_data_y])
+                x_min, x_max = round_down_to_5(all_x.min()), round_up_to_5(all_x.max())
+                y_min, y_max = round_down_to_5(all_y.min()), round_up_to_5(all_y.max())
+
+                # Plot APA density
+                h_apa = ax_apa.hist2d(apa_data_x, apa_data_y, bins=bins, range=[[x_min, x_max], [y_min, y_max]],
+                                      cmap=apa_cmap)
+                # plot equality line
+                ax_apa.plot([x_min, x_max], [x_min, x_max], color='black', linestyle='--', linewidth=0.5)
+                ax_apa.set_title('APAlate', fontsize=fs)
+                ax_apa.set_xlabel(f'PC{pc_name} ({baseline_stride})', fontsize=fs)
+                ax_apa.set_ylabel(f'PC{compare_pc} ({compare_stride})', fontsize=fs)
+                ax_apa.spines['top'].set_visible(False)
+                ax_apa.spines['right'].set_visible(False)
+                ax_apa.set_xlim(x_min, x_max)
+                ax_apa.set_ylim(y_min, y_max)
+                ax_apa.set_xticks(np.arange(x_min, x_max + 1, 5))
+                ax_apa.set_yticks(np.arange(y_min, y_max + 1, 5))
+                ax_apa.tick_params(axis='x',labelsize=fs)
+                ax_apa.yaxis.set_major_locator(plt.MultipleLocator(5))  # ticks every 5 units
+                # ax_apa.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.1f}'))
+                ax_apa.tick_params(axis='y', labelsize=fs)
+
+                # Plot Wash density
+                h_wash = ax_wash.hist2d(wash_data_x, wash_data_y, bins=bins, range=[[x_min, x_max], [y_min, y_max]],
+                                        cmap=wash_cmap)
+                # plot equality line
+                ax_wash.plot([x_min, x_max], [x_min, x_max], color='black', linestyle='--', linewidth=0.5)
+                ax_wash.set_title('Washlate', fontsize=fs)
+                ax_wash.set_xlabel(f'PC{pc_name} ({baseline_stride})', fontsize=fs)
+                # y-label only on left plot
+                ax_wash.tick_params(axis='y', labelleft=True, labelsize=fs)
+                ax_wash.tick_params(axis='x', labelsize=fs)
+                ax_wash.spines['top'].set_visible(False)
+                ax_wash.spines['right'].set_visible(False)
+                ax_wash.set_xlim(x_min, x_max)
+                ax_wash.set_ylim(y_min, y_max)
+                ax_wash.set_xticks(np.arange(x_min, x_max + 1, 5))
+
+                ax_wash.yaxis.set_major_locator(plt.MultipleLocator(5))  # ticks every 5 units
+                # ax_wash.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.1f}'))
+
+                fig.tight_layout()
+
+                fname = f"DensityGrid_APA_vs_Wash_PC{pc_name}xPC{compare_pc}_Stride{compare_stride}"
+                for ext in ('png', 'svg'):
+                    fig.savefig(os.path.join(self.base_dir, fname + f".{ext}"),
+                                bbox_inches='tight', dpi=300)
+                plt.close(fig)
 
     def _plot_scatter(self, baseline_stride, compare_stride, pcs_byStride_interpolated, fs=7):
         """Scatter PC means (APA2 vs Wash2) for one stride comparison."""
@@ -251,55 +428,95 @@ class WhenAPA:
         pcs_cmp = pcs_byStride_interpolated[compare_stride]
         mice = pcs_base.index.get_level_values(0).unique()
 
+        apa_x = np.zeros((global_settings['pcs_to_use'], len(mice), len(apa_runs)))
+        apa_y = np.zeros((global_settings['pcs_to_use'], len(mice), len(apa_runs)))
+        wash_x = np.zeros((global_settings['pcs_to_use'], len(mice), len(wash_runs)))
+        wash_y = np.zeros((global_settings['pcs_to_use'], len(mice), len(wash_runs)))
         for pc_idx in range(global_settings['pcs_to_use']):
-            fig, ax = plt.subplots(figsize=(2, 2))
-            apa_x, apa_y = [], []
-            wash_x, wash_y = [], []
+            for midx, mouse in enumerate(mice):
+                pc1 = pcs_base.loc[mouse]
+                pc2 = pcs_cmp.loc[mouse]
 
-            for midx in mice:
-                pc1 = pcs_base.loc[midx]
-                pc2 = pcs_cmp.loc[midx]
-                # means
-                m1a = pc1.loc[apa_runs].iloc[:, pc_idx].mean()
-                m2a = pc2.loc[apa_runs].iloc[:, pc_idx].mean()
-                m1w = pc1.loc[wash_runs].iloc[:, pc_idx].mean()
-                m2w = pc2.loc[wash_runs].iloc[:, pc_idx].mean()
-                apa_x.append(m1a)
-                apa_y.append(m2a)
-                wash_x.append(m1w)
-                wash_y.append(m2w)
+                pc1a = pc1.loc(axis=0)[apa_runs].iloc[:, pc_idx]
+                pc2a = pc2.loc(axis=0)[apa_runs].iloc[:, pc_idx]
+                pc1w = pc1.loc(axis=0)[wash_runs].iloc[:, pc_idx]
+                pc2w = pc2.loc(axis=0)[wash_runs].iloc[:, pc_idx]
 
-            ax.scatter(apa_x, apa_y, marker='x', label='APAlate', alpha=0.7, color=apa_color)
-            ax.scatter(wash_x, wash_y, marker='o', label='Washlate', alpha=0.7, color=wash_color)
-            ax.set_xlabel(f'PC{pc_idx + 1} ({baseline_stride})', fontsize=fs)
-            ax.set_ylabel(f'PC{pc_idx + 1} ({compare_stride})', fontsize=fs)
-            ax.set_xlim(-1, 1)
-            ax.set_ylim(-1, 1)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.legend(bbox_to_anchor=(1, 1), loc='upper left', frameon=False, fontsize=fs)
-            ax.tick_params(labelsize=fs)
-            fig.subplots_adjust(left=0.1, bottom=0.1, right=0.85, top=0.85)
+                apa_x[pc_idx, midx, :] = pc1a.values
+                apa_y[pc_idx, midx, :] = pc2a.values
+                wash_x[pc_idx, midx, :] = pc1w.values
+                wash_y[pc_idx, midx, :] = pc2w.values
 
-            fname = f"ScatterAPA_vs_Wash_PC{pc_idx + 1}_Stride{compare_stride}"
-            for ext in ('png', 'svg'):
-                fig.savefig(os.path.join(self.base_dir, fname + f".{ext}"),
-                            bbox_inches='tight', dpi=300)
-            plt.close()
+        PCs = np.array([1,3,7])
+        for pc_name in PCs:
+            pc_idx = pc_name - 1  # Convert to zero-based index
+            compare_pcs = PCs
 
-    def _plot_delta_heatmap(self, mat, stars, label, run_type, fs=7, suffix=""):
-        pcs = global_settings['pcs_to_use']
-        xl = [f"PC{i + 1} ({label})" for i in range(pcs)]
-        yl = [f"PC{i + 1} (-1)" for i in range(pcs)]
+            for compare_pc in compare_pcs:
+                compare_pc_idx = compare_pc - 1  # Convert to zero-based index
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(mat, vmin=-1, vmax=1, cmap='coolwarm',
-                    xticklabels=xl, yticklabels=yl, cbar_kws={'label': 'Δ Pearson r'},
-                    annot=False, ax=ax)
+                fig, ax = plt.subplots(figsize=(2, 2))
+                ax.scatter(apa_x[pc_idx, :, :].flatten(), apa_y[compare_pc_idx, :, :].flatten(),
+                           marker='o', s=3, label='APAlate', alpha=0.1, color=apa_color, linewidth=0)
+                ax.scatter(wash_x[pc_idx, :, :].flatten(), wash_y[compare_pc_idx, :, :].flatten(),
+                            marker='o', s=3, label='Washlate', alpha=0.1, color=wash_color, linewidth=0)
+                ax.set_xlabel(f'PC{pc_name} ({baseline_stride})', fontsize=fs)
+                ax.set_ylabel(f'PC{compare_pc} ({compare_stride})', fontsize=fs)
+                # Compute min/max of the data for x and y
+                x_data = np.concatenate([apa_x[pc_idx, :, :].flatten(), wash_x[pc_idx, :, :].flatten()])
+                y_data = np.concatenate([apa_y[compare_pc_idx, :, :].flatten(), wash_y[compare_pc_idx, :, :].flatten()])
 
-        # overlay stars
-        for i in range(pcs):
-            for j in range(pcs):
+                def round_down_to_5(x):
+                    return np.floor(x / 5) * 5
+
+                def round_up_to_5(x):
+                    return np.ceil(x / 5) * 5
+
+                x_min, x_max = round_down_to_5(x_data.min()), round_up_to_5(x_data.max())
+                y_min, y_max = round_down_to_5(y_data.min()), round_up_to_5(y_data.max())
+
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylim(y_min, y_max)
+
+                # Set ticks at multiples of 5 within the limits
+                ax.set_xticks(np.arange(x_min, x_max + 1, 5))
+                ax.set_yticks(np.arange(y_min, y_max + 1, 5))
+                # ax.set_xlim(-1, 1)
+                # ax.set_ylim(-1, 1)
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.legend(bbox_to_anchor=(1, 1), loc='upper left', frameon=False, fontsize=fs)
+                ax.tick_params(labelsize=fs)
+                fig.subplots_adjust(left=0.1, bottom=0.1, right=0.85, top=0.85)
+                fname = f"ScatterAPA_vs_Wash_PC{pc_name}xPC{compare_pc}_Stride{compare_stride}"
+                for ext in ('png', 'svg'):
+                    fig.savefig(os.path.join(self.base_dir, fname + f".{ext}"),
+                                bbox_inches='tight', dpi=300)
+                plt.close()
+
+    def _plot_delta_heatmap(self, mat, stars, label, run_type, fs=7, suffix="", pcs_to_plot=None):
+        if pcs_to_plot is None:
+            pcs_to_plot = list(range(global_settings['pcs_to_use']))
+        n = len(pcs_to_plot)
+        xl = [f"PC{pc + 1} ({label})" for pc in pcs_to_plot]
+        yl = [f"PC{pc + 1} (-1)" for pc in pcs_to_plot]
+
+        if pcs_to_plot is None or len(pcs_to_plot) == global_settings['pcs_to_use']:
+            figsize = (10, 6)
+        else:
+            figsize = (5, 4)
+        fig, ax = plt.subplots(figsize=figsize)
+        heatmap = sns.heatmap(
+            mat, vmin=-1, vmax=1, cmap='coolwarm',
+            xticklabels=xl, yticklabels=yl, cbar_kws={'label': 'Δ Pearson r'},
+            annot=False, ax=ax
+        )
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label('Δ Pearson r', fontsize=fs)
+        cbar.ax.tick_params(labelsize=fs)# set fontsize here
+
+        for i in range(n):
+            for j in range(n):
                 star = stars[i, j]
                 if star:
                     ax.text(j + 0.5, i + 0.5, star,
@@ -310,13 +527,16 @@ class WhenAPA:
         ax.figure.axes[-1].tick_params(labelsize=fs)
         plt.tight_layout()
 
-        fname = f"CorrPCs_{run_type}_Stride{label}{suffix}_delta"
+        if pcs_to_plot is not None:
+            fname = f"CorrPCs_{run_type}_Stride{label}{suffix}_PCs{pcs_to_plot}"
+        else:
+            fname = f"CorrPCs_{run_type}_Stride{label}{suffix}_delta"
         for ext in ('png', 'svg'):
             plt.savefig(os.path.join(self.base_dir, fname + f".{ext}"),
                         bbox_inches='tight', dpi=300)
         plt.close()
 
-    def plot_corr_pcs_heatmap(self, fs=7):
+    def plot_corr_pcs_heatmap(self, fs=7, pcs_to_plot=None):
         pca = self.LH_pca[0].pca
         pcs_byStride = {}
         pcs_byStride_interpolated = {}
@@ -351,184 +571,299 @@ class WhenAPA:
             pcs_byStride[s] = pd.concat(pcs_byMouse)
             pcs_byStride_interpolated[s] = pd.concat(pcs_byMouse_interpolated)
 
-        # compute and plot
-        for rt in ['All runs', 'APAlate']:
-            # 1) raw heatmaps + scatters
+        pcs_to_plot = pcs_to_plot or list(range(global_settings['pcs_to_use']))
+        # 1) raw heatmaps + scatters
+        for rt in ['All runs', 'APAlate', 'Washlate']:
             for s in (-1, -2, -3):
-                mean_r = self._compute_mean_r(-1, s, rt, pcs_byStride_interpolated)
-                self._plot_heatmap(mean_r, s, rt)
-                self._plot_scatter(-1, s, pcs_byStride_interpolated, fs=fs)
+                mean_r = self._compute_mean_r(-1, s, rt, pcs_byStride_interpolated, pcs_to_plot=pcs_to_plot)
+                self._plot_heatmap(mean_r, s, rt, fs=fs, pcs_to_plot=pcs_to_plot)
+                self._plot_scatter(-1, s, pcs_byStride_interpolated,
+                                   fs=fs)  # You may want to modify _plot_scatter similarly
+                self._plot_density_grid(-1, s, pcs_byStride_interpolated, fs=fs, bins=60)
 
-            # 2) delta heatmaps with stars
-            mean2, stars2 = self._compute_delta_stats(-1, -2, rt, pcs_byStride_interpolated)
-            mean3, stars3 = self._compute_delta_stats(-1, -3, rt, pcs_byStride_interpolated)
+            mean2, stars2 = self._compute_delta_stats(-1, -2, rt, pcs_byStride_interpolated, pcs_to_plot=pcs_to_plot)
+            mean3, stars3 = self._compute_delta_stats(-1, -3, rt, pcs_byStride_interpolated, pcs_to_plot=pcs_to_plot)
 
-            self._plot_delta_heatmap(mean2, stars2, '-2 minus -1', rt, fs=fs, suffix='_Delta2')
-            self._plot_delta_heatmap(mean3, stars3, '-3 minus -1', rt, fs=fs, suffix='_Delta3')
+            self._plot_delta_heatmap(mean2, stars2, '-2 minus -1', rt, fs=fs, suffix='_Delta2', pcs_to_plot=pcs_to_plot)
+            self._plot_delta_heatmap(mean3, stars3, '-3 minus -1', rt, fs=fs, suffix='_Delta3', pcs_to_plot=pcs_to_plot)
 
     def plot_line_pcs_apa_vs_wash(self, fs=7):
         apa_runs = expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']
         wash_runs = expstuff['condition_exp_runs']['APAChar']['Extended']['Wash2']
-        strides = [-3, -2, -1] # removed 0 from here
+        strides = [-3, -2, -1]
 
+        # Precompute PCA projections for each stride and mouse
         pcs_byStride = {}
         pca = self.LH_pca[0].pca
-
-        # --- Extract mean per mouse per stride ---
         for s in strides:
             if s != 0:
-                stride_feature_data = self.LH_feature_data.loc(axis=0)[s]
+                data = self.LH_feature_data.loc(axis=0)[s]
             else:
-                stride_feature_data = self.LH_feature_data_s0.loc(axis=0)[s]
-            mice_names = stride_feature_data.index.get_level_values('MouseID').unique()
+                data = self.LH_feature_data_s0.loc(axis=0)[s]
 
             pcs_byMouse = {}
-            for midx in mice_names:
-                mouse_data = stride_feature_data.loc[midx]
-                pcs = pca.transform(mouse_data)[:, :global_settings['pcs_to_use']]
-                pc_df = pd.DataFrame(pcs, index=mouse_data.index.get_level_values('Run'),
-                                     columns=[f'PC{i + 1}' for i in range(global_settings['pcs_to_use'])])
+            for midx in data.index.get_level_values('MouseID').unique():
+                mouse_df = data.loc[midx]
+                projected = pca.transform(mouse_df)[:, :global_settings['pcs_to_use']]
+                pc_df = pd.DataFrame(
+                    projected,
+                    index=mouse_df.index.get_level_values('Run'),
+                    columns=[f'PC{i+1}' for i in range(global_settings['pcs_to_use'])]
+                )
                 pcs_byMouse[midx] = pc_df
-
             pcs_byStride[s] = pcs_byMouse
 
-        # --- Plot per PC ---
-        for pc_idx in range(global_settings['pcs_to_use']):
-            fig, ax1 = plt.subplots(figsize=(4, 3))
-            ax2 = ax1.twinx()
+        # Helper to map p-value to star string
+        def p2star(p):
+            if p < 0.001:
+                return '***'
+            elif p < 0.01:
+                return '**'
+            elif p < 0.05:
+                return '*'
+            else:
+                return ''
 
-            apa_means = []
-            wash_means = []
-            delta_means = []
+        # Build delta (APA-Wash) matrix and p-value matrix for all PCs and strides
+        pc_labels = [f'PC{i+1}' for i in range(global_settings['pcs_to_use'])]
+        delta_df = pd.DataFrame(index=pc_labels, columns=strides, dtype=float)
+        pmat = pd.DataFrame(index=pc_labels, columns=strides, dtype=float)
 
-            apa_CIs = []
-            wash_CIs = []
-            delta_CIs = []
+        for pc_idx, label in enumerate(pc_labels):
+            for s in strides:
+                apa_vals, wash_vals = [], []
+                for midx, pc_df in pcs_byStride[s].items():
+                    apa_vals.append(
+                        pc_df.loc[pc_df.index.isin(apa_runs), label].mean()
+                    )
+                    wash_vals.append(
+                        pc_df.loc[pc_df.index.isin(wash_runs), label].mean()
+                    )
+                diffs = np.array(apa_vals) - np.array(wash_vals)
+                delta_df.loc[label, s] = np.nanmean(diffs)
+                _, p = ttest_1samp(diffs, 0.0, alternative='two-sided', nan_policy='omit')
+                # _, p = ttest_rel(apa_vals, wash_vals, alternative='greater', nan_policy='omit')
+                pmat.loc[label, s] = p
+
+        # Map p-values to stars for heatmap
+        star_df = pmat.applymap(p2star)
+        # Create combined annotation strings with star above diff value
+        annot = delta_df.round(2).astype(str)
+        for r in delta_df.index:
+            for c in delta_df.columns:
+                star = star_df.loc[r, c]
+                val = annot.loc[r, c]
+                if star:
+                    annot.loc[r, c] = f"{star}\n{val}"
+                else:
+                    annot.loc[r, c] = val
+
+        fig, ax = plt.subplots(figsize=(4, 6))
+        heatmap = sns.heatmap(
+            delta_df,
+            annot=annot,
+            fmt="",
+            cmap='coolwarm',
+            center=0,
+            cbar_kws={'label': 'Delta (APA - Wash)'},
+            vmin=-2, vmax=2,
+            linewidths=0.5,
+            linecolor='gray',
+            ax=ax,
+            annot_kws={"size": fs},
+        )
+
+        # Set font size of colorbar label
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label('Delta (APA - Wash)', fontsize=fs)
+
+        # Set font size for colorbar tick labels
+        cbar.ax.tick_params(labelsize=fs)
+
+        # Set axis labels, title, and ticks font size
+        ax.set_xlabel('Stride', fontsize=fs)
+        ax.set_ylabel('PC', fontsize=fs)
+        ax.set_title('APA - Wash', fontsize=fs)
+        ax.tick_params(labelsize=fs)
+
+        plt.tight_layout()
+        heatmap_base = os.path.join(self.base_dir, 'DeltaHeatmap_APA_Wash')
+        fig.savefig(f"{heatmap_base}.png", bbox_inches='tight', dpi=300)
+        fig.savefig(f"{heatmap_base}.svg", bbox_inches='tight', dpi=300)
+        plt.close(fig)
+
+        # Line plots for each PC with CI and stars
+        stride_labels = strides
+        for pc_idx, label in enumerate(pc_labels):
+            apa_means, wash_means, delta_means = [], [], []
+            apa_CIs, wash_CIs, delta_CIs = [], [], []
+            stars = []
 
             for s in strides:
-                pcs_mouse = pcs_byStride[s]
                 apa_vals = []
                 wash_vals = []
-                diff_vals = []
+                for midx, pc_df in pcs_byStride[s].items():
+                    apa_vals.append(
+                        pc_df.loc[pc_df.index.isin(apa_runs), label].mean()
+                    )
+                    wash_vals.append(
+                        pc_df.loc[pc_df.index.isin(wash_runs), label].mean()
+                    )
+                diffs = np.array(apa_vals) - np.array(wash_vals)
 
-                for midx, pc_df in pcs_mouse.items():
-                    # APA
-                    apa_mouse_vals = pc_df.loc[pc_df.index.isin(apa_runs), f'PC{pc_idx + 1}']
-                    apa_mean = apa_mouse_vals.mean()
-                    apa_vals.append(apa_mean)
-
-                    # Wash
-                    wash_mouse_vals = pc_df.loc[pc_df.index.isin(wash_runs), f'PC{pc_idx + 1}']
-                    wash_mean = wash_mouse_vals.mean()
-                    wash_vals.append(wash_mean)
-
-                    # Difference
-                    diffs = apa_mean - wash_mean
-                    diff_vals.append(diffs)
-
-                # Mean across mice
                 apa_means.append(np.nanmean(apa_vals))
                 wash_means.append(np.nanmean(wash_vals))
-                delta_means.append(np.nanmean(diff_vals))
+                delta_means.append(np.nanmean(diffs))
+                apa_CIs.append(np.nanstd(apa_vals)/np.sqrt(len(apa_vals))*1.96)
+                wash_CIs.append(np.nanstd(wash_vals)/np.sqrt(len(wash_vals))*1.96)
+                delta_CIs.append(np.nanstd(diffs)/np.sqrt(len(diffs))*1.96)
+                stars.append(p2star(pmat.loc[label, s]))
 
-                # Confidence intervals
-                apa_CI = np.nanstd(apa_vals) / np.sqrt(len(apa_vals)) * 1.96  # 95% CI
-                wash_CI = np.nanstd(wash_vals) / np.sqrt(len(wash_vals)) * 1.96  # 95% CI
-                delta_CI = np.nanstd(diff_vals) / np.sqrt(len(diff_vals)) * 1.96  # 95% CI
-                apa_CIs.append(apa_CI)
-                wash_CIs.append(wash_CI)
-                delta_CIs.append(delta_CI)
+            fig, (ax_delta, ax_lines) = plt.subplots(2, 1, figsize=(3, 4), sharex=True,
+                                           gridspec_kw={'height_ratios': [1, 2]})
 
-            stride_labels = [-s for s in strides]  # display as positive stride numbers
+            # Top subplot: Delta with error bars + stars
+            ax_delta.errorbar(
+                stride_labels, delta_means, yerr=delta_CIs,
+                color='teal', marker='o', ms=5, linestyle='--', linewidth=1, capsize=3, label='Delta APA–Wash'
+            )
+            ax_delta.set_ylabel('Delta (mean ± 95% CI)', fontsize=fs)
+            ax_delta.tick_params(axis='y', labelsize=fs)
+            ax_delta.axhline(0, color='gray', linestyle='--', linewidth=0.5)
+            ax_delta.spines['top'].set_visible(False)
+            ax_delta.spines['right'].set_visible(False)
+            ax_delta.spines['bottom'].set_visible(False)
+            ax_delta.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+            ax_delta.set_title(label, fontsize=fs)
 
-            # --- Plot APA and Wash on left y-axis ---
-            apa_color = pu.get_color_phase('APA2')
-            wash_color = pu.get_color_phase('Wash2')
-            ax1.plot(stride_labels, apa_means, color=apa_color, marker='o', label='APA')
-            ax1.plot(stride_labels, wash_means, color=wash_color, marker='o', label='Wash')
-            ax1.set_ylabel('PC Value (mean)', fontsize=fs, color='black')
-            ax1.tick_params(axis='y', labelsize=fs)
-            ax1.set_xlabel('Stride', fontsize=fs)
-            ax1.set_xticks(stride_labels)
-            ax1.set_xticklabels(stride_labels, fontsize=fs)
-            ax1.tick_params(axis='x', labelsize=fs)
-            ax1.invert_xaxis()
+            # Add stars above error bars on delta plot
+            for x, d_mean, d_ci, star in zip(stride_labels, delta_means, delta_CIs, stars):
+                y = d_mean + d_ci + 0.02
+                ax_delta.text(x, y, star, ha='center', va='bottom', fontsize=fs)
 
-            # --- Plot delta on right y-axis ---
-            ax2.plot(stride_labels, delta_means, color='teal', marker='o', linestyle='--', label='Delta (APA-Wash)')
-            ax2.set_ylabel('Delta APA-Wash', fontsize=fs, color='teal')
-            ax2.tick_params(axis='y', labelsize=fs, colors='teal')
-            ax2.spines['top'].set_visible(False)
-
-            # --- Legends ---
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=fs, loc='best')
-
-            ax1.set_title(f'PC{pc_idx + 1} APA vs Wash vs Delta', fontsize=fs)
-            ax1.axhline(0, color='grey', linestyle='--', linewidth=0.5)
-            ax1.spines['top'].set_visible(False)
+            # Bottom subplot: APA & Wash with error bars
+            ax_lines.errorbar(
+                stride_labels, apa_means, yerr=apa_CIs,
+                color=pu.get_color_phase('APA2'), marker='o', ms=5, linewidth=1, capsize=3, label='APA'
+            )
+            ax_lines.errorbar(
+                stride_labels, wash_means, yerr=wash_CIs,
+                color=pu.get_color_phase('Wash2'), marker='o', ms=5, linewidth=1, capsize=3, label='Wash'
+            )
+            ax_lines.set_xlabel('Stride', fontsize=fs)
+            ax_lines.set_xticks(stride_labels)
+            ax_lines.set_xticklabels([str(s) for s in stride_labels], fontsize=fs)
+            ax_lines.set_ylabel('PC value (mean ± 95% CI)', fontsize=fs)
+            ax_lines.tick_params(axis='both', labelsize=fs)
+            ax_lines.axhline(0, color='gray', linestyle='--', linewidth=0.5)
+            ax_lines.spines['top'].set_visible(False)
+            ax_lines.legend(fontsize=fs, loc='best')
 
             fig.tight_layout()
 
-            # --- Save ---
-            savepath = os.path.join(self.base_dir, f'LinePlot_PC{pc_idx + 1}_APA_Wash_Delta')
-            plt.savefig(f"{savepath}.png", format='png', bbox_inches='tight', dpi=300)
-            plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
-            plt.close()
+            # Save line plot
+            base = os.path.join(self.base_dir, f'LinePlot_{label}_Delta_APA_Wash')
+            fig.savefig(f"{base}.png", bbox_inches='tight', dpi=300)
+            fig.savefig(f"{base}.svg", bbox_inches='tight', dpi=300)
+            plt.close(fig)
 
-            # --- Collect delta values into DataFrame for heatmap ---
-            delta_df = pd.DataFrame(index=[f'PC{i + 1}' for i in range(global_settings['pcs_to_use'])],
-                                    columns=[s for s in strides])
+    def plot_pcs_timeseries_by_stride(self, fs=7, smooth_window=15):
+        """
+        Plot PC timeseries across trials for each stride, one plot per PC.
+        Each plot: x = trial, y = PC value (mean across mice), line = stride.
+        """
+        from scipy.ndimage import median_filter
 
-            for pc_idx in range(global_settings['pcs_to_use']):
-                delta_means = []
-                for s in strides:
-                    pcs_mouse = pcs_byStride[s]
-                    apa_vals = []
-                    wash_vals = []
-                    diff_vals = []
-                    for midx, pc_df in pcs_mouse.items():
-                        # APA
-                        apa_mouse_vals = pc_df.loc[pc_df.index.isin(apa_runs), f'PC{pc_idx + 1}']
-                        apa_mean = apa_mouse_vals.mean()
-                        apa_vals.append(apa_mean)
+        pca = self.LH_pca[0].pca
+        goal_runs = np.arange(160)
+        strides = self.strides if hasattr(self, 'strides') else [-1, -2, -3]
+        pc_labels = [f'PC{i + 1}' for i in range(global_settings['pcs_to_use'])]
 
-                        # Wash
-                        wash_mouse_vals = pc_df.loc[pc_df.index.isin(wash_runs), f'PC{pc_idx + 1}']
-                        wash_mean = wash_mouse_vals.mean()
-                        wash_vals.append(wash_mean)
+        # --- For each stride, collect smoothed and normalized PCs for all mice ---
+        # Format: {stride: {mouse: (160 x n_pc array)}}
+        pcs_byStride_byMouse = {}
+        for s in strides:
+            if s != 0:
+                data = self.LH_feature_data.loc(axis=0)[s]
+            else:
+                data = self.LH_feature_data_s0.loc(axis=0)[s]
+            pcs_byMouse = {}
+            for midx in data.index.get_level_values('MouseID').unique():
+                mouse_df = data.loc[midx]
+                pcs = pca.transform(mouse_df)[:, :global_settings['pcs_to_use']]
+                run_vals = mouse_df.index.get_level_values('Run')
+                # Interpolate to full 160 trials
+                pcs_interp = np.vstack([
+                    np.interp(goal_runs, run_vals, pcs[:, i])
+                    for i in range(pcs.shape[1])
+                ]).T  # shape: 160 x n_pcs
+                # Optionally smooth and normalise each PC trace
+                pcs_smooth = median_filter(pcs_interp, size=(smooth_window, 1), mode='nearest')
+                # Normalise each PC trace independently (per mouse, per PC)
+                max_abs = np.max(np.abs(pcs_smooth), axis=0)
+                pcs_norm = pcs_smooth / (max_abs + 1e-10)
+                pcs_byMouse[midx] = pcs_norm
+            pcs_byStride_byMouse[s] = pcs_byMouse
 
-                        # Difference
-                        diffs = apa_mean - wash_mean
-                        diff_vals.append(diffs)
+        apa1_color = pu.get_color_phase('APA1')
+        apa2_color = pu.get_color_phase('APA2')
+        wash1_color = pu.get_color_phase('Wash1')
+        wash2_color = pu.get_color_phase('Wash2')
 
-                    mean_delta = np.nanmean(diff_vals)
-                    # Mean across mice
-                    # delta = np.nanmean(apa_vals) - np.nanmean(wash_vals)
-                    delta_df.loc[f'PC{pc_idx + 1}', s] = mean_delta  # -s to match stride labels
+        # --- For each PC, plot all strides (average across mice, with shaded SEM) ---
+        for pc_idx, pc_label in enumerate(pc_labels):
 
-            # --- Convert to float ---
-            delta_df = delta_df.astype(float)
+            fig, ax = plt.subplots(figsize=(7, 4))
 
-            # --- Plot heatmap ---
-            fig, ax = plt.subplots(figsize=(6, 8))
-            sns.heatmap(delta_df, annot=True, fmt=".2f", cmap='coolwarm', center=0,
-                        cbar_kws={'label': 'Delta (APA - Wash)'}, vmin=-2, vmax=2)
-            ax.set_xlabel('Stride', fontsize=fs)
-            ax.set_ylabel('PC', fontsize=fs)
-            ax.set_title('Delta (APA - Wash) Heatmap', fontsize=fs)
-            ax.tick_params(axis='both', which='major', labelsize=fs)
+            boxy = 1
+            height = 0.02
+            patch1 = plt.axvspan(xmin=10, xmax=60, ymin=boxy, ymax=boxy + height, color=apa1_color, lw=0)
+            patch2 = plt.axvspan(xmin=60, xmax=110, ymin=boxy, ymax=boxy + height, color=apa2_color, lw=0)
+            patch3 = plt.axvspan(xmin=110, xmax=135, ymin=boxy, ymax=boxy + height, color=wash1_color, lw=0)
+            patch4 = plt.axvspan(xmin=135, xmax=160, ymin=boxy, ymax=boxy + height, color=wash2_color, lw=0)
+            patch1.set_clip_on(False)
+            patch2.set_clip_on(False)
+            patch3.set_clip_on(False)
+            patch4.set_clip_on(False)
 
+            for daybreak in [40,80, 120]:
+                ax.axvline(daybreak, color='grey', linestyle='--', linewidth=0.5)
+            ax.axvline(10, color=apa1_color, linestyle='-', linewidth=0.5)
+            ax.axvline(110, color=wash1_color, linestyle='-', linewidth=0.5)
+            ax.axhline(0, color='grey', linestyle='--', linewidth=0.5)
+
+            for s in strides:
+                # Collect (mice x trials) for this PC and stride
+                pcs_all_mice = []
+                for pcs_norm in pcs_byStride_byMouse[s].values():
+                    pcs_all_mice.append(pcs_norm[:, pc_idx])
+                pcs_all_mice = np.stack(pcs_all_mice)  # [n_mice, 160]
+                mean_trace = pcs_all_mice.mean(axis=0)
+                sem_trace = pcs_all_mice.std(axis=0, ddof=1) / np.sqrt(pcs_all_mice.shape[0])
+                color = pu.get_color_stride(s)
+                label = f'Stride {abs(s)}'
+                # Plot with shaded error
+                ax.plot(goal_runs + 1, mean_trace, color=color, label=label, linewidth=2)
+                ax.fill_between(goal_runs + 1, mean_trace - sem_trace, mean_trace + sem_trace,
+                                color=color, alpha=0.16, linewidth=0)
+
+
+
+            ax.set_xlabel('Trial number', fontsize=fs)
+            ax.set_ylabel(f'Normalised {pc_label}', fontsize=fs)
+            ax.set_title(f'{pc_label} timeseries by stride', fontsize=fs)
+            ax.set_xlim(1, 160)
+            ax.set_xticks([10, 40, 60, 80, 110, 120, 135, 160])
+            ax.set_xticklabels(['10', '40', '60', '80', '110', '120', '135', '160'], fontsize=fs)
+            ax.tick_params(axis='both', labelsize=fs)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.legend(fontsize=fs, frameon=False)
             plt.tight_layout()
-
-            # --- Save ---
-            savepath = os.path.join(self.base_dir, f'DeltaHeatmap_APA_Wash')
-            plt.savefig(f"{savepath}.png", format='png', bbox_inches='tight', dpi=300)
-            plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
-            plt.close()
-
-
+            savepath = os.path.join(self.base_dir, f'Timeseries_{pc_label}_byStride')
+            plt.savefig(f"{savepath}.png", bbox_inches='tight', dpi=300)
+            plt.savefig(f"{savepath}.svg", bbox_inches='tight', dpi=300)
+            plt.close(fig)
 
 
 def main():
@@ -541,8 +876,10 @@ def main():
     # Plot the accuracy of each stride model
     when_apa.plot_accuracy_of_each_stride_model()
     # when_apa.plot_corr_pc_weights_heatmap()
-    when_apa.plot_corr_pcs_heatmap()
+    when_apa.plot_corr_pcs_heatmap(pcs_to_plot=None)
+    when_apa.plot_corr_pcs_heatmap(pcs_to_plot=[0,2,6])
     when_apa.plot_line_pcs_apa_vs_wash()
+    when_apa.plot_pcs_timeseries_by_stride()
 
 
 

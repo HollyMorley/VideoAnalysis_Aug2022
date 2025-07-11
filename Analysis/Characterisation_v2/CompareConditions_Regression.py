@@ -585,16 +585,27 @@ class RegRunner:
         fig2, ax2 = plt.subplots(figsize=(5, 4))
         # Define data collections for both plots per pc
         pc_data_dict = {pc: {'apa': {'x': [], 'y': []}, 'diff': {'x': [], 'y': []}} for pc in chosen_pcs}
-
+        fig_temp, ax_temp = plt.subplots(figsize=(5, 4))
         # First gather all data
         for midx in common_mice:
-            cond1_feature_data = getattr(self, f'feature_data_{conditions[0]}')
-            cond2_feature_data = getattr(self, f'feature_data_{conditions[1]}')
+            cond1_feature_data = getattr(self, f'feature_data_norm_{conditions[0]}')
+            cond2_feature_data = getattr(self, f'feature_data_norm_{conditions[1]}')
 
             cond1_apa_pcs, _ = self.filter_data(cond1_feature_data, s, midx, apa_wash='apa')
             cond2_apa_pcs, _ = self.filter_data(cond2_feature_data, s, midx, apa_wash='apa')
             cond1_wash_pcs, _ = self.filter_data(cond1_feature_data, s, midx, apa_wash='wash')
             cond2_wash_pcs, _ = self.filter_data(cond2_feature_data, s, midx, apa_wash='wash')
+
+            # TEMP
+            run_vals = cond2_feature_data.loc(axis=0)[s, midx].index
+            pcs = self.pca.transform(cond2_feature_data.loc(axis=0)[s, midx])
+            pcs_trimmed = pcs[:, :global_settings['pcs_to_use']]
+            pc7 = pcs_trimmed[:, 0]
+            pc7_smooth = pc7#median_filter(pc7, size=10, mode='nearest')
+
+            # plot
+            mouse_color = pu.get_color_mice(midx)
+            ax_temp.plot(run_vals, pc7_smooth, color=mouse_color)
 
             cond1_apa_pc_avgs = np.mean(cond1_apa_pcs, axis=0)
             cond2_apa_pc_avgs = np.mean(cond2_apa_pcs, axis=0)

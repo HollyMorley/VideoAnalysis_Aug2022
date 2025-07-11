@@ -244,7 +244,7 @@ def plot_PCA_pred_heatmap(pca_all, pca_pred, feature_data, stride_data, phases, 
         plt.savefig(os.path.join(save_path, f"PCAXRuns_Heatmap__RunPrediction_{p1}_{p2}_{s}_{condition}.svg"), dpi=300)
         plt.close()
 
-def plot_aggregated_run_predictions(run_pred, save_dir, p1, p2, s, condition, normalization_method='maxabs', smooth_kernel=13, fs=7):
+def plot_aggregated_run_predictions(run_pred, save_dir, p1, p2, s, condition, normalization_method='maxabs', smooth_kernel=13, error_bars=False, fs=7):
     stride_pred = [pred for pred in run_pred if pred.stride == s]
     common_x = np.arange(0, 160, 1)
 
@@ -289,24 +289,49 @@ def plot_aggregated_run_predictions(run_pred, save_dir, p1, p2, s, condition, no
         # interp_curve = f(common_x)
         interpolated_curves.append(interp_curve)
 
-        ax.plot(common_x, interp_curve, linewidth=0.6, label=f'Mouse {mouse_id}', alpha=0.3, color='grey')
+        if not error_bars:
+            ax.plot(common_x, interp_curve, linewidth=0.6, label=f'Mouse {mouse_id}', alpha=0.3, color='grey')
 
     all_curves_array = np.vstack(interpolated_curves)
     mean_curve = np.mean(all_curves_array, axis=0)
     ax.plot(common_x, mean_curve, color='black', linewidth=1, label='Mean Curve')
 
+    # Get 95% CI for each trial across mice
+    if error_bars:
+        from scipy.stats import t
+
+        # std_curve = np.std(all_curves_array, axis=0, ddof=1)
+        # lower_bound = mean_curve - 1.96 * std_curve / np.sqrt(all_curves_array.shape[0])
+        # upper_bound = mean_curve + 1.96 * std_curve / np.sqrt(all_curves_array.shape[0])
+        n = 8  # number of mice
+        df = n - 1
+        t_crit = t.ppf(0.975, df)  # two-tailed 95% confidence
+
+        std_curve = np.std(all_curves_array, axis=0, ddof=1)
+        ci_margin = t_crit * std_curve / np.sqrt(n)
+        lower_bound = mean_curve - ci_margin
+        upper_bound = mean_curve + ci_margin
+
+        ax.fill_between(common_x, lower_bound, upper_bound, color='grey', alpha=0.3, label='95% CI')
+
+
     # plt.vlines(x=[9.5, 109.5], ymin=-1, ymax=1, color='red', linestyle='-')
     ax.axhline(0, color='black', linestyle='--', alpha=0.5, linewidth=0.5)
     ax.set_title(s, fontsize=fs, pad=10)
     ax.set_xlabel('Trial', fontsize=fs)
-    ax.set_ylabel('Normalized Prediction', fontsize=fs)
+    if error_bars:
+        ax.set_ylabel('Normalized Prediction (mean with 95% CI (t-distribution))', fontsize=fs)
+    else:
+        ax.set_ylabel('Normalized Prediction', fontsize=fs)
     ax.set_ylim(-1, 1)
     ax.set_yticks(np.arange(-0.5, 0.6, 0.5))
     ax.set_yticklabels(np.arange(-0.5, 0.6, 0.5), fontsize=fs)
-    ax.set_xticks(np.arange(0, 161, 20))
-    ax.set_xticklabels(np.arange(0, 161, 20), fontsize=fs)
+    ax.set_xticks([0,10,60,110, 135, 160])
+    ax.set_xticklabels([0, 10, 60, 110, 135, 160], fontsize=fs)
+    # ax.set_xticks(np.arange(0, 161, 20))
+    # ax.set_xticklabels(np.arange(0, 161, 20), fontsize=fs)
     ax.set_xlim(0, 160)
-    ax.xaxis.set_minor_locator(ticker.MultipleLocator(10))
+    #ax.xaxis.set_minor_locator(ticker.MultipleLocator(10))
     ax.tick_params(axis='x', which='major', bottom=True, top=False, length=4, width=1)
     ax.tick_params(axis='x', which='minor', bottom=True, top=False, length=2, width=1)
     ax.spines['top'].set_visible(False)

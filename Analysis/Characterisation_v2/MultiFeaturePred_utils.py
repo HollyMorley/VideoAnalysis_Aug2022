@@ -93,7 +93,8 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                                 select_pc_type,
                                                                 lda_w_unit=lda_w_unit)
                 (y_pred, smoothed_y_pred, feature_weights, w_PC, normalize_mean_pc, normalize_std_pc,
-                 acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc, pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ) = results
+                 acc, cv_acc, w_folds, pc_acc, pc_y_preds, null_acc, pc_lesions_cv_acc, pc_lesions_w_folds, null_acc_circ,
+                 w_single_pc, bal_acc_single_pc, cv_acc_single_pc, cv_acc_shuffle_single_pc, bal_acc_shuffle_single_pc) = results
 
                 # Skipping w/in vs b/wn mice comparison
 
@@ -116,12 +117,12 @@ def run_pca_regressions(phases, stride_numbers, condition, pca_data, feature_dat
                                                       null_acc=null_acc,
                                                       null_acc_circ=null_acc_circ,
                                                       pc_lesions_cv_acc=pc_lesions_cv_acc,
-                                                      pc_lesions_w_folds=pc_lesions_w_folds
-                                                      # y_preds_PCwise=y_preds_PCwise,
-                                                      # cv_acc_PCwise=cv_acc_PCwise,
-                                                      # shuffle_acc=cv_acc_shuffle_PCwise,
-                                                      # mean_acc_PCwise=mean_cv_acc_PCwise,
-                                                      # mean_acc_shuffle_PCwise=mean_cv_acc_shuffle_PCwise,
+                                                      pc_lesions_w_folds=pc_lesions_w_folds,
+                                                      w_single_pc=w_single_pc,
+                                                      bal_acc_single_pc=bal_acc_single_pc,
+                                                      cv_acc_single_pc=cv_acc_single_pc,
+                                                      cv_acc_shuffle_single_pc=cv_acc_shuffle_single_pc,
+                                                      bal_acc_shuffle_single_pc=bal_acc_shuffle_single_pc
                                                       )
                 pca_predictions.append(pca_pred_class)
     return pca_predictions

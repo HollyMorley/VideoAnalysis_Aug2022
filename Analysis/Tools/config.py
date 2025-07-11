@@ -43,8 +43,8 @@ instance_settings = [
 
 # --------------------------- Global settings: -------------------------------
 global_settings = {
-    "stride_numbers": [-1],#[-3,-2,-1],#[0]
-    "phases": ['APA1','APA2'], #['APA2','Wash2'], #['APA1', 'APA2'],
+    "stride_numbers": [-3,-2,-1],#[-3,-2,-1],#[0]
+    "phases": ['APA2','Wash2'], #['APA2','Wash2'], #['APA1', 'APA2'],
     "residuals": True,
     "script_version": 'SingleCondition',
     "allmice": True,
@@ -58,7 +58,7 @@ global_settings = {
     "pcs_to_show": 60,
     "pcs_to_use": 12,
     "pcs_to_plot": 8,
-    "use_LH_pcs": True, ## !!!
+    "use_LH_pcs": False, ## !!!
     "use_LH_reg_model": False, ## !!!
     "normalise_to_LH_wash": False, ## !!!
     "normalise_wash_nullspace": False, ## !!!

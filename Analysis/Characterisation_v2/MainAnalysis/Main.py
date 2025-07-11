@@ -371,11 +371,11 @@ def main(stride_numbers: List[int], phases: List[str],
         # Plot how each feature loads onto the PCA components
         pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
 
-    LH_feature_data  = feature_data_compare if inst["condition"] != "APAChar_LowHigh" else None
-    top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8, feature_data_LH=LH_feature_data)
-    # Save the top features for each PC
-    with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
-        pickle.dump(top_features, f)
+    # LH_feature_data  = feature_data_compare if inst["condition"] != "APAChar_LowHigh" else None
+    # top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8, feature_data_LH=LH_feature_data)
+    # # Save the top features for each PC
+    # with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
+    #     pickle.dump(top_features, f)
 
     """
     -------------------- PCA/Multi Feature Predictions ----------------------
@@ -441,18 +441,18 @@ def main(stride_numbers: List[int], phases: List[str],
         pca_pred_LH = None
 
     print('Features:')
-    pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath, lesion_significance=True, LH_pred=pca_pred_LH)
+    pcs_of_interest, pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred, stride_numbers, MultiFeatPath, lesion_significance=False, LH_pred=pca_pred_LH)
 
     if residuals and inst["condition"] == "APAChar_LowHigh":
         print('Residuals:')
-        residual_pcs_of_interest, residual_pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred_residual, stride_numbers, MultiResidualFeatPath, lesion_significance=True, LH_pred=pca_pred_LH)
+        residual_pcs_of_interest, residual_pcs_of_interest_criteria = gu.get_and_save_pcs_of_interest(pca_pred_residual, stride_numbers, MultiResidualFeatPath, lesion_significance=False, LH_pred=pca_pred_LH)
 
 
     # --------------- Plot run predicitions ---------------
     stride_mean_preds = defaultdict(list)
     residual_stride_mean_preds = defaultdict(list)
     for s in stride_numbers:
-        stride_pred_mean = regp.plot_aggregated_run_predictions(pca_pred, MultiFeatPath, phases[0], phases[1], s, condition, smooth_kernel=3)
+        stride_pred_mean = regp.plot_aggregated_run_predictions(pca_pred, MultiFeatPath, phases[0], phases[1], s, condition, smooth_kernel=3, error_bars=True)
         stride_mean_preds[s] = stride_pred_mean
         regp.plot_regression_loadings_PC_space_across_mice(pca_all, pca_pred, s, phases[0], phases[1], condition, MultiFeatPath)
 

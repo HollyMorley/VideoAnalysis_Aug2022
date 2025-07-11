@@ -10,6 +10,8 @@ import seaborn as sns
 from scipy.stats import pearsonr
 from scipy.ndimage import median_filter
 from scipy.stats import ttest_rel
+from scipy.stats import t
+
 
 from Analysis.Tools.config import (global_settings, condition_specific_settings, instance_settings)
 from Analysis.Characterisation_v2 import General_utils as gu
@@ -36,7 +38,7 @@ with open(LH_pca_path, 'rb') as f:
     LH_pca_data = pickle.load(f)
 
 class Learning:
-    def __init__(self, feature_data, feature_data_s0, pred_data, pca_data, save_dir):
+    def __init__(self, feature_data, feature_data_s0, pred_data, pca_data, save_dir, disturb_pred_file: str):
         self.LH_feature_data = feature_data
         self.LH_feature_data_s0 = feature_data_s0
         self.LH_pred = LH_pred_data
@@ -50,6 +52,22 @@ class Learning:
         self.slow_learning = {}
         self.fast_extinction = {}
         self.slow_extinction = {}
+
+        with open(disturb_pred_file, 'rb') as f:
+            self.disturb_pred_data = pickle.load(f)
+
+    def get_disturb_preds(self):
+        """
+        Returns: { mouse_id: (x_vals, y_pred_array) }
+        for stride==0 entries in self.disturb_pred_data
+        """
+        out = {}
+        for p in self.disturb_pred_data:
+            if p.stride == 0:
+                x = np.array(list(p.x_vals))
+                y = p.y_pred[0]
+                out[p.mouse_id] = (x, y)
+        return out
 
 
     def get_pcs(self, s=-1):
@@ -282,10 +300,27 @@ class Learning:
             plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
             plt.close(fig_pc)
 
-            # average across mice and plot in averages plot
-            pc_preds_mean = pc_preds_df.mean(axis=1)
+            # --- compute mean and 95% CI across mice ---
+            n_mice = pc_preds_df.shape[1]
+            mean_series = pc_preds_df.mean(axis=1)
+            sem_series = pc_preds_df.std(axis=1, ddof=1) / np.sqrt(n_mice)
+            ci_mult = t.ppf(0.975, df=n_mice - 1)  # two-tailed 95%
+            ci_series = sem_series * ci_mult
+
             pc_color = pu.get_color_pc(pc_index)
-            ax.plot(goal_runs + 1, pc_preds_mean, color=pc_color, linewidth=1, label=f'PC{pc}')
+            # plot shaded CI
+            ax.fill_between(goal_runs + 1,
+                            mean_series - ci_series,
+                            mean_series + ci_series,
+                            color=pc_color,
+                            alpha=0.08,
+                            linewidth=0)
+            # plot the mean line
+            ax.plot(goal_runs + 1,
+                    mean_series,
+                    color=pc_color,
+                    linewidth=1,
+                    label=f'PC{pc}')
 
         ax.set_xlabel('Trial number', fontsize=fs)
         ax.set_ylabel('Normalised Prediction', fontsize=fs)
@@ -370,11 +405,28 @@ class Learning:
             plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
             plt.close(fig_pc)
 
-            # average across mice
-            pcs_mean = pcs_df.mean(axis=0)
+            # --- compute mean and 95% CI across mice ---
+            n_mice = pcs_df.shape[0]
+            mean_vals = pcs_df.mean(axis=0)
+            sem_vals = pcs_df.std(axis=0, ddof=1) / np.sqrt(n_mice)
+            ci_mult = t.ppf(0.975, df=n_mice - 1)
+            ci_vals = sem_vals * ci_mult
 
             pc_color = pu.get_color_pc(pc_index)
-            ax.plot(goal_runs + 1, pcs_mean, color=pc_color, linewidth=1, label=f'PC{pc}')
+            # shaded CI
+            ax.fill_between(goal_runs + 1,
+                            mean_vals - ci_vals,
+                            mean_vals + ci_vals,
+                            color=pc_color,
+                            alpha=0.08,
+                            linewidth=0)
+            # mean line
+            ax.plot(goal_runs + 1,
+                    mean_vals,
+                    color=pc_color,
+                    linewidth=1,
+                    label=f'PC{pc}')
+
         ax.set_xlabel('Trial number', fontsize=fs)
         ax.set_ylabel('Normalised PC', fontsize=fs)
         ax.set_xlim(0, 160)
@@ -664,13 +716,13 @@ class Learning:
 
         for day_idx, day in enumerate(day_runs):
             data = preds_df.loc(axis=1)[day]
-            data_smoothed = data.apply(lambda x: median_filter(x, size=smooth_window, mode='nearest'))
-            data_av = data_smoothed.mean(axis=0)
+            #data_smoothed = data.apply(lambda x: median_filter(x, size=smooth_window, mode='nearest'))
+            data_av = data.mean(axis=0)
 
             # Determine x positions for this chunk within full x-axis
             x_positions = day + 1  # if your trial numbers start at 1
 
-            for mouse_id, pred in data_smoothed.iterrows():
+            for mouse_id, pred in data.iterrows():
                 ax.plot(x_positions, pred, label=mouse_id, alpha=0.5)
             ax.plot(x_positions, data_av, color='black', linewidth=2, label=f'Average Chunk {day_idx + 1}')
 
@@ -859,7 +911,10 @@ class Learning:
         # make MouseID the index
         learn_x_extinct_df.set_index('Mouse ID', inplace=True)
 
-        fig, ax = plt.subplots(figsize=(4, 4))
+        learn_extinct_diff = learn_x_extinct_df['Extinction Trial'] - learn_x_extinct_df['Learning Trial']
+        _, p = ttest_1samp(learn_extinct_diff, 0)
+
+        fig, (ax, ax_diff) = plt.subplots(1, 2, figsize=(5, 4), gridspec_kw={'width_ratios': [3, 1]})
 
         for mouse_id in learn_x_extinct_df.index:
             grp = learn_x_extinct_df.loc[mouse_id]
@@ -893,10 +948,152 @@ class Learning:
         ax.set_xticks(np.arange(0, xmax + 1, 20))
         ax.set_yticks(np.arange(0, ymax + 1, 5))
 
+        # Scatter plot difference (right)
+        for mouse in learn_extinct_diff.index:
+            diff = learn_extinct_diff[mouse]
+            mkr = pu.get_marker_style_mice(mouse)
+            col = pu.get_color_mice(mouse, speedordered=speed_ordered_mice)
+            jitter = np.random.normal(0, 0.01, size=1)  # small jitter for visibility
+            ax_diff.scatter(1 + jitter, diff, marker=mkr, s=50, edgecolor=col, facecolor='none', linewidth=1)
+        # plot mean difference and 95% CI
+        mean_diff = learn_extinct_diff.mean()
+        ci = 1.96 * learn_extinct_diff.std() / np.sqrt(len(learn_extinct_diff))
+        ax_diff.errorbar(
+            [1], mean_diff, yerr=ci, fmt='o', color='black', markersize=5, capsize=3, label='Mean ± 95% CI', elinewidth=0.5
+        )
+
+        # Format difference plot
+        ax_diff.set_xlim(0.95, 1.05)
+        ax_diff.axhline(0, color='grey', linestyle='--', linewidth=0.5)
+        ax_diff.set_ylabel('Extinction - Learning Trials', fontsize=fs)
+        ax_diff.tick_params(axis='x', labelsize=fs)
+        ax_diff.tick_params(axis='y', labelsize=fs)
+        ax_diff.spines['top'].set_visible(False)
+        ax_diff.spines['right'].set_visible(False)
+
+        # Set x-ticks as mouse ids for clarity, but you can tweak if too crowded
+        ax_diff.set_xticks([1])
+        ax_diff.set_xticklabels(['Diff'], fontsize=fs)
+
+        # Add significance text
+        if p < 0.05:
+            # Convert p-value to stars
+            if p < 0.001:
+                stars = '***'
+            elif p < 0.01:
+                stars = '**'
+            else:
+                stars = '*'
+            sig_text = stars
+        else:
+            sig_text = 'n.s.'
+
+        # Place significance text above scatter plot
+        ylim = ax_diff.get_ylim()
+        ax_diff.text(
+            0.5, 1, sig_text,
+            ha='center', va='top', fontsize=fs, transform=ax_diff.transAxes
+        )
+
+        plt.tight_layout()
+
         savepath = os.path.join(self.base_dir, 'Learning_vs_Extinction_Scatter')
         plt.savefig(f"{savepath}.png", format='png', bbox_inches='tight', dpi=300)
         plt.savefig(f"{savepath}.svg", format='svg', bbox_inches='tight', dpi=300)
         plt.close()
+
+    def plot_disturbance_by_prediction_interpolated(self,
+                                                    phase: str = 'APA2',
+                                                    desired_diameter: int = 3):
+        """
+        One plot of Low vs High APA tertiles → mean disturbance,
+        coloring each mouse by fast (blue), slow (red), or other (gray).
+        """
+        # 1) grab APA & disturbance preds
+        apa_preds = self.get_preds(pcwise=False, s=-1)  # {mouse: 160-array}
+        disturb_preds = self.get_disturb_preds()  # {mouse: (x_vals, y_vals)}
+
+        # 2) which mice?
+        mice = list(apa_preds.keys())
+        fast = set(self.fast_learning.keys())
+        slow = set(self.slow_learning.keys())
+
+        # 3) which trial-indices belong to this phase?
+        runs = np.array(expstuff['condition_exp_runs']
+                        ['APAChar']['Extended'][phase])
+
+        # 4) set up figure
+        fig, ax = plt.subplots(figsize=(4, 4))
+        low_vals, high_vals, colors, diffs = [], [], [], []
+
+        for m in mice:
+            # --- APA for this mouse ---
+            y_apa = apa_preds[m]
+            trials = np.arange(len(y_apa))
+            phase_mask = np.isin(trials, runs)
+            x_apa = trials[phase_mask]
+            y_apa = y_apa[phase_mask]
+
+            # --- interp disturbance to the APA trial points ---
+            x_dist, y_dist = disturb_preds[m]
+            y_dist_on_apa = np.interp(x_apa, x_dist, y_dist)
+
+            # --- tertiles of APA strength ---
+            order = np.argsort(y_apa)
+            third = len(order) // 3
+            bot_idx = order[:third]
+            top_idx = order[-third:]
+
+            bot_mean = y_dist_on_apa[bot_idx].mean()
+            top_mean = y_dist_on_apa[top_idx].mean()
+
+            low_vals.append(bot_mean)
+            high_vals.append(top_mean)
+            diff = bot_mean - top_mean
+            diffs.append(diff)
+
+            # choose color
+            if m in fast:
+                c = 'blue'
+            elif m in slow:
+                c = 'red'
+            else:
+                c = 'gray'
+            colors.append(c)
+
+            # draw the per‐mouse connector
+            ax.plot([1, 2], [bot_mean, top_mean],
+                    marker='o', markersize=desired_diameter,
+                    color=c, alpha=0.5)
+
+        # 5) scatter the Δ at x=3
+        s = np.pi * (desired_diameter / 2) ** 2
+        jit = np.random.normal(0, 0.02, size=len(diffs))
+        ax.scatter(3 + jit, diffs, s=s,
+                   c=colors, edgecolors='none', alpha=0.7)
+
+        # 6) legend handles
+        import matplotlib.patches as mpatches
+        handles = [
+            mpatches.Patch(color='blue', label='Fast learners'),
+            mpatches.Patch(color='red', label='Slow learners'),
+            mpatches.Patch(color='gray', label='Others'),
+        ]
+        ax.legend(handles=handles, loc='upper right', fontsize=8)
+
+        # 7) styling & save
+        ax.set_xticks([1, 2, 3])
+        ax.set_xticklabels(['Low', 'High', 'Δ'], fontsize=9)
+        ax.set_ylabel('Disturbance prediction', fontsize=10)
+        ax.set_title(f"{phase} — all mice", fontsize=11)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+
+        fname = f"Disturb_vs_Pred_interp_{phase}_all"
+        fig.savefig(os.path.join(self.base_dir, fname + '.png'), dpi=300)
+        fig.savefig(os.path.join(self.base_dir, fname + '.svg'), dpi=300)
+        plt.close(fig)
 
 
 def main():
@@ -908,7 +1105,9 @@ def main():
     chosen_pcs_extended = [1, 3, 5, 6, 7, 8]
 
     # Initialize the WhenAPA class with LH prediction data
-    learning = Learning(LH_preprocessed_data, LH_stride0_preprocessed_data, LH_pred_data, LH_pca_data, save_dir)
+    learning = Learning(LH_preprocessed_data, LH_stride0_preprocessed_data, LH_pred_data, LH_pca_data, save_dir,
+                        disturb_pred_file=r"H:\Characterisation\LH_subtract_res_0_APA1APA2-PCStot=60-PCSuse=12\APAChar_LowHigh_Extended\MultiFeaturePredictions\pca_predictions_APAChar_LowHigh.pkl"
+                        )
 
     learning.find_learned_trials(smoothing=None, phase='learning')
     learning.find_learned_trials(smoothing=None, phase='extinction')
@@ -916,6 +1115,11 @@ def main():
     print("Slow learners in learning phase:", learning.slow_learning)
     print("Fast learners in extinction phase:", learning.fast_extinction)
     print("Slow learners in extinction phase:", learning.slow_extinction)
+
+    learning.plot_learning_by_extinction_scatter()
+
+    learning.plot_prediction_delta()
+    learning.plot_prediction_per_day(fs=7)
 
     learning.plot_total_predictions_x_trial(smooth_window=3)
     learning.plot_total_predictions_x_trial(fast_slow='fast', smooth_window=3)
@@ -938,13 +1142,13 @@ def main():
     learning.plot_line_important_pcs_preds_x_trial(fast_slow='fast', chosen_pcs=other_pcs, smooth_window=10)
     learning.plot_line_important_pcs_preds_x_trial(fast_slow='slow', chosen_pcs=other_pcs, smooth_window=10)
 
-    learning.plot_prediction_delta()
-    learning.plot_prediction_per_day(fs=7)
 
-    learning.plot_learning_by_extinction_scatter()
+
 
     learning.fit_pcwise_regression_model(chosen_pcs=chosen_pcs)
 
+    for phase in ['APA1','APA2','APA']:
+        learning.plot_disturbance_by_prediction_interpolated(phase)
 
 
 if __name__ == '__main__':

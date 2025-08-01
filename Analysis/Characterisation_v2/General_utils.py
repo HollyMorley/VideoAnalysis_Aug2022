@@ -373,7 +373,7 @@ def get_and_save_pcs_of_interest(pca_pred, stride_numbers, savedir, conditions=N
             pcs_of_interest_criteria_df = pd.DataFrame(
                 [PC_sigs, mean_accs, uniformity_display],
                 index=['PC_sigs', 'mean_accs', 'uniformity'],
-                columns=np.arange(global_settings["pcs_to_use"]) + 1  # PC numbers as column labels
+                columns=np.arange(len(PC_sigs)) + 1  # PC numbers as column labels
             )
         elif accmse == 'mse':
             pcs_of_interest_criteria_df = pd.DataFrame(

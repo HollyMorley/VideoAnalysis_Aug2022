@@ -443,7 +443,7 @@ def calculate_PC_prediction_significances(pca_pred, stride, conditions, mice_thr
         # elif accmse == 'mse': # ie lower is better
         #     delta_acc_by_mouse = accuracies_full_model.mean(axis=2) - full_model_accuracy
 
-        pc_significances = np.zeros((global_settings['pcs_to_use'],))
+        pc_significances = np.zeros((delta_acc_by_mouse.shape[1],))
         for pc in np.arange(delta_acc_by_mouse.shape[1]):
             pc_acc = delta_acc_by_mouse[:, pc]
             stat = ttest_1samp(pc_acc, 0)

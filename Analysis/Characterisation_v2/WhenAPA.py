@@ -34,6 +34,7 @@ with open(LH_pred_path, 'rb') as f:
 with open(LH_pca_path, 'rb') as f:
     LH_pca_data = pickle.load(f)
 
+
 class WhenAPA:
     def __init__(self, LH_feature_data, LH_feature_data_s0, LH_pred_data, LH_pca_data, base_dir):
         self.LH_feature_data = LH_feature_data
@@ -48,6 +49,7 @@ class WhenAPA:
 
         # Collect accuracy data
         all_stride_accs = {}
+        all_stride_cv_accs = {}
         for s in self.strides:
             stride_mice_names = [pred.mouse_id for pred in self.LH_pred if pred.stride == s]
 
@@ -58,19 +60,26 @@ class WhenAPA:
             null_df = pd.DataFrame(stride_null_accs, index=stride_mice_names)
 
             delta_accs = accs_df - null_df
-            delta_accs = delta_accs.median(axis=1)
+            delta_accs = delta_accs.mean(axis=1)
 
             all_stride_accs[s] = delta_accs
+            all_stride_cv_accs[s] = accs_df.mean(axis=1)
 
         all_stride_accs_by_stride = pd.concat(all_stride_accs).reset_index()
         all_stride_accs_by_stride.columns = ['Stride', 'Mouse', 'Accuracy']
         all_stride_accs_by_stride['Stride_abs'] = all_stride_accs_by_stride['Stride'].abs()
         df = all_stride_accs_by_stride
 
+        for s in self.strides:
+            stride_acc = all_stride_cv_accs[s]
+            stride_acc_mean = stride_acc.mean()
+            print(f"Stride {s}: Mean CV Accuracy = {stride_acc_mean:.3f}")
+
+
         stride_order = sorted(df['Stride_abs'].unique())
         palette = {s: pu.get_color_stride(-s) for s in stride_order}
 
-        fig, ax = plt.subplots(figsize=(4, 3))
+        fig, ax = plt.subplots(figsize=(2, 3))
 
         means = []
         cis_lower = []
@@ -736,6 +745,14 @@ class WhenAPA:
             ax_delta.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
             ax_delta.set_title(label, fontsize=fs)
 
+            # Set y-axis limits/ticks for DELTA (multiples of 2, outward rounding)
+            delta_min = np.min([m - ci for m, ci in zip(delta_means, delta_CIs)])
+            delta_max = np.max([m + ci for m, ci in zip(delta_means, delta_CIs)])
+            delta_min_tick = self.outward_round(delta_min, 2, 'down')
+            delta_max_tick = self.outward_round(delta_max, 2, 'up')
+            ax_delta.set_ylim(delta_min_tick, delta_max_tick)
+            ax_delta.set_yticks(np.arange(delta_min_tick, delta_max_tick + 1, 2))
+
             # Add stars above error bars on delta plot
             for x, d_mean, d_ci, star in zip(stride_labels, delta_means, delta_CIs, stars):
                 y = d_mean + d_ci + 0.02
@@ -759,6 +776,20 @@ class WhenAPA:
             ax_lines.spines['top'].set_visible(False)
             ax_lines.legend(fontsize=fs, loc='best')
 
+            # Set y-axis limits/ticks for lines (multiples of 1, outward rounding)
+            all_y = np.concatenate([
+                [m - ci for m, ci in zip(apa_means, apa_CIs)],
+                [m + ci for m, ci in zip(apa_means, apa_CIs)],
+                [m - ci for m, ci in zip(wash_means, wash_CIs)],
+                [m + ci for m, ci in zip(wash_means, wash_CIs)],
+            ])
+            lines_min = np.min(all_y)
+            lines_max = np.max(all_y)
+            lines_min_tick = self.outward_round(lines_min, 1, 'down')
+            lines_max_tick = self.outward_round(lines_max, 1, 'up')
+            ax_lines.set_ylim(lines_min_tick, lines_max_tick)
+            ax_lines.set_yticks(np.arange(lines_min_tick, lines_max_tick + 1, 1))
+
             fig.tight_layout()
 
             # Save line plot
@@ -766,6 +797,18 @@ class WhenAPA:
             fig.savefig(f"{base}.png", bbox_inches='tight', dpi=300)
             fig.savefig(f"{base}.svg", bbox_inches='tight', dpi=300)
             plt.close(fig)
+
+    def outward_round(self, val, base, direction):
+        """
+        Rounds val outward to the nearest multiple of base.
+        direction: 'up' for max, 'down' for min.
+        """
+        if direction == 'up':
+            return base * np.ceil(val / base)
+        elif direction == 'down':
+            return base * np.floor(val / base)
+        else:
+            raise ValueError("direction must be 'up' or 'down'")
 
     def plot_pcs_timeseries_by_stride(self, fs=7, smooth_window=15):
         """
@@ -813,7 +856,7 @@ class WhenAPA:
         # --- For each PC, plot all strides (average across mice, with shaded SEM) ---
         for pc_idx, pc_label in enumerate(pc_labels):
 
-            fig, ax = plt.subplots(figsize=(7, 4))
+            fig, ax = plt.subplots(figsize=(5, 5))
 
             boxy = 1
             height = 0.02
@@ -853,8 +896,11 @@ class WhenAPA:
             ax.set_ylabel(f'Normalised {pc_label}', fontsize=fs)
             ax.set_title(f'{pc_label} timeseries by stride', fontsize=fs)
             ax.set_xlim(1, 160)
-            ax.set_xticks([10, 40, 60, 80, 110, 120, 135, 160])
-            ax.set_xticklabels(['10', '40', '60', '80', '110', '120', '135', '160'], fontsize=fs)
+            ax.set_xticks([0, 10, 40, 60, 80, 110, 120, 135, 160])
+            ax.set_xticklabels(['0', '10', '40', '60', '80', '110', '120', '135', '160'], fontsize=fs)
+            ax.set_ylim(-1, 1)
+            ax.set_yticks(np.arange(-1, 1.1, 0.5))
+            ax.set_yticklabels(np.arange(-1, 1.1, 0.5), fontsize=fs)
             ax.tick_params(axis='both', labelsize=fs)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
@@ -865,6 +911,105 @@ class WhenAPA:
             plt.savefig(f"{savepath}.svg", bbox_inches='tight', dpi=300)
             plt.close(fig)
 
+    def plot_stride_times(self, fs=7):
+        fps=247
+        stride_data, _ = gu.collect_stride_data('APAChar_LowHigh', 'Extended', None, 'APAChar_HighLow')
+        mice = condition_specific_settings['APAChar_LowHigh']['global_fs_mouse_ids']
+        strides = [0, -1, -2, -3]  # Transition and preceding strides
+
+        stride_times_per_mouse = {mouse: {} for mouse in mice}
+
+        for mouse in mice:
+            stride_stance_byDay_times = pd.DataFrame(index=np.arange(0,160), columns=strides, dtype=float)
+            mouse_stride_data = stride_data.loc[mouse]
+
+            # Find stride 0 stance frames (transition points)
+            stride0_mask = mouse_stride_data.loc(axis=1)['Stride_no'] == 0
+            stride0_data = mouse_stride_data.loc[stride0_mask]
+
+            # Use ForepawL and ForepawR data together, whichever is not NaN
+            stride0_stance_mask =  (stride0_data.loc[:, ('ForepawL', 'SwSt_discrete')] == locostuff['swst_vals_2025']['st']) | (stride0_data.loc[:, ('ForepawR', 'SwSt_discrete')] == locostuff['swst_vals_2025']['st'])
+            stride0_stance_frames = stride0_data[stride0_stance_mask].index.get_level_values('FrameIdx').to_numpy()
+            stride0_runs = stride0_data.loc[stride0_stance_mask].index.get_level_values('Run').unique()
+            assert len(stride0_runs) == len(stride0_stance_frames), "Mismatch between runs and stance frames for stride 0"
+            stride_stance_byDay_times.loc[stride0_runs, 0] = stride0_stance_frames / fps # in seconds
+
+            # Get stride -1, -2, -3 stance frames relative to stride 0
+            for s in strides[1:]:
+                stride_mask = mouse_stride_data.loc(axis=1)['Stride_no'] == s
+                stride_s_data = mouse_stride_data.loc[stride_mask]
+
+                stride_s_stance_mask = (stride_s_data.loc[:, ('ForepawL', 'SwSt_discrete')] == locostuff['swst_vals_2025']['st']) | (stride_s_data.loc[:, ('ForepawR', 'SwSt_discrete')] == locostuff['swst_vals_2025']['st'])
+                stride_s_stance_frames = stride_s_data[stride_s_stance_mask].index.get_level_values('FrameIdx').to_numpy()
+                stride_s_runs = stride_s_data.loc[stride_s_stance_mask].index.get_level_values('Run').unique()
+                assert len(stride_s_runs) == len(stride_s_stance_frames), f"Mismatch between runs and stance frames for stride {s}"
+                stride_stance_byDay_times.loc[stride_s_runs, s] = stride_s_stance_frames / fps  # in seconds
+
+            # trim stride_stance_byDay_times to only APA2 runs
+            apa_runs = expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']
+            stride_stance_byDay_times = stride_stance_byDay_times.loc[apa_runs]
+
+            # Store stride times for this mouse
+            stride_times_per_mouse[mouse] = stride_stance_byDay_times
+
+        all_mice_stride_diffs_times = {mouse: {} for mouse in mice}
+        for mouse in mice:
+            stride_diffs_times = pd.DataFrame(index=np.arange(60,110), columns=strides[1:], dtype=float)
+            for s in strides[1:]:
+                # Calculate time differences relative to stride 0
+                run = np.array(stride_times_per_mouse[mouse][s].index)
+                stride_diffs_times.loc[run,s] = stride_times_per_mouse[mouse][s] - stride_times_per_mouse[mouse][0]
+            all_mice_stride_diffs_times[mouse] = stride_diffs_times
+        # Concatenate all mice stride differences into a single DataFrame
+
+        all_mice_stride_diffs_times = pd.concat(all_mice_stride_diffs_times)
+        all_mice_stride_diffs_times.index.names = ['MouseID', 'Run']
+        mice_mean_stride_diffs_times = all_mice_stride_diffs_times.groupby(level='MouseID').mean()
+        mean_stride_diffs_times = mice_mean_stride_diffs_times.mean(axis=0)
+        std_stride_diffs_times = mice_mean_stride_diffs_times.std(axis=0)
+        # Calculate 95% CI
+        ci_stride_diffs_times = std_stride_diffs_times / np.sqrt(len(mice)) * 1.96
+
+        # Plotting
+        fig, ax = plt.subplots(figsize=(3, 2))
+        for mouse in mice:
+            mouse_color = pu.get_color_mice(mouse)
+            mouse_marker = pu.get_marker_style_mice(mouse)
+            ax.plot(mice_mean_stride_diffs_times.columns, mice_mean_stride_diffs_times.loc[mouse],
+                       color=mouse_color, marker=mouse_marker, linestyle='-', alpha=0.8, markersize=3, label= mouse)
+
+        ax.errorbar(mean_stride_diffs_times.index + 0.15, mean_stride_diffs_times.values,
+                    yerr=ci_stride_diffs_times.values, fmt='o-', color='k', capsize=3,
+                    elinewidth=1, markersize=4, linewidth=0, zorder=10)
+
+        # print the mean values for each stride above the error bars
+        y_max = mice_mean_stride_diffs_times.max().max() + ci_stride_diffs_times.max()
+        y_min = mice_mean_stride_diffs_times.min().min() - ci_stride_diffs_times.min()
+        for i, (stride, mean_time) in enumerate(mean_stride_diffs_times.items()):
+            ax.text(stride + 0.15, y_max, f"mean={mean_time:.2f}", ha='center', va='bottom', fontsize=fs-1)
+
+        y_min_rounded = np.floor(y_min * 10) / 10  # Round down to nearest 0.1
+        ax.set_ylim(0, y_min_rounded)
+        ax.set_xticks(strides[1:])
+        ax.set_xticklabels(strides[1:], fontsize=fs)
+        ax.set_xlabel('Stride', fontsize=fs)
+        ax.set_ylabel('Time from Transition (s)', fontsize=fs)
+        ax.tick_params(axis='both', labelsize=fs)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        ax.legend(
+            fontsize=fs, loc='upper left', bbox_to_anchor=(1, 1), frameon=False, ncol=1
+        )
+
+        fig.subplots_adjust(left=0.2, bottom=0.2, right=0.7, top=0.95)
+
+        savepath = os.path.join(self.base_dir, 'StrideTimes')
+        fig.savefig(f"{savepath}.png", bbox_inches='tight', dpi=300)
+        fig.savefig(f"{savepath}.svg", bbox_inches='tight', dpi=300)
+
+
+
 
 def main():
     save_dir = r"H:\Characterisation_v2\WhenAPA_1"
@@ -873,14 +1018,15 @@ def main():
     # Initialize the WhenAPA class with LH prediction data
     when_apa = WhenAPA(LH_preprocessed_data, LH_stride0_preprocessed_data, LH_pred_data, LH_pca_data, save_dir)
 
-    # Plot the accuracy of each stride model
-    when_apa.plot_accuracy_of_each_stride_model()
-    # when_apa.plot_corr_pc_weights_heatmap()
-    when_apa.plot_corr_pcs_heatmap(pcs_to_plot=None)
-    when_apa.plot_corr_pcs_heatmap(pcs_to_plot=[0,2,6])
+    # when_apa.plot_stride_times()
+    #
+    # # Plot the accuracy of each stride model
+    # when_apa.plot_accuracy_of_each_stride_model()
+    # # when_apa.plot_corr_pc_weights_heatmap()
+    # when_apa.plot_corr_pcs_heatmap(pcs_to_plot=None)
+    # when_apa.plot_corr_pcs_heatmap(pcs_to_plot=[0,2,6])
     when_apa.plot_line_pcs_apa_vs_wash()
-    when_apa.plot_pcs_timeseries_by_stride()
-
+    # when_apa.plot_pcs_timeseries_by_stride()
 
 
 if __name__ == '__main__':

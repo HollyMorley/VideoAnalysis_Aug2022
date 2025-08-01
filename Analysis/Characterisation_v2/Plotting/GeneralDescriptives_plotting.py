@@ -7,11 +7,41 @@ import matplotlib.ticker as ticker
 import os
 import pickle
 from matplotlib.patches import Patch
+from scipy.interpolate import interp1d
+import re
 
 from Helpers.Config_23 import *
 
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2 import Plotting_utils as pu
+
+
+def extract_bodypart_labels(feature_name, bodypart_names):
+    # Sort by length descending so Back12 is checked before Back1, etc.
+    sorted_names = sorted(bodypart_names, key=len, reverse=True)
+    matches = []
+    used_ranges = []
+
+    idx = 0
+    while len(matches) < 2 and idx < len(feature_name):
+        found = False
+        for bp in sorted_names:
+            if feature_name.startswith(bp, idx):
+                matches.append(bp)
+                idx += len(bp)
+                found = True
+                break
+        if not found:
+            idx += 1  # move forward in string if no match at current position
+
+    # If two matches found, return in order of appearance
+    if len(matches) >= 2:
+        return matches[0], matches[1]
+    elif len(matches) == 1:
+        return matches[0], ''
+    else:
+        return '', ''
+
 
 def plot_literature_parallels(feature_data, stride, phases, savedir, fs=7):
     features = ['stride_length|speed_correct:True', 'cadence', 'walking_speed|bodypart:Tail1, speed_correct:True',
@@ -208,17 +238,36 @@ def plot_angles(feature_data_notscaled, phases, stride, savedir):
                          p1=phases[0], p2=phases[1], stride=stride, feature=feature, savedir=savedir)
 
 def plot_angle_polar(angle_p1, angle_p2 ,p1, p2, stride, feature, savedir):
+    feature_name = angle_p1.name
+    bodypart_names = ['Toe', 'Knuckle', 'Ankle', 'Back1', 'Back12', 'Tail1', 'Tail12', 'Nose']
     short_feat = short_names.get(feature, feature)
+
+    angle_p1.index = angle_p1.index.set_names(['Stride', 'MouseID', 'FrameIdx'])
+    angle_p2.index = angle_p2.index.set_names(['Stride', 'MouseID', 'FrameIdx'])
+
+    # filter by stride
+    angle_p1 = angle_p1.loc(axis=0)[stride]
+    angle_p2 = angle_p2.loc(axis=0)[stride]
+
+    if 'ToeKnuckle' in feature_name or 'ToeAnkle' in feature_name:
+        # Flip the angles as they were accidentally calculated Knuckle-Toe and Ankle-Toe
+        angle_p1 = -angle_p1
+        angle_p2 = -angle_p2
+    if 'overhead_xref' in feature_name:
+        # so 0 degrees is facing forward, not backward
+        angle_p1 = -angle_p1
+        angle_p2 = -angle_p2
+
     # Group by run (assuming the run is on level=1) to compute the average across all observations per run
-    angle_p1_avg = angle_p1.groupby(level=1).mean()
-    angle_p2_avg = angle_p2.groupby(level=1).mean()
+    angle_p1_avg = angle_p1.groupby(level='MouseID').mean()
+    angle_p2_avg = angle_p2.groupby(level='MouseID').mean()
     # Convert from degrees to radians as polar histograms require radians
     theta_p1 = np.deg2rad(angle_p1_avg.values)
     theta_p2 = np.deg2rad(angle_p2_avg.values)
     # Define the bins for the polar histogram
     # Here we create 20 equal bins spanning from 0 to 2*pi
-    num_bins = 90
-    bins = np.linspace(0, 2 * np.pi, num_bins + 1)
+    num_bins = 180
+    bins = np.linspace(-np.pi, np.pi, num_bins + 1)
     # Compute histograms: counts of run averages falling within each bin
     hist_p1, _ = np.histogram(theta_p1, bins=bins)
     hist_p2, _ = np.histogram(theta_p2, bins=bins)
@@ -233,8 +282,22 @@ def plot_angle_polar(angle_p1, angle_p2 ,p1, p2, stride, feature, savedir):
     ax.set_title(short_feat)
     # Plot Phase 2
     ax.bar(bins[:-1], hist_p2, width=width, bottom=0.0, align='edge', linewidth=0, color=p2_col, alpha=0.6, label=p2)
+
+    ax.set_xticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
+    ax.set_xticklabels(['–180°', '–90°', '0°', '90°', '180°'])
+
+    # Extract labels automatically
+    bp1, bp2 = extract_bodypart_labels(feature_name, bodypart_names)
+
+    # Center label
+    ax.text(0, 0, bp2, ha='center', va='center', fontsize=12, fontweight='bold', color='dimgray')
+
+    # Outer label at 0 radians
+    r = ax.get_rmax() * 1.1
+    ax.text(0, r, bp1, ha='center', va='bottom', fontsize=12, color='dimgray')
+
     if 'yaw' in short_feat:
-        ax.set_theta_zero_location("W")
+        ax.set_theta_zero_location("E")
     elif 'pitch' in short_feat:
         ax.set_theta_zero_location("S")
     ax.set_theta_direction(1)
@@ -245,6 +308,251 @@ def plot_angle_polar(angle_p1, angle_p2 ,p1, p2, stride, feature, savedir):
     plt.savefig(f"{save_path}.png", dpi=300)
     plt.savefig(f"{save_path}.svg", dpi=300)
     plt.close()
+
+def plot_limb_positions(raw_data, phases, savedir, fs=7):
+    forelimb_parts = ['ForepawToe', 'ForepawKnuckle', 'ForepawAnkle', 'ForepawKnee']
+    y_midline = structural_stuff['belt_width'] / 2
+
+    for phase in phases:
+        # Get data from last stride before transition
+        for midx, mouse in enumerate(raw_data.keys()):
+            mouse_data = raw_data[mouse]
+            # Drop the 'Day' index level
+            mouse_data = mouse_data.droplevel('Day', axis=0)
+            mouse_data = mouse_data.loc(axis=0)[expstuff['condition_exp_runs']['APAChar']['Extended'][phase]]
+            for run in mouse_data.index.get_level_values('Run').unique():
+                run_data = mouse_data.loc(axis=0)[run]
+                transition_idx = run_data.index.get_level_values(level='FrameIdx')[run_data.index.get_level_values('RunStage') == 'Transition'][0]
+                transition_paw = run_data.loc(axis=1)['initiating_limb'].loc(axis=0)['Transition', transition_idx]
+
+                # Get the last stride before transition
+                stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw,'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+                stance_periods_idxs = run_data.loc(axis=0)['RunStart'].index.get_level_values(level='FrameIdx')[stance_periods_mask]
+                last_stance_idx = stance_periods_idxs[-1]
+                stride_data = run_data.loc(axis=0)['RunStart',np.arange(last_stance_idx,transition_idx)]
+
+                fig, ax = plt.subplots(figsize=(5, 2.5))
+                column_multi = pd.MultiIndex.from_product([forelimb_parts, ['x', 'y', 'z']], names=['BodyPart', 'Coord'])
+                run_coords = pd.DataFrame(index=stride_data.index.get_level_values(level='FrameIdx'), columns=column_multi)
+                for fidx, frame in enumerate(stride_data.index.get_level_values('FrameIdx')):
+                    frame_data = stride_data.loc(axis=0)['RunStart',frame]
+                    transition_paw_side = transition_paw.split('Forepaw')[1]  # 'R' or 'L'
+
+                    transition_paw_limbparts = [l+transition_paw_side for l in forelimb_parts]
+                    x = frame_data.loc[transition_paw_limbparts, 'x'].values
+                    y = frame_data.loc[transition_paw_limbparts, 'y'].values
+                    z = frame_data.loc[transition_paw_limbparts, 'z'].values
+
+                    if transition_paw_side == 'L':
+                        # Need to flip the y coords to mirror the left side to the right side
+                        mirrored_y = 2 * y_midline - y
+                        y = mirrored_y
+
+                    # Plot the limb positions
+                    ax.plot(x, z, marker='o', markersize=2, color='grey', alpha=0.5, linewidth=0.5)
+                    # Store the coordinates for the current frame
+                    col_x = [(part, 'x') for part in forelimb_parts]
+                    col_y = [(part, 'y') for part in forelimb_parts]
+                    col_z = [(part, 'z') for part in forelimb_parts]
+
+                    run_coords.loc[frame, col_x] = x
+                    run_coords.loc[frame, col_y] = y
+                    run_coords.loc[frame, col_z] = z
+
+                run_coords_mice_mean = run_coords.mean(axis=0)
+                # Plot the mean limb positions
+                ax.plot(run_coords_mice_mean.loc(axis=0)[forelimb_parts, 'x'], run_coords_mice_mean.loc(axis=0)[forelimb_parts, 'z'],
+                        marker='o', markersize=3, color='black', linewidth=1, label='Mean')
+
+
+def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_interp=100):
+    forelimb_parts = ['ForepawToe', 'ForepawKnuckle', 'ForepawAnkle', 'ForepawKnee']
+    mice = ['1035243', '1035244', '1035245', '1035246', '1035250', '1035297', '1035299', '1035301']
+    coords = ['x', 'y', 'z']
+    y_midline = structural_stuff['belt_width'] / 2
+
+    all_arr = {}
+    all_stride_lengths = []
+    for phase in phases:
+        phase_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase]
+        n_phase_runs = len(phase_runs)
+        n_mice = len(mice)
+        n_bps = len(forelimb_parts)
+        arr = np.full((n_mice, n_phase_runs, n_bps, 3, n_interp), np.nan)
+
+        for m, mouse in enumerate(mice):
+            mouse_data = raw_data[mouse].droplevel('Day', axis=0)
+            for r, run in enumerate(phase_runs):
+                if run not in mouse_runs[mouse]:
+                    print(f"Run {run} not in mouse {mouse} runs, skipping.")
+                    continue
+
+                run_data = mouse_data.loc(axis=0)[run]
+                transition_idx = run_data.index.get_level_values(level='FrameIdx')[run_data.index.get_level_values('RunStage') == 'Transition'][0]
+                transition_paw = run_data.loc(axis=1)['initiating_limb'].loc(axis=0)['Transition', transition_idx]
+                stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw, 'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+                stance_periods_idxs = run_data.loc(axis=0)['RunStart'].index.get_level_values(level='FrameIdx')[stance_periods_mask]
+                last_stance_idx = stance_periods_idxs[-1]
+                stride_data = run_data.loc(axis=0)['RunStart', np.arange(last_stance_idx, transition_idx)]
+
+                bp_side = transition_paw.split('Forepaw')[1]  # 'L' or 'R'
+
+                # 1. Reference for x: get from initiating paw at stride start and end
+                ref_bp = 'ForepawToe' + bp_side  # e.g., 'ForepawToeR'
+                x_ref_all = stride_data.loc(axis=1)[ref_bp, 'x'].values
+                x_start = x_ref_all[0]
+                x_end = x_ref_all[-1]
+
+                # 2. Stack all joints to get overall mean y/z for run (use a list or array)
+                y_all_joints = []
+                z_all_joints = []
+                for bp in forelimb_parts:
+                    bp_name = bp + bp_side
+                    try:
+                        y = stride_data.loc(axis=1)[bp_name, 'y'].values
+                        z = stride_data.loc(axis=1)[bp_name, 'z'].values
+                        y_all_joints.append(y)
+                        z_all_joints.append(z)
+                    except KeyError:
+                        continue
+                y_all_joints = np.concatenate(y_all_joints)
+                z_all_joints = np.concatenate(z_all_joints)
+                y_center = np.mean(y_all_joints)
+                z_center = np.mean(z_all_joints)
+
+                for b, bp in enumerate(forelimb_parts):
+                    bp_name = bp + bp_side
+                    x = stride_data.loc(axis=1)[bp_name, 'x'].values
+                    y = stride_data.loc(axis=1)[bp_name, 'y'].values
+                    z = stride_data.loc(axis=1)[bp_name, 'z'].values
+
+                    if np.isnan(x).any() or np.isnan(y).any() or np.isnan(z).any():
+                        continue
+                    if bp_side == 'L':
+                        y = 2 * y_midline - y
+                    n_pts = len(x)
+
+                    # --- NORMALISE ---
+                    # x: relative to stride start/end of reference toe/ankle
+                    x_norm = 100 * (x - x_start) / (x_end - x_start)
+                    # y/z: center by whole run mean
+                    y_norm = y - y_center
+                    z_norm = z - z_center
+
+                    interp_x = interp1d(np.linspace(0, 1, n_pts), x_norm, kind='linear')(np.linspace(0, 1, n_interp))
+                    interp_y = interp1d(np.linspace(0, 1, n_pts), y_norm, kind='linear')(np.linspace(0, 1, n_interp))
+                    interp_z = interp1d(np.linspace(0, 1, n_pts), z_norm, kind='linear')(np.linspace(0, 1, n_interp))
+                    arr[m, r, b, 0, :] = interp_x
+                    arr[m, r, b, 1, :] = interp_y
+                    arr[m, r, b, 2, :] = interp_z
+
+
+        # --- NEW: Stick-figure x-z trajectory plot for this phase ---
+        # 1. Compute the average x and z for each joint at each time point
+        mean_x = np.nanmean(arr[:, :, :, 0, :], axis=(0, 1))  # shape: [n_bps, n_interp]
+        mean_y = np.nanmean(arr[:, :, :, 1, :], axis=(0, 1))  # shape: [n_bps, n_interp]
+        mean_z = np.nanmean(arr[:, :, :, 2, :], axis=(0, 1))  # shape: [n_bps, n_interp]
+
+        # 2. Stick-figure sequence plot (trajectory through the stride)
+        fig, ax = plt.subplots(figsize=(6, 2))
+        # Plot stick figures for each timepoint (optional: stride through in steps for less clutter)
+        for t in range(n_interp):
+            xs = mean_x[:, t]
+            zs = mean_z[:, t]
+            ax.plot(xs, zs, marker='.', color='k', alpha=0.4, linewidth=0.5, markersize=1, zorder=1)
+        ax.set_title(phase, fontsize=fs)
+        ax.set_xlabel('x (normalised)', fontsize=fs)
+        ax.set_ylabel('z (centred)', fontsize=fs)
+        ax.tick_params(axis='both', which='major', labelsize=fs)
+        ax.set_ylim(-10, 10)
+        ax.set_yticks(np.arange(-10, 11, 5))
+        ax.set_yticklabels(np.arange(-10, 11, 5), fontsize=fs)
+        ax.set_xlim(-50, 100)
+        ax.set_xticks(np.arange(-50, 101, 50))
+        ax.set_xticklabels(np.arange(-50, 101, 50), fontsize=fs)
+        ax.set_aspect('equal')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        plt.tight_layout()
+        save_path = os.path.join(savedir, f"stick_trajectory_{phase}")
+        plt.savefig(f"{save_path}.png", dpi=400)
+        plt.savefig(f"{save_path}.svg", dpi=400)
+        plt.close(fig)
+
+        # plot 3d version
+        # 3D plot of the stick figure trajectory
+        fig = plt.figure(figsize=(5, 5))
+        ax = fig.add_subplot(111, projection='3d')
+        for t in range(n_interp):
+            xs = mean_x[:, t]
+            ys = mean_y[:, t]
+            zs = mean_z[:, t]
+            ax.plot(xs, ys, zs, marker='.', color='k', alpha=0.4, linewidth=0.5, markersize=1, zorder=1)
+        ax.set_xlim(np.nanmin(mean_x), np.nanmax(mean_x))
+        ax.set_ylim(np.nanmin(mean_y), np.nanmax(mean_y))
+        ax.set_zlim(np.nanmin(mean_z), np.nanmax(mean_z))
+
+        ax.set_title(phase, fontsize=fs)
+        ax.set_xlabel('x (normalised)', fontsize=fs)
+        ax.set_ylabel('y (centred)', fontsize=fs)
+        ax.set_zlabel('z (centred)', fontsize=fs)
+        ax.tick_params(axis='both', which='major', labelsize=fs)
+        # Calculate the ranges for each axis
+        x_range = np.nanmax(mean_x) - np.nanmin(mean_x)
+        y_range = np.nanmax(mean_y) - np.nanmin(mean_y)
+        z_range = np.nanmax(mean_z) - np.nanmin(mean_z)
+        ax.set_box_aspect([x_range, y_range, z_range])  # Matches real proportions!
+        #        plt.tight_layout()
+        plt.savefig(f"{savedir}/stick_trajectory_3d_{phase}.png", dpi=400)
+        plt.close(fig)
+
+        # 3. Mean stick-figure (average posture across stride)
+        # Recenter x to the toe at each timepoint before averaging
+        arr_toe_x = arr[:, :, 0, 0, :]  # [mouse, run, time] -- toe's x
+        # Subtract the toe x at each timepoint from all bodyparts for each run/mouse
+        arr_x_centered = arr[:, :, :, 0, :] - arr_toe_x[:, :, np.newaxis, :]
+        # Now avg_x gives you mean shape with toe at x=0 for each timepoint
+        mean_x_centered = np.nanmean(arr_x_centered, axis=(0, 1))  # shape: [n_bps, n_interp]
+        avg_x = np.nanmean(mean_x_centered, axis=1)
+        avg_z = np.nanmean(mean_z, axis=1)
+        std_x = np.nanstd(mean_x_centered, axis=1)
+        std_z = np.nanstd(mean_z, axis=1)
+
+
+        fig, ax = plt.subplots(figsize=(2.5, 2))
+        ax.plot(avg_x, avg_z, marker='o', color='black', linewidth=1, markersize=2, zorder=2)
+        # Plot error bars for std deviation
+        eb = ax.errorbar(avg_x, avg_z, xerr=std_x, yerr=std_z, fmt='none', ecolor='grey', elinewidth=0.5, capsize=2, zorder=1)
+        for bar in eb[2]:
+            bar.set_linestyle('--')
+
+        ax.set_title(phase, fontsize=fs)
+        ax.set_xlabel('x (normalised)', fontsize=fs)
+        ax.set_ylabel('z (centred)', fontsize=fs)
+        ax.set_ylim(-8,8)
+        ax.set_yticks(np.arange(-8, 9, 8))
+        ax.set_yticklabels(np.arange(-8, 9, 8), fontsize=fs)
+        ax.set_xlim(-40, 10)
+        ax.set_xticks(np.arange(-40, 11, 10))
+        ax.set_xticklabels(np.arange(-40, 11, 10), fontsize=fs)
+        ax.set_aspect('equal')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(axis='both', which='major', labelsize=fs)
+        plt.tight_layout()
+        save_path = os.path.join(savedir, f"stick_shape_{phase}")
+        plt.savefig(f"{save_path}.png", dpi=400)
+        plt.savefig(f"{save_path}.svg", dpi=400)
+        plt.close(fig)
+
+        all_arr[phase] = arr
+
+
+
+
+
+
+
 
 def handedness(raw_data):
     mice = raw_data.keys()
@@ -463,4 +771,22 @@ print("Loaded data from preprocessed_data_APAChar_LowHigh.pkl")
 with open(r"H:\Dual-belt_APAs\analysis\DLC_DualBelt\DualBelt_MyAnalysis\FilteredData\Round7_Jan25\APAChar_LowHigh\Extended\allmice.pickle",'rb') as file:
     raw_data = pickle.load(file)
 
-handedness(raw_data)
+indexes = data_LH['feature_data_notscaled'].loc(axis=0)[-1].index
+# If idx has two levels: mouse and run
+mouse_to_runs = {}
+for mouse, run in indexes:
+    mouse_to_runs.setdefault(mouse, []).append(run)
+
+# Convert to np arrays if you want
+mouse_to_runs = {mouse: np.array(runs) for mouse, runs in mouse_to_runs.items()}
+
+angle_save_dir = r"H:\Characterisation_v2\Angles"
+if not os.path.exists(angle_save_dir):
+    os.makedirs(angle_save_dir)
+
+
+plot_limb_positions_average(raw_data, mouse_to_runs, phases=['APA2', 'Wash2'], savedir=angle_save_dir, fs=7, n_interp=100)
+
+plot_angles(data_LH['feature_data_notscaled'], phases=['APA2', 'Wash2'], stride=-1,
+            savedir=angle_save_dir)
+# handedness(raw_data)

@@ -123,6 +123,7 @@ class CalculateMeasuresByStride():
         Returns the duration (in seconds) of the braking phase during stance. Here, braking is defined
         as the period (in stance) from the initial touchdown (first frame where the stepping limb is in stance)
         until the forward (x-axis) velocity of the stepping limb first becomes nonnegative.
+        !!!!! NOT TRUE !!!!! it's the time of maximal contact in z
         """
         # Select stance-phase frames for the stepping limb
         stance_mask = self.data_chunk.loc(axis=1)[self.stepping_limb, 'SwSt'] == locostuff['swst_vals_2025']['st']

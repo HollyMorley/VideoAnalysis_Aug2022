@@ -130,15 +130,29 @@ def get_color_stride(s):
         raise ValueError(f"Unknown stride: {s}")
     return color
 
-def get_color_pc(pc, colormap='gist_ncar', n_pcs=12):
+def get_color_pc(pc, colormap='gist_ncar', n_pcs=12, chosen_pcs=False):
     import matplotlib.colors as mcolors
-    # length of possible PCs is 12, so we can use the first 12 colors from Set1
-    if pc < 0 or pc >= n_pcs:
-        raise ValueError(f"PC index {pc} is out of range. Must be between 0 and {n_pcs - 1}.")
+    if not chosen_pcs:
+        # length of possible PCs is 12, so we can use the first 12 colors from Set1
+        if pc < 0 or pc >= n_pcs:
+            raise ValueError(f"PC index {pc} is out of range. Must be between 0 and {n_pcs - 1}.")
 
-    cm = plt.get_cmap(colormap)
-    color = mcolors.to_hex(cm(pc / (n_pcs - 1)))  # Normalize pc to [0, 1]
-
+        cm = plt.get_cmap(colormap)
+        color = mcolors.to_hex(cm(pc / (n_pcs - 1)))  # Normalize pc to [0, 1]
+    else:
+        # If chosen_pcs is True, we use a predefined set of colors
+        if pc == 1:
+            color = "#04A2A2"
+        elif pc == 3:
+            color = "#5B5EA6"
+        elif pc == 7:
+            color = "#BD2459"
+        elif pc == 5:
+            color = "#330000"
+        elif pc == 6:
+            color = "#dd1188"
+        elif pc == 8:
+            color = "#ffaa33"
     return color
 
 

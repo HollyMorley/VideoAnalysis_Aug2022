@@ -159,7 +159,8 @@ class RegRunner:
                                                             other_condition=self.other_condition,exp='APA_Char',save_dir=self.base_dir)
         rplot.plot_condition_comparison_pc_features(feature_data_norm, self.pca_data, self.reg_apa_predictions, -1, self.conditions, 'APA_Char', self.base_dir)
         rplot.plot_prediction_discrete_conditions(interp_preds, -1, self.conditions, 'APA_Char', self.base_dir)
-        gu.get_and_save_pcs_of_interest(self.reg_apa_predictions, [-1], self.base_dir, conditions=self.conditions, reglda='reg', accmse=performance_measure)
+        if not is_three_way:
+            gu.get_and_save_pcs_of_interest(self.reg_apa_predictions, [-1], self.base_dir, conditions=self.conditions, reglda='reg', accmse=performance_measure)
 
         if is_three_way:
             self.compare_conditions_loaded_apavswash()
@@ -169,6 +170,11 @@ class RegRunner:
         LH_pcs, LH_runs = self.filter_data(self.feature_data_norm_LowHigh, s, midx)
         LM_pcs, LM_runs = self.filter_data(self.feature_data_norm_LowMid, s, midx)
         HL_pcs, HL_runs = self.filter_data(self.feature_data_norm_HighLow, s, midx)
+
+        # trim to pcs 1,3,7 (actually 0,2,6 in 0-indexed)
+        LH_pcs = LH_pcs[:, [0,2,6]]
+        LM_pcs = LM_pcs[:, [0,2,6]]
+        HL_pcs = HL_pcs[:, [0,2,6]]
 
         pcs_all = np.vstack([LH_pcs, LM_pcs, HL_pcs])
         mean_pcs = pcs_all.mean(axis=0)
@@ -227,6 +233,10 @@ class RegRunner:
         pcs1, runs1 = self.filter_data(data_map[cond1], s, midx)
         pcs2, runs2 = self.filter_data(data_map[cond2], s, midx)
 
+        # trim to pcs 1,3,7 (actually 0,2,6 in 0-indexed)
+        pcs1 = pcs1[:, [0, 2, 6]]
+        pcs2 = pcs2[:, [0, 2, 6]]
+
         # 🔥 NEW: concatenate and z-score across conditions
         pcs_all = np.vstack([pcs1, pcs2])
         mean_pcs = pcs_all.mean(axis=0)
@@ -253,14 +263,19 @@ class RegRunner:
         num_folds = 10
         w, bal_acc, cv_acc, w_folds = reg.compute_regression(pcs.T, labels, folds=num_folds)
         pc_acc, y_preds, null_acc = reg.compute_regression_pcwise_prediction(pcs.T, labels, w)
+        w_single_pc, bal_acc_single_pc, cv_acc_single_pc, cv_acc_shuffle_single_pc, bal_acc_shuffle_single_pc = reg.compute_single_pc_regression(pcs.T, labels, folds=num_folds, shuffles=100)
+
         y_pred = np.dot(pcs, w.T)
 
-        pc_lesions_cv_acc = np.zeros((global_settings['pcs_to_use'], num_folds))
-        pc_lesions_w_folds = np.zeros((global_settings['pcs_to_use'], num_folds, global_settings['pcs_to_use']))
-        for pc in range(global_settings['pcs_to_use']):
+
+        num_pcs = pcs1.shape[1]
+        pc_lesions_cv_acc = np.zeros((num_pcs, num_folds))
+        pc_lesions_w_folds = np.zeros((num_pcs, num_folds, num_pcs))
+        for pc in range(num_pcs):
             cv_acc_lesion, w_folds_lesion = reg.compute_regression_lesion(pcs.T, labels, folds=num_folds, regressor_to_shuffle=pc)
             pc_lesions_cv_acc[pc, :] = cv_acc_lesion
             pc_lesions_w_folds[pc, :, :] = w_folds_lesion.squeeze()
+
 
         reg_data = dc.RegressionPredicitonData(
             conditions=[cond1, cond2],
@@ -277,7 +292,12 @@ class RegRunner:
             pc_acc=pc_acc,
             null_acc=null_acc,
             pc_lesions_cv_acc=pc_lesions_cv_acc,
-            pc_lesions_w_folds=pc_lesions_w_folds
+            pc_lesions_w_folds=pc_lesions_w_folds,
+            w_single_pc=w_single_pc,
+            bal_acc_single_pc= bal_acc_single_pc,
+            cv_acc_single_pc=cv_acc_single_pc,
+            cv_acc_shuffle_single_pc= cv_acc_shuffle_single_pc,
+            bal_acc_shuffle_single_pc= bal_acc_shuffle_single_pc
         )
         self.reg_apa_predictions.append(reg_data)
 
@@ -285,6 +305,8 @@ class RegRunner:
             other_cond = self.other_condition
             other_data = getattr(self, f'feature_data_norm_{other_cond.split("_")[-1]}')
             pcs_other, runs_other = self.filter_data(other_data, s, midx)
+            # trim to pcs 1,3,7 (actually 0,2,6 in 0-indexed)
+            pcs_other = pcs_other[:, [0, 2, 6]]
             runs_other_zeroed = runs_other - expstuff['condition_exp_runs']['APAChar']['Extended']['APA2'][0] + len(
                 expstuff['condition_exp_runs']['APAChar']['Extended']['APA2']) * 2
             y_pred_other = np.dot(pcs_other, w.T)
@@ -302,7 +324,14 @@ class RegRunner:
                 cv_acc=None,
                 w_folds=None,
                 pc_acc=None,
-                null_acc=None
+                null_acc=None,
+                pc_lesions_cv_acc=None,
+                pc_lesions_w_folds=None,
+                w_single_pc=None,
+                bal_acc_single_pc=None,
+                cv_acc_single_pc=None,
+                cv_acc_shuffle_single_pc=None,
+                bal_acc_shuffle_single_pc=None
             )
             self.reg_apa_predictions.append(reg_data_proj)
 
@@ -553,6 +582,7 @@ class RegRunner:
 
                     if sig == 'ns':
                         continue
+                    print(f"PC{pc} {cond1} vs {cond2}: p={pval:.3f}, stat={stat:.3f}, significance={sig}")
                     # Get x positions
                     x1 = x_pos_map[cond1]
                     x2 = x_pos_map[cond2]
@@ -650,6 +680,43 @@ class RegRunner:
         ax2.set_ylabel(f'{conditions[1]} APAlate - Washlate PC', fontsize=fs)
 
         for fig,ax,key in zip([fig1, fig2], [ax1, ax2], ['apa', 'diff']):
+            # add equality lines
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+            start = max(xlim[0], ylim[0])
+            end = min(xlim[1], ylim[1])
+            ax.plot([start, end], [start, end], color='r', linestyle=':', linewidth=0.5)
+
+            # The line y = -x crosses the rectangle at up to two points:
+            # Solve for y at xlim: y = -xlim[0], y = -xlim[1]
+            points = [
+                (xlim[0], -xlim[0]),
+                (xlim[1], -xlim[1])
+            ]
+
+            # Solve for x at ylim: x = -ylim[0], x = -ylim[1]
+            points += [
+                (-ylim[0], ylim[0]),
+                (-ylim[1], ylim[1])
+            ]
+
+            # Only keep points within both xlim and ylim
+            valid_points = [
+                (x, y)
+                for (x, y) in points
+                if (xlim[0] <= x <= xlim[1]) and (ylim[0] <= y <= ylim[1])
+            ]
+
+            # Remove duplicates (can occur if 0 is in bounds)
+            valid_points = list(dict.fromkeys(valid_points))
+
+            if len(valid_points) >= 2:
+                # Sort for visual consistency
+                valid_points = sorted(valid_points)
+                x_vals, y_vals = zip(*valid_points)
+                ax.plot(x_vals, y_vals, color='r', linestyle=':', linewidth=0.5)
+
+
             ax.axhline(0, color='k', linestyle='--', linewidth=0.5)
             ax.axvline(0, color='k', linestyle='--', linewidth=0.5)
             ax.spines['top'].set_visible(False)
@@ -660,7 +727,9 @@ class RegRunner:
                                                 label=f'PC{pc_num}') for pc_num in chosen_pcs]
             ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1), fontsize=fs - 1, frameon=False)
             fig.tight_layout()
-            fig.savefig(os.path.join(self.base_dir, f'Comparison_{conditions[0]}_{conditions[1]}_PCs{chosen_pcs}_{key}.png'), dpi=300)
+            savepath = os.path.join(self.base_dir, f'Comparison_{conditions[0]}_{conditions[1]}_PC{pc}_vs_PC{pc}_{key}')
+            fig.savefig(f"{savepath}.png", dpi=300)
+            fig.savefig(f"{savepath}.svg", dpi=300)
 
     def report_overall_model_accuracy(self,f):
         """
@@ -688,7 +757,7 @@ def main():
     all_conditions = ['APAChar_LowHigh', 'APAChar_LowMid', 'APAChar_HighLow']
 
     # 3-way regression
-    base_dir_3way = r"H:\Characterisation_v2\Compare_LH_LM_HL_regression"
+    base_dir_3way = r"H:\Characterisation_v2\Compare_LH_LM_HL_regression_chosen_pcs"
     runner = RegRunner(all_conditions, base_dir_3way)
 
     runner.compare_conditions_APA_correlations(['LowHigh','HighLow'], -1)
@@ -707,7 +776,7 @@ def main():
     # 2-way comparisons
     for cond1, cond2 in itertools.combinations(all_conditions, 2):
         other_cond = list(set(all_conditions) - {cond1, cond2})[0]
-        base_dir = rf"H:\Characterisation_v2\Compare_{cond1.split('_')[-1]}_vs_{cond2.split('_')[-1]}_regression"
+        base_dir = rf"H:\Characterisation_v2\Compare_{cond1.split('_')[-1]}_vs_{cond2.split('_')[-1]}_regression_chosen_pcs"
         print(f"Running comparison for {cond1} vs {cond2} with projection of {other_cond} in directory {base_dir}")
         runner = RegRunner([cond1, cond2], base_dir, other_condition=other_cond)
         runner.run()

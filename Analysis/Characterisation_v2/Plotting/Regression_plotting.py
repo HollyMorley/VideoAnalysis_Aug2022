@@ -14,6 +14,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as mcolors
 from matplotlib import ticker
 from scipy.ndimage import gaussian_filter1d
+from scipy.stats import ttest_rel
 
 
 from Helpers.Config_23 import *
@@ -554,10 +555,22 @@ def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir
     weights = [reg.pc_weights for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
     if len(np.array(weights).shape) == 3 and np.array(weights).shape[1] == 1:  # if weights are in shape (n_mice, 1, n_pcs) or similar
         weights = np.squeeze(weights, axis=1)
-    weights = np.array(weights)[:, :global_settings['pcs_to_plot']]
+    weights = np.array(weights)
+    if weights.shape[1]  == 3:
+        weights = weights[:, :weights.shape[1]]
+    else:
+        weights = weights[:, :global_settings["pcs_to_plot"]]
     mice_names = [reg.mouse_id for reg in reg_data if reg.stride == s and reg.phase == 'apa' and reg.conditions == conditions]
+    if weights.shape[1] == 3:
+        pc_labels = [1, 3, 7]
+    else:
+        # if more than 3 PCs, use numbers
+        pc_labels = [i for i in range(weights.shape[1])]
 
-    fig, ax = plt.subplots(figsize=(4, 8))
+    if weights.shape == 3:
+        fig, ax = plt.subplots(figsize=(4, 4))
+    else:
+        fig, ax = plt.subplots(figsize=(4, 8))
 
     w_norm = np.zeros_like(weights)
     for midx, mouse_weights in enumerate(weights):
@@ -565,13 +578,14 @@ def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir
 
         # max/abs normalisation
         max_abs = np.abs(mouse_weights).max()
-        w_mouse_norm = mouse_weights / max_abs if max_abs != 0 else mouse_weights
+        w_mouse_norm = mouse_weights / max_abs
         w_norm[midx] = w_mouse_norm
+        print(w_mouse_norm)
 
         ms = pu.get_marker_style_mice(mouse_name)
         ls = '-'
 
-        ax.plot(mouse_weights, np.arange(1, len(mouse_weights) + 1),
+        ax.plot(w_mouse_norm, np.arange(1, len(mouse_weights) + 1),
                 marker=ms, markersize=4, linestyle=ls, linewidth=0.5, label=mouse_name, color='k')
 
     ax.axvline(x=0, color='black', linestyle='--', alpha=0.4)
@@ -584,9 +598,14 @@ def plot_reg_weights_condition_comparison(reg_data, s, conditions, exp, save_dir
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(0.25))
     ax.tick_params(axis='x', which='major', bottom=True, top=False, length=4, width=1)
     ax.tick_params(axis='x', which='minor', bottom=True, top=False, length=2, width=1)
-    ax.set_ylim(0, global_settings["pcs_to_plot"] + 1)
-    ax.set_yticks(np.arange(1, global_settings["pcs_to_plot"] + 1))
-    ax.set_yticklabels(np.arange(1, global_settings["pcs_to_plot"] + 1), fontsize=fs)
+    if weights.shape[1] == 3:
+        ax.set_ylim(0, 4)
+        ax.set_yticks(np.arange(1, 4))
+        ax.set_yticklabels(pc_labels, fontsize=fs)
+    else:
+        ax.set_ylim(0, global_settings["pcs_to_plot"] + 1)
+        ax.set_yticks(np.arange(1, global_settings["pcs_to_plot"] + 1))
+        ax.set_yticklabels(np.arange(1, global_settings["pcs_to_plot"] + 1), fontsize=fs)
     ax.legend(fontsize=7, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., title=f"Mouse ID",
               title_fontsize=fs)
     ax.spines['top'].set_visible(False)
@@ -885,10 +904,41 @@ def plot_prediction_discrete_conditions(interp_preds, s, conditions, exp, save_d
         ax.plot(range(n_conditions), mouse_vals, linestyle='--', marker='o', markersize=3,
                 linewidth=1, alpha=0.3, color='grey', zorder=2)
 
+    # Paired t-tests and significance stars
+    y_max = np.max([np.nanmax(vals) for vals in data_to_plot])  # Get the maximum value plotted
+    star_offset = (np.ptp(ax.get_ylim()) or 1) * 0.08  # Offset above the top for each star line
+    line_height = y_max + star_offset
+
+    star_labels = {0.001: '***', 0.01: '**', 0.05: '*'}
+    for i in range(n_conditions):
+        for j in range(i + 1, n_conditions):
+            # Get mouse-wise means for this pair (as arrays, aligned by mouse)
+            group1 = means_by_mouse[i]
+            group2 = means_by_mouse[j]
+            # Remove mice with nan in either condition
+            mask = ~(group1.isna() | group2.isna())
+            t_stat, p_val = ttest_rel(group1[mask], group2[mask])
+
+            # Assign stars if significant
+            star = None
+            for thresh, label in star_labels.items():
+                if p_val < thresh:
+                    star = label
+                    break
+            if star:
+                # Plot bracket and stars
+                x1, x2 = i, j
+                ax.plot([x1, x1, x2, x2],
+                        [line_height, line_height + star_offset / 3, line_height + star_offset / 3, line_height],
+                        color='k', lw=1.0, zorder=10)
+                ax.text((x1 + x2) / 2, line_height + star_offset / 2, star, ha='center', va='bottom',
+                        fontsize=fs + 2, color='k')
+                line_height += star_offset * 1.2  # Stack if multiple stars
+
     ax.set_xticks(range(n_conditions))
     ax.set_xticklabels(cond_labels)
     ax.set_xlim(-0.5, n_conditions - 0.5)
-    ax.set_ylim(-0.5, 0.5)
+    ax.set_ylim(-0.5, 0.7)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     plt.xticks(fontsize=fs)
@@ -950,6 +1000,11 @@ def mouse_sign_flip_with_LH(pca_pred, LH_pca_pred, s, condition, savedir, fs=7):
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_color('k')
         ax.grid(False)
+
+        ax.set_title(f"PC{pc}", fontsize=fs)
+
+        ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True, labelsize=fs)
+        plt.tight_layout()
 
         save_path = os.path.join(savedir, f"Mouse_sign_LH_flip_{pc}_stride{s}_{condition_name}")
         plt.savefig(f"{save_path}.png", dpi=300)

@@ -9,9 +9,11 @@ import pickle
 from matplotlib.patches import Patch
 from scipy.interpolate import interp1d
 import re
+import matplotlib.patches as mpatches
 
 from Helpers.Config_23 import *
 
+from Helpers import utils
 from Analysis.Characterisation_v2 import General_utils as gu
 from Analysis.Characterisation_v2 import Plotting_utils as pu
 
@@ -372,7 +374,8 @@ def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_i
     y_midline = structural_stuff['belt_width'] / 2
 
     all_arr = {}
-    all_stride_lengths = []
+    real_mid_strides = {phase: [] for phase in phases}  # Will hold [n_runs x n_bps x 2] (x, z) for each phase
+
     for phase in phases:
         phase_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase]
         n_phase_runs = len(phase_runs)
@@ -388,14 +391,40 @@ def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_i
                     continue
 
                 run_data = mouse_data.loc(axis=0)[run]
+                # if sum(run_data.index.get_level_values('RunStage') == 'Transition') == 0:
+                #     continue
                 transition_idx = run_data.index.get_level_values(level='FrameIdx')[run_data.index.get_level_values('RunStage') == 'Transition'][0]
                 transition_paw = run_data.loc(axis=1)['initiating_limb'].loc(axis=0)['Transition', transition_idx]
-                stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw, 'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+                stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw, 'SwSt'] == locostuff['swst_vals_2025']['st']
                 stance_periods_idxs = run_data.loc(axis=0)['RunStart'].index.get_level_values(level='FrameIdx')[stance_periods_mask]
-                last_stance_idx = stance_periods_idxs[-1]
+                stance_chunks = utils.Utils().find_blocks(stance_periods_idxs, gap_threshold=10, block_min_size=10)
+                last_stance_idx = stance_chunks[-1][0]
+
+                # transition_idx = run_data.index.get_level_values(level='FrameIdx')[run_data.index.get_level_values('RunStage') == 'Transition'][0]
+                # transition_paw = run_data.loc(axis=1)['initiating_limb'].loc(axis=0)['Transition', transition_idx]
+                # stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw, 'SwSt_discrete'] == locostuff['swst_vals_2025']['st']
+                # stance_periods_idxs = run_data.loc(axis=0)['RunStart'].index.get_level_values(level='FrameIdx')[stance_periods_mask]
+                # last_stance_idx = stance_periods_idxs[-1]
                 stride_data = run_data.loc(axis=0)['RunStart', np.arange(last_stance_idx, transition_idx)]
 
                 bp_side = transition_paw.split('Forepaw')[1]  # 'L' or 'R'
+
+                # Get the true 50% timepoint joint positions (x, z) for each run
+                xz_joint = []
+                n_frames = stride_data.shape[0]
+                t_idx = int(round(n_frames / 2)) if n_frames > 0 else 0
+                for bp in forelimb_parts:
+                    bp_name = bp + bp_side
+                    try:
+                        x = stride_data.loc(axis=1)[bp_name, 'x'].values
+                        z = stride_data.loc(axis=1)[bp_name, 'z'].values
+                        # pick midpoint of stride
+                        x_val = x[t_idx] if t_idx < len(x) else np.nan
+                        z_val = z[t_idx] if t_idx < len(z) else np.nan
+                        xz_joint.append([x_val, z_val])
+                    except Exception:
+                        xz_joint.append([np.nan, np.nan])
+                real_mid_strides[phase].append(xz_joint)
 
                 # 1. Reference for x: get from initiating paw at stride start and end
                 ref_bp = 'ForepawToe' + bp_side  # e.g., 'ForepawToeR'
@@ -446,8 +475,13 @@ def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_i
                     arr[m, r, b, 1, :] = interp_y
                     arr[m, r, b, 2, :] = interp_z
 
+                stride_len = x_end - x_start
+                if 'stride_lengths' not in locals():
+                    stride_lengths = {ph: [] for ph in phases}
+                stride_lengths[phase].append(stride_len)
 
-        # --- NEW: Stick-figure x-z trajectory plot for this phase ---
+        mean_stride_len = np.nanmean(stride_lengths[phase])
+
         # 1. Compute the average x and z for each joint at each time point
         mean_x = np.nanmean(arr[:, :, :, 0, :], axis=(0, 1))  # shape: [n_bps, n_interp]
         mean_y = np.nanmean(arr[:, :, :, 1, :], axis=(0, 1))  # shape: [n_bps, n_interp]
@@ -460,6 +494,18 @@ def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_i
             xs = mean_x[:, t]
             zs = mean_z[:, t]
             ax.plot(xs, zs, marker='.', color='k', alpha=0.4, linewidth=0.5, markersize=1, zorder=1)
+        desired_mm = 10  # or px, depending on your units
+        # How big is this in normalised units?
+        if mean_stride_len > 0:
+            scale_bar_norm = 100 * (desired_mm / mean_stride_len)
+        else:
+            scale_bar_norm = 0
+        # Draw scale bar (10 mm)
+        sb_x_start = -40  # or pick a corner that works for your plot
+        sb_y = -9.5  # just below your lowest stick
+        ax.hlines(sb_y, sb_x_start, sb_x_start + scale_bar_norm, color='black', linewidth=2)
+        ax.text(sb_x_start + scale_bar_norm / 2, sb_y - 1.5, '10 mm', ha='center', va='top', fontsize=fs)
+
         ax.set_title(phase, fontsize=fs)
         ax.set_xlabel('x (normalised)', fontsize=fs)
         ax.set_ylabel('z (centred)', fontsize=fs)
@@ -547,11 +593,288 @@ def plot_limb_positions_average(raw_data, mouse_runs, phases, savedir, fs=7, n_i
 
         all_arr[phase] = arr
 
+    fig, ax = plt.subplots(figsize=(3, 4))
+    colors = {'APA2': 'blue', 'Wash2': 'red'}
+    for phase in phases:
+        arr_mid = np.array(real_mid_strides[phase])  # shape: [n_runs, n_bps, 2]
+        mean_x = np.nanmean(arr_mid[:, :, 0], axis=0)
+        mean_z = np.nanmean(arr_mid[:, :, 1], axis=0)
+        ax.plot(mean_x, mean_z, marker='o', color=colors.get(phase, 'k'), linewidth=2, markersize=6, label=phase)
+        for i, bp in enumerate(forelimb_parts):
+            ax.text(mean_x[i], mean_z[i], bp, fontsize=8, color=colors.get(phase, 'k'))
+    ax.set_xlabel('x (real units)', fontsize=fs)
+    ax.set_ylabel('z (real units)', fontsize=fs)
+    ax.legend()
+    ax.set_title('Mean stick figure at 50% stride (real units)', fontsize=fs)
+    ax.set_aspect('equal')
+    plt.tight_layout()
+    plt.savefig(os.path.join(savedir, "stick_shape_50pct_real.png"), dpi=400)
+    plt.savefig(os.path.join(savedir, "stick_shape_50pct_real.svg"), dpi=400)
+    plt.close(fig)
 
 
+def plot_nose_back_tail_averages(raw_data, mouse_runs, phases, savedir, fs=7, n_interp=100):
+    body_parts = [
+        'Nose', 'EarR', 'EarL',
+        'Back1', 'Back2', 'Back3', 'Back4', 'Back5', 'Back6', 'Back7', 'Back8', 'Back9', 'Back10', 'Back11', 'Back12',
+        'Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7', 'Tail8', 'Tail9', 'Tail10', 'Tail11', 'Tail12',
+    ]
+
+    mice = ['1035243', '1035244', '1035245', '1035246', '1035250', '1035297', '1035299', '1035301']
+
+    # --- 1. Calculate mean back/tail lengths and nose/ear offsets from Back1 ---
+    back_lengths, tail_lengths = [], []
+    nose_offsets, earr_offsets, earl_offsets = [], [], []
+    for mouse in mice:
+        mouse_data = raw_data[mouse].droplevel('Day', axis=0)
+        for phase in phases:
+            phase_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase]
+            for run in phase_runs:
+                if run not in mouse_runs[mouse]:
+                    continue
+                run_data = mouse_data.loc(axis=0)[run]
+                try:
+                    # Back: Back1 to Back12, Tail: Tail1 to Tail12
+                    back1_x = run_data.loc(axis=1)['Back1', 'x'].values
+                    back12_x = run_data.loc(axis=1)['Back12', 'x'].values
+                    tail1_x = run_data.loc(axis=1)['Tail1', 'x'].values
+                    tail12_x = run_data.loc(axis=1)['Tail12', 'x'].values
+                    nose_x = run_data.loc(axis=1)['Nose', 'x'].values
+                    earr_x = run_data.loc(axis=1)['EarR', 'x'].values
+                    earl_x = run_data.loc(axis=1)['EarL', 'x'].values
+
+                    back_lengths.append(np.nanmean(np.abs(back12_x - back1_x)))
+                    tail_lengths.append(np.nanmean(np.abs(tail12_x - tail1_x)))
+                    nose_offsets.append(np.nanmean(back1_x - nose_x))
+                    earr_offsets.append(np.nanmean(back1_x - earr_x))
+                    earl_offsets.append(np.nanmean(back1_x - earl_x))
+                except Exception:
+                    continue
+
+    mean_back_length = np.nanmean(back_lengths)
+    mean_tail_length = np.nanmean(tail_lengths)
+    mean_nose_offset = np.nanmean(nose_offsets)
+    mean_earr_offset = np.nanmean(earr_offsets)
+    mean_earl_offset = np.nanmean(earl_offsets)
+
+    # --- 2. Set up template x positions ---
+    n_back = 12
+    n_tail = 12
+    back_xs = np.linspace(0, mean_back_length, n_back)      # Back1 = 0, Back12 = mean_back_length
+    tail_xs = np.linspace(mean_back_length, mean_back_length + mean_tail_length, n_tail)
+    bp_xvals = {
+        'Nose': 0 + mean_nose_offset,
+        'EarR': 0 + mean_earr_offset,
+        'EarL': 0 + mean_earl_offset,
+    }
+    for i in range(n_back):
+        bp_xvals[f'Back{i + 1}'] = back_xs[i]
+    for i in range(n_tail):
+        bp_xvals[f'Tail{i + 1}'] = tail_xs[i]
+
+    all_arr = {}
+    stride_lengths = {ph: [] for ph in phases}
+    phase_shapes = {}
+
+    for phase in phases:
+        phase_runs = expstuff['condition_exp_runs']['APAChar']['Extended'][phase]
+        n_phase_runs = len(phase_runs)
+        n_mice = len(mice)
+        n_bps = len(body_parts)
+        arr = np.full((n_mice, n_phase_runs, n_bps, 3, n_interp), np.nan)
+
+        for m, mouse in enumerate(mice):
+            mouse_data = raw_data[mouse].droplevel('Day', axis=0)
+            for r, run in enumerate(phase_runs):
+                print(f"Processing mouse {mouse}, run {run}, phase {phase}")
+                if run not in mouse_runs[mouse]:
+                    print(f"Run {run} not in mouse {mouse} runs, skipping.")
+                    continue
+
+                run_data = mouse_data.loc(axis=0)[run]
+                transition_idx = run_data.index.get_level_values(level='FrameIdx')[run_data.index.get_level_values('RunStage') == 'Transition'][0]
+                transition_paw = run_data.loc(axis=1)['initiating_limb'].loc(axis=0)['Transition', transition_idx]
+                stance_periods_mask = run_data.loc(axis=0)['RunStart'].loc(axis=1)[transition_paw, 'SwSt'] == locostuff['swst_vals_2025']['st']
+                stance_periods_idxs = run_data.loc(axis=0)['RunStart'].index.get_level_values(level='FrameIdx')[stance_periods_mask]
+                stance_chunks = utils.Utils().find_blocks(stance_periods_idxs, gap_threshold=10, block_min_size=10)
+                last_stance_idx = stance_chunks[-1][0]
+                stride_data = run_data.loc(axis=0)['RunStart', np.arange(last_stance_idx, transition_idx)]
+
+                # Reference: Back12 x at stride start/end
+                ref_bp = 'Back12'
+                try:
+                    x_ref_all = stride_data.loc(axis=1)[ref_bp, 'x'].values
+                except KeyError:
+                    continue
+                x_start = x_ref_all[0]
+                x_end = x_ref_all[-1]
+
+                stride_len = x_end - x_start
+                stride_lengths[phase].append(stride_len)
+
+                for b, bp in enumerate(body_parts):
+                    try:
+                        x = stride_data.loc(axis=1)[bp, 'x'].values
+                        y = stride_data.loc(axis=1)[bp, 'y'].values
+                        z = stride_data.loc(axis=1)[bp, 'z'].values
+                    except KeyError:
+                        continue
+                    if np.isnan(x).any() or np.isnan(y).any() or np.isnan(z).any():
+                        continue
+                    n_pts = len(x)
+
+                    # Use fixed template x; interpolate y/z as before
+                    x_fixed = bp_xvals[bp]
+                    y_ref = np.mean(np.mean(stride_data.loc(axis=1)[['TransitionR', 'TransitionL'], 'y'].values, axis=1))
+                    z_ref = np.mean(np.mean(stride_data.loc(axis=1)[['TransitionR', 'TransitionL'], 'z'].values, axis=1))
+                    y_norm = y - y_ref
+                    z_norm = z - z_ref
+                    interp_x = np.full(n_interp, x_fixed)
+                    interp_y = interp1d(np.linspace(0, 1, n_pts), y_norm, kind='linear')(np.linspace(0, 1, n_interp))
+                    interp_z = interp1d(np.linspace(0, 1, n_pts), z_norm, kind='linear')(np.linspace(0, 1, n_interp))
+                    arr[m, r, b, 0, :] = interp_x
+                    arr[m, r, b, 1, :] = interp_y
+                    arr[m, r, b, 2, :] = interp_z
+
+        # -- Mean and std across runs and mice for each body part, at each time point --
+        mean_x = np.nanmean(arr[:, :, :, 0, :], axis=(0, 1))
+        mean_z = np.nanmean(arr[:, :, :, 2, :], axis=(0, 1))
+        mean_y = np.nanmean(arr[:, :, :, 1, :], axis=(0, 1))
+        std_x = np.nanstd(arr[:, :, :, 0, :], axis=(0, 1))
+        std_z = np.nanstd(arr[:, :, :, 2, :], axis=(0, 1))
+
+        # -- Store mean shape for this phase for summary plot --
+        avg_x = np.array([bp_xvals[bp] for bp in body_parts])
+        avg_z = np.nanmean(mean_z, axis=1)
+        avg_y = np.nanmean(mean_y, axis=1)
+        phase_shapes[phase] = (avg_x, avg_y, avg_z)
+
+        # -- Optionally plot and save individual phase shapes as before --
+        fig, ax = plt.subplots(figsize=(4, 2.5))
+        ax.plot(avg_x, avg_z, marker='o', color='black', linewidth=2, markersize=4, zorder=2)
+        for i, bp in enumerate(body_parts):
+            ax.text(avg_x[i], avg_z[i], bp, fontsize=fs-1, ha='right', va='center', color='black', zorder=3)
+        ax.set_title(f"{phase} (mean shape)", fontsize=fs)
+        ax.set_xlabel('x (mm, fixed template)', fontsize=fs)
+        ax.set_ylabel('z (centred)', fontsize=fs)
+        # ax.set_ylim(0, 40)
+        # ax.set_xlim(-10, mean_back_length + mean_tail_length + 10)
+        ax.invert_xaxis()  # Invert x-axis: mouse faces left
+        ax.set_aspect('equal')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(axis='both', which='major', labelsize=fs)
+        plt.tight_layout()
+        save_path = os.path.join(savedir, f"body_shape_{phase}")
+        plt.savefig(f"{save_path}.png", dpi=400)
+        plt.savefig(f"{save_path}.svg", dpi=400)
+        plt.close(fig)
+
+        all_arr[phase] = arr
+
+    # --- Plot APA and Wash phases together on the same figure ---
+
+    fig, ax = plt.subplots(figsize=(6, 2))
+    for p in phases:
+        avg_x, _, avg_z = phase_shapes[p]
+        color = pu.get_color_phase(p)
+        ax.plot(avg_x[[0,1]], avg_z[[0,1]], marker='o', color=color, linewidth=1, markersize=1, label=p)
+        ax.plot(avg_x[[0,2]], avg_z[[0,2]], marker='o', color=color, linewidth=1, markersize=1)
+        ax.plot(avg_x[[1,2]], avg_z[[1,2]], marker='o', color=color, linewidth=1, markersize=1)
+        ax.plot(avg_x[[0,3]], avg_z[[0,3]], marker='o', color=color, linewidth=1, markersize=1)
+        ax.plot(avg_x[[1,3]], avg_z[[1,3]], marker='o', color=color, linewidth=1, markersize=1)
+        ax.plot(avg_x[[2,3]], avg_z[[2,3]], marker='o', color=color, linewidth=1, markersize=1)
+        ax.plot(avg_x[3:], avg_z[3:], marker='o', color=color, linewidth=1, markersize=1)
+
+    # for i, bp in enumerate(body_parts):
+    #     ax.text(avg_x_APA[i], avg_z_APA[i], bp, fontsize=fs-1, ha='right', va='center', color='blue', alpha=0.7)
+    #     ax.text(avg_x_Wash[i], avg_z_Wash[i], bp, fontsize=fs-1, ha='left', va='center', color='red', alpha=0.7)
+    ax.set_xlabel('x (mm, fixed template)', fontsize=fs)
+    ax.set_ylabel('z (centred)', fontsize=fs)
+    ax.set_xlim(-30, mean_back_length + mean_tail_length + 10)
+    ax.set_ylim(0,40)
+
+    ax.invert_xaxis()
+    ax.set_aspect('equal')
+    ax.legend(fontsize=fs)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.tick_params(axis='both', which='major', labelsize=fs)
+    plt.tight_layout()
+    save_path = os.path.join(savedir, "body_shape_APA_vs_Wash")
+    plt.savefig(f"{save_path}.png", dpi=400)
+    plt.savefig(f"{save_path}.svg", dpi=400)
+    plt.close(fig)
 
 
+    #### HEAD PLOTS
+    # Only keep relevant labels
+    head_labels = ['Nose', 'EarR', 'EarL', 'Back1']
 
+    # Gather for each phase: mean x/y/z for Nose, EarR, EarL, Back1
+    head_data = {}
+    for phase in phases:
+        avg_x, avg_y, avg_z = phase_shapes[phase]
+        idxs = [body_parts.index(bp) for bp in head_labels]
+        head_xyz = np.stack([
+            avg_x[idxs],
+            avg_y[idxs],
+            avg_z[idxs]
+        ], axis=1)  # shape (4, 3)
+        head_data[phase] = head_xyz
+
+    # Align all heads so Back1 is at (0, 0, 0)
+    for phase in phases:
+        base = head_data[phase][3, :]  # Back1: index 3 in head_labels
+        head_data[phase] = head_data[phase] - base
+
+    # 3D Plot
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    fig = plt.figure(figsize=(6, 4))
+    ax = fig.add_subplot(111, projection='3d')
+
+    for i, phase in enumerate(phases):
+        xyz = head_data[phase]
+        color = pu.get_color_phase(phase)
+        xs, ys, zs = xyz[:3, 0] * -1, xyz[:3, 1], xyz[:3, 2]
+
+        # If this is Wash (assume phases[1]), shift a tiny bit in z
+        if i == 1:
+            zs = zs + 0.02  # Small shift to bring on top
+
+        # Plot the triangle outline
+        ax.plot(np.append(xs, xs[0]), np.append(ys, ys[0]), np.append(zs, zs[0]), 'o-', color=color, label=phase,
+                zorder=10 + i)
+        # Plot the filled patch (triangle)
+        verts = [list(zip(xs, ys, zs))]
+        poly = Poly3DCollection(verts, color=color, alpha=0.9, zorder=10 + i)
+        ax.add_collection3d(poly)
+        ax.scatter(0, 0, 0, color='k', marker='x', s=30, alpha=1, zorder=11 + i)
+
+    ax.set_xlabel('x (mm, rel. to Back1)', fontsize=fs)
+    ax.set_ylabel('y (mm, rel. to Back1)', fontsize=fs)
+    ax.set_zlabel('z (mm, rel. to Back1)', fontsize=fs)
+    ax.set_title('Head angle (3D)', fontsize=fs)
+    ax.view_init(elev=3.455504227316453, azim=-82.90072343763637)
+    ax.legend()
+    # Remove all panes (background walls)
+    ax.xaxis.pane.set_visible(False)
+    ax.yaxis.pane.set_visible(False)
+    ax.zaxis.pane.set_visible(False)
+    # Also remove the edges around panes (optional)
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
+    # remove grid and background
+    ax.grid(False)
+    ax.set_facecolor('white')
+    fig.patch.set_facecolor('white')  # or 'none' for transparent
+    plt.tight_layout()
+    plt.savefig(os.path.join(savedir, "head_angle_3D.png"), dpi=400)
+    plt.savefig(os.path.join(savedir, "head_angle_3D.svg"), dpi=400)
+    plt.close(fig)
+
+    print("Saved all plots to", savedir)
 
 
 def handedness(raw_data):
@@ -784,7 +1107,7 @@ angle_save_dir = r"H:\Characterisation_v2\Angles"
 if not os.path.exists(angle_save_dir):
     os.makedirs(angle_save_dir)
 
-
+plot_nose_back_tail_averages(raw_data, mouse_to_runs, phases=['APA2', 'Wash2'], savedir=angle_save_dir, fs=7, n_interp=100)
 plot_limb_positions_average(raw_data, mouse_to_runs, phases=['APA2', 'Wash2'], savedir=angle_save_dir, fs=7, n_interp=100)
 
 plot_angles(data_LH['feature_data_notscaled'], phases=['APA2', 'Wash2'], stride=-1,

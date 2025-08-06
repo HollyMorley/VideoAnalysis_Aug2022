@@ -371,11 +371,11 @@ def main(stride_numbers: List[int], phases: List[str],
         # Plot how each feature loads onto the PCA components
         pcap.pca_plot_feature_loadings(pca_all, phases, MultiFeatPath)
 
-    # LH_feature_data  = feature_data_compare if inst["condition"] != "APAChar_LowHigh" else None
-    # top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8, feature_data_LH=LH_feature_data)
-    # # Save the top features for each PC
-    # with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
-    #     pickle.dump(top_features, f)
+    LH_feature_data  = feature_data_compare if inst["condition"] != "APAChar_LowHigh" else None
+    top_features = pcap.plot_top_features_per_PC(pca_all, feature_data, feature_data_notscaled, phases, stride_numbers, condition, MultiFeatPath, n_top_features=8, feature_data_LH=LH_feature_data)
+    # Save the top features for each PC
+    with open(os.path.join(MultiFeatPath, f'top_features_per_PC_{condition}.pkl'), 'wb') as f:
+        pickle.dump(top_features, f)
 
     """
     -------------------- PCA/Multi Feature Predictions ----------------------
